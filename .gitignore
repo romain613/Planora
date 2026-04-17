@@ -1,3 +1,16 @@
 planora-backup*
 *.zip
 .claude/settings.local.json
+
+node_modules/
+backups/
+.vite/
+.DS_Store
+*.db
+*.db-wal
+*.db-shm
+*.zip
+*.tar.gz
+*.crt
+*.p7b
+.claude/
