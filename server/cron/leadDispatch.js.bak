@@ -1,0 +1,130 @@
+import cron from 'node-cron';
+import { db, insert } from '../db/database.js';
+
+console.log('\x1b[35m[CRON]\x1b[0m Lead dispatch scheduler started (every 15 min)');
+
+cron.schedule('*/15 * * * *', () => {
+  try { processAutoDispatch(); }
+  catch (err) { console.error('[CRON LEAD DISPATCH ERROR]', err.message); }
+});
+
+function processAutoDispatch() {
+  const now = new Date();
+  const currentMinute = now.getMinutes();
+  const currentTime = now.getHours().toString().padStart(2, '0') + ':' + now.getMinutes().toString().padStart(2, '0');
+
+  const envelopes = db.prepare("SELECT * FROM lead_envelopes WHERE auto_dispatch = 1").all();
+
+  for (const env of envelopes) {
+    let shouldDispatch = false;
+
+    if (env.dispatch_type === 'hourly') {
+      shouldDispatch = currentMinute < 15; // First 15-min window of each hour
+    } else if (env.dispatch_type === 'daily') {
+      const dispatchTime = env.dispatch_time || '09:00';
+      const [h, m] = dispatchTime.split(':').map(Number);
+      shouldDispatch = now.getHours() === h && currentMinute < 15;
+    }
+    // 'on_import' and 'manual' are not processed by cron
+
+    if (shouldDispatch) {
+      try { dispatchEnvelope(env); }
+      catch (err) { console.error(`[CRON DISPATCH] Error for envelope ${env.id}:`, err.message); }
+    }
+  }
+}
+
+function dispatchEnvelope(envelope) {
+  const leads = db.prepare("SELECT * FROM incoming_leads WHERE envelope_id = ? AND companyId = ? AND status = 'queued' ORDER BY created_at ASC")
+    .all(envelope.id, envelope.companyId);
+
+  if (leads.length === 0) return;
+
+  const rules = db.prepare("SELECT * FROM lead_dispatch_rules WHERE envelope_id = ? AND companyId = ? AND active = 1 ORDER BY priority ASC")
+    .all(envelope.id, envelope.companyId);
+
+  if (rules.length === 0) return;
+
+  const totalPct = rules.reduce((s, r) => s + r.percentage, 0);
+  if (totalPct === 0) return;
+
+  // Apply dispatch limit
+  const leadsToProcess = envelope.dispatch_limit > 0 ? leads.slice(0, envelope.dispatch_limit) : leads;
+
+  const quotas = rules.map(r => ({
+    collaboratorId: r.collaborator_id, ruleId: r.id,
+    target: Math.max(1, Math.round(leadsToProcess.length * (r.percentage / totalPct))),
+    assigned: 0
+  }));
+
+  let totalTarget = quotas.reduce((s, q) => s + q.target, 0);
+  while (totalTarget < leadsToProcess.length) { quotas[0].target++; totalTarget++; }
+  while (totalTarget > leadsToProcess.length) {
+    const maxQ = quotas.reduce((a, b) => a.target > b.target ? a : b);
+    maxQ.target--; totalTarget--;
+  }
+
+  const now = new Date().toISOString();
+
+  const tx = db.transaction(() => {
+    let qIdx = 0;
+    let dispatched = 0;
+
+    for (const lead of leadsToProcess) {
+      let attempts = 0;
+      while (quotas[qIdx].assigned >= quotas[qIdx].target && attempts < quotas.length) {
+        qIdx = (qIdx + 1) % quotas.length;
+        attempts++;
+      }
+      if (attempts >= quotas.length) break;
+
+      const collabId = quotas[qIdx].collaboratorId;
+
+      // Check duplicate
+      let existingContact = null;
+      if (lead.email) {
+        existingContact = db.prepare("SELECT id FROM contacts WHERE companyId = ? AND email = ? AND email != ''").get(envelope.companyId, lead.email);
+      }
+      if (!existingContact && lead.phone) {
+        existingContact = db.prepare("SELECT id FROM contacts WHERE companyId = ? AND phone = ? AND phone != ''").get(envelope.companyId, lead.phone);
+      }
+
+      let contactId;
+      if (existingContact) {
+        contactId = existingContact.id;
+        db.prepare("UPDATE contacts SET assignedTo = ?, source = 'lead' WHERE id = ?").run(collabId, contactId);
+      } else {
+        contactId = 'ct' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+        const contactName = [lead.first_name, lead.last_name].filter(Boolean).join(' ') || lead.email || lead.phone || 'Lead';
+        insert('contacts', {
+          id: contactId, companyId: envelope.companyId,
+          name: contactName, firstname: lead.first_name || '', lastname: lead.last_name || '',
+          email: lead.email || '', phone: lead.phone || '',
+          totalBookings: 0, lastVisit: '',
+          tags_json: JSON.stringify(['lead']), notes: '', rating: null,
+          docs_json: JSON.stringify([]), pipeline_stage: 'nouveau',
+          assignedTo: collabId, shared_with_json: JSON.stringify([]),
+          source: 'lead', createdAt: now
+        });
+      }
+
+      const assignId = 'la_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
+      insert('lead_assignments', {
+        id: assignId, companyId: envelope.companyId,
+        lead_id: lead.id, collaborator_id: collabId,
+        rule_id: quotas[qIdx].ruleId, contact_id: contactId,
+        assigned_at: now
+      });
+
+      db.prepare("UPDATE incoming_leads SET status = 'assigned', assigned_to = ?, assigned_at = ?, contact_id = ? WHERE id = ?")
+        .run(collabId, now, contactId, lead.id);
+
+      quotas[qIdx].assigned++;
+      qIdx = (qIdx + 1) % quotas.length;
+      dispatched++;
+    }
+
+    console.log(`\x1b[35m[CRON DISPATCH]\x1b[0m Envelope "${envelope.name}": ${dispatched} leads dispatched`);
+  });
+  tx();
+}
