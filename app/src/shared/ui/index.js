@@ -1,0 +1,22 @@
+// app/src/components/ui/index.js — Phase 1B barrel
+export { default as HookIsolator } from "./HookIsolator";
+export { default as Logo } from "./Logo";
+export { default as I } from "./I";
+export { default as Avatar } from "./Avatar";
+export { default as Badge } from "./Badge";
+export { default as Btn } from "./Btn";
+export { default as Stars } from "./Stars";
+export { default as Toggle } from "./Toggle";
+export { default as LoadBar } from "./LoadBar";
+export { default as Card } from "./Card";
+export { default as Spinner } from "./Spinner";
+export { default as Req } from "./Req";
+export { default as Skeleton } from "./Skeleton";
+export { default as Input } from "./Input";
+export { default as Stat } from "./Stat";
+export { default as Modal } from "./Modal";
+export { default as ConfirmModal } from "./ConfirmModal";
+export { default as EmptyState } from "./EmptyState";
+export { default as HelpTip } from "./HelpTip";
+export { default as ValidatedInput } from "./ValidatedInput";
+export { default as ErrorBoundary } from "./ErrorBoundary";
