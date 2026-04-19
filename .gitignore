@@ -14,3 +14,4 @@ backups/
 *.crt
 *.p7b
 .claude/
+node_modules
