@@ -20,6 +20,7 @@ const PhoneTab = () => {
   const ctx = useCollabContext();
   const {
     collab, company, contacts, bookings, collabs, showNotif,
+    googleEventsProp,
     portalTab, setPortalTab, setPortalTabKey,
     selectedCrmContact, setSelectedCrmContact,
     setCollabFicheTab, setRdvPasseModal,
@@ -57,6 +58,7 @@ const PhoneTab = () => {
     schedContactMode, setSchedContactMode, schedSearchQ, setSchedSearchQ,
     phoneCalMonth, setPhoneCalMonth,
     phoneStatsPeriod, setPhoneStatsPeriod, phoneStatsOpen, setPhoneStatsOpen,
+    todayCallCount,
     phoneShowCampaignModal, setPhoneShowCampaignModal,
     phoneCampaigns, setPhoneCampaigns, phoneDailyGoal, setPhoneDailyGoal,
     phoneVoicemails, setPhoneVoicemails,

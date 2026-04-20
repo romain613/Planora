@@ -2430,6 +2430,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     });
     const result = [];
     const usedContactIds = new Set();
+    const isAdminView2 = collab?.role === 'admin' || collab?.role === 'supra' || isAdminView;
     for (const [key, data] of Object.entries(visitorMap)) {
       if (isCollab(data.email, data.name)) continue;
       // V5-ISOLATION: matcher uniquement les contacts de la MEME company et assignes au collab (ou shared)
@@ -2446,7 +2447,6 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     // Contacts manuels — exclure aussi les collaborateurs
     // V5-ISOLATION: collab ne voit QUE ses contacts (assignedTo ou shared_with)
     // Admin voit tout. Pas de rétrocompatibilité "unassigned visible par tous"
-    const isAdminView2 = collab?.role === 'admin' || collab?.role === 'supra' || isAdminView;
     (contacts||[]).filter(c => c.companyId === company.id && !usedContactIds.has(c.id) && !isCollab(c.email, c.name)).forEach(c => {
       const isOwned = c.assignedTo === collab.id;
       const isShared = Array.isArray(c.shared_with) && c.shared_with.includes(collab.id);
@@ -3265,7 +3265,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       schedSearchQ, setSchedSearchQ,
       phoneCalMonth, setPhoneCalMonth,
       phoneStatsPeriod, setPhoneStatsPeriod,
-      phoneStatsOpen, setPhoneStatsOpen,
+      todayCallCount,
       phoneShowCampaignModal, setPhoneShowCampaignModal,
       phoneCampaigns, setPhoneCampaigns,
       phoneDailyGoal, setPhoneDailyGoal,
@@ -3304,7 +3304,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       phoneCopilotReactions, setPhoneCopilotReactions,
       phoneCopilotReactionStats, setPhoneCopilotReactionStats,
       phoneCopilotLiveStep, setPhoneCopilotLiveStep,
-      voipDevice, voipCall, voipCallRef,
+      voipCallRef,
       voipState, setVoipState,
       voipCurrentCallLogId, setVoipCurrentCallLogId,
       voipCredits, voipConfigured,
@@ -3316,7 +3316,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       pdStatus, setPdStatus,
       pdCurrentIdx, setPdCurrentIdx,
       pdResults, setPdResults,
-      pdResult, pdStageId, pdContactList,
+      pdStageId, pdContactList,
       collabCallForms, setCollabCallForms,
       callFormData, setCallFormData,
       callFormResponses, setCallFormResponses,
@@ -3331,7 +3331,6 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       convFilter, setConvFilter,
       convLoading, setConvLoading,
       selectedLine, setSelectedLine,
-      zoom, setZoom,
       cockpitOpen, setCockpitOpen,
       cockpitMinimized, setCockpitMinimized,
       liveConfig, saveLiveConfig,
@@ -3382,8 +3381,6 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       contractForm, setContractForm,
       contactAnalysesHistory, setContactAnalysesHistory,
       contactAnalysesHistoryModal, setContactAnalysesHistoryModal,
-      histOpen, setHistOpen,
-      statusHist, setStatusHist,
       dragContact, setDragContact,
       dragOverStage, setDragOverStage,
       dragColumnId, setDragColumnId,
@@ -3426,6 +3423,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       getBookingAt, getGoogleEventAt, updateBooking,
       // Home tab
       bookings, voipCallLogs, smsCredits,
+      googleEventsProp,
       portalTab, setPortalTab,
       portalTabKey, setPortalTabKey,
       phoneDialNumber, setPhoneDialNumber,
