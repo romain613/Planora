@@ -27,3 +27,4 @@ app/dist-minified.bak/
 ops/smoke/node_modules/
 ops/smoke/last-*.json
 ops/smoke/screenshots/
+app/dist/
