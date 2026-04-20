@@ -1,0 +1,24 @@
+[Unit]
+Description=Planora FK Violations Live Monitor (D-3.1)
+After=network.target pm2-root.service
+Requires=pm2-root.service
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/planora-fk-monitor.sh
+Restart=always
+RestartSec=10
+User=root
+Group=root
+# pm2 a besoin d'accès à /root/.pm2/ pour communiquer avec le god daemon
+# → on garde HOME accessible (pas de ProtectHome) et /root non protégé
+Environment=HOME=/root
+WorkingDirectory=/root
+StandardOutput=journal
+StandardError=journal
+
+# Hardening minimal (compatible pm2 + pipeline)
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

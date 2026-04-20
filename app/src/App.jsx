@@ -216,7 +216,10 @@ export default function App() {
   const contactsLocalEditRef = useRef(0); // timestamp of last local edit — protect from auto-refresh overwrite
   const [customTables, setCustomTables] = useState([]);
   const [googleEvents, setGoogleEvents] = useState([]);
-  const [company, setCompany] = useState(COMPANIES[0]);
+  // Phase C-4 (2026-04-20): no longer initialize with COMPANIES[0]={id:'c1',...}.
+  // Bootstrap leaked 'c1' as companyId in API calls before session resolved.
+  // Real value is set via setCompany(data.company) after /api/init succeeds.
+  const [company, setCompany] = useState(null);
 
   // Dark mode: reassign global T and persist
   setTheme(darkMode ? "dark" : "light");

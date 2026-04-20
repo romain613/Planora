@@ -1,0 +1,76 @@
+{
+  "phase": "C-3",
+  "strategy": "Dé-assignation Préau (1 UPDATE), efef intouché",
+  "audit_storage": "JSON in git (option C)",
+  "target_db": "monolithe (calendar360.db)",
+  "db_path": "/var/www/planora-data/calendar360.db",
+  "started_at": "2026-04-20T03:37:37.509Z",
+  "completed_at": "2026-04-20T03:37:37.550Z",
+  "integrity_before": "ok",
+  "integrity_after": "ok",
+  "summary": {
+    "preau_rows_changed": 1,
+    "preau_already_applied": false,
+    "efef_intouched": true,
+    "contacts_to_collab_orphans_remaining_global": 1,
+    "contacts_to_collab_orphans_remaining_details": [
+      {
+        "id": "ct1774872603359",
+        "nom": "efef  efef",
+        "email": "dee",
+        "companyId": "comp-first",
+        "assignedTo": "u-rcsitbon"
+      }
+    ]
+  },
+  "operation": {
+    "op": "deassign",
+    "contact_id": "ct1774812199599",
+    "before_assignedTo": "u1774811266836",
+    "after_assignedTo": "",
+    "reason": "collab inexistant dans table collaborators",
+    "before_row": {
+      "id": "ct1774812199599",
+      "firstname": "Préau",
+      "lastname": "",
+      "name": "Préau",
+      "email": "Sitbon.alain@creatland.com",
+      "phone": "+33 611913142",
+      "companyId": "c1774809632450",
+      "assignedTo": "u1774811266836"
+    },
+    "after_row": {
+      "id": "ct1774812199599",
+      "firstname": "Préau",
+      "lastname": "",
+      "name": "Préau",
+      "email": "Sitbon.alain@creatland.com",
+      "phone": "+33 611913142",
+      "companyId": "c1774809632450",
+      "assignedTo": ""
+    }
+  },
+  "efef_check": {
+    "id": "ct1774872603359",
+    "before": {
+      "id": "ct1774872603359",
+      "firstname": "efef",
+      "lastname": "",
+      "name": "efef",
+      "email": "dee",
+      "phone": "",
+      "companyId": "comp-first",
+      "assignedTo": "u-rcsitbon"
+    },
+    "after": {
+      "id": "ct1774872603359",
+      "firstname": "efef",
+      "lastname": "",
+      "name": "efef",
+      "email": "dee",
+      "phone": "",
+      "companyId": "comp-first",
+      "assignedTo": "u-rcsitbon"
+    }
+  }
+}

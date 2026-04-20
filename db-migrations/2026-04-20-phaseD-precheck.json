@@ -1,0 +1,3274 @@
+{
+  "phase": "D-0",
+  "type": "pre-flight read-only audit",
+  "started_at": "2026-04-20T04:33:56.192Z",
+  "completed_at": "2026-04-20T04:33:58.245Z",
+  "dbs_audited": [
+    "monolithe",
+    "CapFinances",
+    "MonBilan"
+  ],
+  "per_db_results": [
+    {
+      "db_name": "monolithe",
+      "db_path": "/var/www/planora-data/calendar360.db",
+      "integrity_check": "ok",
+      "pragma_foreign_keys_current": 1,
+      "pragma_defer_foreign_keys": 0,
+      "pragma_recursive_triggers": 0,
+      "tables_total": 95,
+      "fk_summary": {
+        "total_fks_declared": 50,
+        "tables_with_fk": 41,
+        "on_delete_cascade": 2,
+        "on_update_cascade": 0,
+        "on_delete_set_null": 0,
+        "on_delete_restrict": 0,
+        "on_delete_no_action_or_default": 48
+      },
+      "fk_by_table": {
+        "ai_copilot_analyses": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "ai_profile_history": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "ai_profile_suggestions": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "availabilities": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "bookings": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "calendars",
+            "child_col": "calendarId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "calendars": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "call_contexts": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "call_transcript_archive": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "call_logs",
+            "child_col": "callLogId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "call_transcripts": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "call_logs",
+            "child_col": "callLogId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "collaborators": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "company_documents": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "company_email_templates": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "company_knowledge_base": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "company_products": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "company_scripts": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "company_sms_templates": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "contact_documents": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "contacts",
+            "child_col": "contactId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "contact_followers": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 2,
+            "seq": 0,
+            "parent_table": "contacts",
+            "child_col": "contactId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "CASCADE",
+            "match": "NONE"
+          }
+        ],
+        "form_submissions": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "forms",
+            "child_col": "formId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "forms": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "goal_rewards": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "google_events": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "incoming_leads": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_assignments": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_dispatch_rules": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaborator_id",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "lead_envelopes",
+            "child_col": "envelope_id",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 2,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_distribution_scores": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaborator_id",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_envelopes": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_history": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_import_logs": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_sources": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "page_leads": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "pages",
+            "child_col": "pageId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "pages": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "recommended_actions": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "role_permissions": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "roles",
+            "child_col": "roleId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "CASCADE",
+            "match": "NONE"
+          }
+        ],
+        "roles": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "secure_ia_alerts": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "secure_ia_reports": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "team_goals": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "ticket_messages": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "tickets",
+            "child_col": "ticketId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "tickets": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "user_goals": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaborator_id",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ]
+      },
+      "fk_impact": {
+        "ai_copilot_analyses": {
+          "rows": 10,
+          "fks": 2
+        },
+        "ai_profile_history": {
+          "rows": 1,
+          "fks": 1
+        },
+        "ai_profile_suggestions": {
+          "rows": 10,
+          "fks": 1
+        },
+        "availabilities": {
+          "rows": 10,
+          "fks": 1
+        },
+        "bookings": {
+          "rows": 48,
+          "fks": 1
+        },
+        "calendars": {
+          "rows": 13,
+          "fks": 1
+        },
+        "call_contexts": {
+          "rows": 0,
+          "fks": 1
+        },
+        "call_transcript_archive": {
+          "rows": 23,
+          "fks": 1
+        },
+        "call_transcripts": {
+          "rows": 27,
+          "fks": 1
+        },
+        "collaborators": {
+          "rows": 12,
+          "fks": 1
+        },
+        "company_documents": {
+          "rows": 0,
+          "fks": 1
+        },
+        "company_email_templates": {
+          "rows": 0,
+          "fks": 1
+        },
+        "company_knowledge_base": {
+          "rows": 0,
+          "fks": 1
+        },
+        "company_products": {
+          "rows": 0,
+          "fks": 1
+        },
+        "company_scripts": {
+          "rows": 0,
+          "fks": 1
+        },
+        "company_sms_templates": {
+          "rows": 0,
+          "fks": 1
+        },
+        "contact_documents": {
+          "rows": 0,
+          "fks": 1
+        },
+        "contact_followers": {
+          "rows": 6,
+          "fks": 3
+        },
+        "form_submissions": {
+          "rows": 0,
+          "fks": 1
+        },
+        "forms": {
+          "rows": 0,
+          "fks": 1
+        },
+        "goal_rewards": {
+          "rows": 0,
+          "fks": 1
+        },
+        "google_events": {
+          "rows": 123,
+          "fks": 1
+        },
+        "incoming_leads": {
+          "rows": 173,
+          "fks": 1
+        },
+        "lead_assignments": {
+          "rows": 0,
+          "fks": 1
+        },
+        "lead_dispatch_rules": {
+          "rows": 4,
+          "fks": 3
+        },
+        "lead_distribution_scores": {
+          "rows": 2,
+          "fks": 2
+        },
+        "lead_envelopes": {
+          "rows": 2,
+          "fks": 1
+        },
+        "lead_history": {
+          "rows": 48,
+          "fks": 1
+        },
+        "lead_import_logs": {
+          "rows": 4,
+          "fks": 1
+        },
+        "lead_sources": {
+          "rows": 2,
+          "fks": 1
+        },
+        "page_leads": {
+          "rows": 0,
+          "fks": 1
+        },
+        "pages": {
+          "rows": 1,
+          "fks": 1
+        },
+        "recommended_actions": {
+          "rows": 20,
+          "fks": 1
+        },
+        "role_permissions": {
+          "rows": 168,
+          "fks": 1
+        },
+        "roles": {
+          "rows": 24,
+          "fks": 1
+        },
+        "secure_ia_alerts": {
+          "rows": 0,
+          "fks": 2
+        },
+        "secure_ia_reports": {
+          "rows": 92,
+          "fks": 2
+        },
+        "team_goals": {
+          "rows": 0,
+          "fks": 1
+        },
+        "ticket_messages": {
+          "rows": 849,
+          "fks": 1
+        },
+        "tickets": {
+          "rows": 849,
+          "fks": 1
+        },
+        "user_goals": {
+          "rows": 0,
+          "fks": 2
+        }
+      },
+      "fk_violations_global": [
+        {
+          "table": "roles",
+          "rowid": 9,
+          "parent": "companies",
+          "fkid": 0
+        },
+        {
+          "table": "roles",
+          "rowid": 10,
+          "parent": "companies",
+          "fkid": 0
+        },
+        {
+          "table": "roles",
+          "rowid": 11,
+          "parent": "companies",
+          "fkid": 0
+        },
+        {
+          "table": "roles",
+          "rowid": 12,
+          "parent": "companies",
+          "fkid": 0
+        },
+        {
+          "table": "roles",
+          "rowid": 13,
+          "parent": "companies",
+          "fkid": 0
+        },
+        {
+          "table": "roles",
+          "rowid": 14,
+          "parent": "companies",
+          "fkid": 0
+        },
+        {
+          "table": "roles",
+          "rowid": 15,
+          "parent": "companies",
+          "fkid": 0
+        },
+        {
+          "table": "roles",
+          "rowid": 16,
+          "parent": "companies",
+          "fkid": 0
+        },
+        {
+          "table": "roles",
+          "rowid": 17,
+          "parent": "companies",
+          "fkid": 0
+        },
+        {
+          "table": "roles",
+          "rowid": 18,
+          "parent": "companies",
+          "fkid": 0
+        },
+        {
+          "table": "roles",
+          "rowid": 19,
+          "parent": "companies",
+          "fkid": 0
+        },
+        {
+          "table": "roles",
+          "rowid": 20,
+          "parent": "companies",
+          "fkid": 0
+        },
+        {
+          "table": "tickets",
+          "rowid": 52,
+          "parent": "companies",
+          "fkid": 0
+        },
+        {
+          "table": "tickets",
+          "rowid": 53,
+          "parent": "companies",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 366988,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 366989,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 366990,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 366991,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 366992,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 366993,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 366994,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 366995,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 366996,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 366997,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 366998,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 366999,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367000,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367001,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367002,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367003,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367004,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367005,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367006,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367007,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367008,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367009,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367010,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367011,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367012,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367013,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367014,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367015,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367016,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367017,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367018,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367019,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367020,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367021,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367022,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367023,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367024,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367025,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367026,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367027,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367028,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367029,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367030,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367031,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367032,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367033,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367034,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367035,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367036,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367037,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367038,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367039,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367040,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367041,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367042,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367043,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367044,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367045,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367046,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367047,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367048,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367049,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367050,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367051,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367052,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367053,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367054,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367055,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367056,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367057,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367058,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367059,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367060,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367061,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367062,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367063,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367064,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367065,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367066,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367067,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367068,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367069,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367070,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367071,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367072,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367073,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367074,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367075,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367076,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367077,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367078,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367079,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367080,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367081,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367082,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367083,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367084,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367085,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367086,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367087,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367088,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367089,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367090,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367091,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367092,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367093,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367094,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367095,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367096,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367097,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367098,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367099,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367100,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367101,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367102,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367103,
+          "parent": "collaborators",
+          "fkid": 0
+        },
+        {
+          "table": "google_events",
+          "rowid": 367104,
+          "parent": "collaborators",
+          "fkid": 0
+        }
+      ],
+      "fk_violations_count": 131,
+      "triggers": [
+        {
+          "name": "prevent_audit_delete",
+          "tbl_name": "audit_logs",
+          "sql": "CREATE TRIGGER prevent_audit_delete BEFORE DELETE ON audit_logs BEGIN SELECT RAISE(ABORT, 'audit_logs is immutable'); END"
+        },
+        {
+          "name": "prevent_audit_update",
+          "tbl_name": "audit_logs",
+          "sql": "CREATE TRIGGER prevent_audit_update BEFORE UPDATE ON audit_logs BEGIN SELECT RAISE(ABORT, 'audit_logs is immutable'); END"
+        }
+      ],
+      "triggers_count": 2,
+      "placeholder_deleted": {
+        "id": "__deleted__",
+        "name": "[Contact supprime]",
+        "companyId": "c-monbilan"
+      },
+      "placeholder_exists": true,
+      "bookings_empty_contactId": 5,
+      "bookings_total": 48,
+      "call_logs_empty_contactId": 145,
+      "call_logs_total": 227,
+      "row_counts_sensitive": {
+        "bookings": 48,
+        "call_logs": 227,
+        "contacts": 248,
+        "collaborators": 12,
+        "companies": 6,
+        "contact_followers": 6,
+        "tickets": 849,
+        "calendars": 13,
+        "messages": "absent",
+        "conversations": 134,
+        "pipeline_history": 412,
+        "audit_logs": 1494,
+        "sms_messages": 117,
+        "notifications": 131,
+        "ai_copilot_analyses": 10,
+        "call_contexts": 0,
+        "recommended_actions": 20,
+        "call_form_responses": 0,
+        "client_messages": 1,
+        "contact_documents": 0,
+        "contact_ai_memory": 0,
+        "call_transcript_archive": 23,
+        "contact_status_history": 62,
+        "system_anomaly_logs": 0
+      },
+      "efef_check": {
+        "fk_assignedTo_to_collaborators_exists": false,
+        "fk_details": null
+      }
+    },
+    {
+      "db_name": "CapFinances",
+      "db_path": "/var/www/planora-data/tenants/c1776169036725.db",
+      "integrity_check": "ok",
+      "pragma_foreign_keys_current": 1,
+      "pragma_defer_foreign_keys": 0,
+      "pragma_recursive_triggers": 0,
+      "tables_total": 89,
+      "fk_summary": {
+        "total_fks_declared": 50,
+        "tables_with_fk": 41,
+        "on_delete_cascade": 2,
+        "on_update_cascade": 0,
+        "on_delete_set_null": 0,
+        "on_delete_restrict": 0,
+        "on_delete_no_action_or_default": 48
+      },
+      "fk_by_table": {
+        "ai_copilot_analyses": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "ai_profile_history": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "ai_profile_suggestions": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "availabilities": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "bookings": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "calendars",
+            "child_col": "calendarId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "calendars": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "call_contexts": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "call_transcript_archive": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "call_logs",
+            "child_col": "callLogId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "call_transcripts": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "call_logs",
+            "child_col": "callLogId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "collaborators": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "company_documents": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "company_email_templates": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "company_knowledge_base": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "company_products": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "company_scripts": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "company_sms_templates": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "contact_documents": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "contacts",
+            "child_col": "contactId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "contact_followers": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 2,
+            "seq": 0,
+            "parent_table": "contacts",
+            "child_col": "contactId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "CASCADE",
+            "match": "NONE"
+          }
+        ],
+        "form_submissions": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "forms",
+            "child_col": "formId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "forms": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "goal_rewards": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "google_events": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "incoming_leads": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_assignments": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_dispatch_rules": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaborator_id",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "lead_envelopes",
+            "child_col": "envelope_id",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 2,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_distribution_scores": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaborator_id",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_envelopes": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_history": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_import_logs": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_sources": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "page_leads": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "pages",
+            "child_col": "pageId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "pages": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "recommended_actions": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "role_permissions": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "roles",
+            "child_col": "roleId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "CASCADE",
+            "match": "NONE"
+          }
+        ],
+        "roles": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "secure_ia_alerts": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "secure_ia_reports": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "team_goals": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "ticket_messages": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "tickets",
+            "child_col": "ticketId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "tickets": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "user_goals": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaborator_id",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ]
+      },
+      "fk_impact": {
+        "ai_copilot_analyses": {
+          "rows": 0,
+          "fks": 2
+        },
+        "ai_profile_history": {
+          "rows": 0,
+          "fks": 1
+        },
+        "ai_profile_suggestions": {
+          "rows": 0,
+          "fks": 1
+        },
+        "availabilities": {
+          "rows": 1,
+          "fks": 1
+        },
+        "bookings": {
+          "rows": 1,
+          "fks": 1
+        },
+        "calendars": {
+          "rows": 1,
+          "fks": 1
+        },
+        "call_contexts": {
+          "rows": 0,
+          "fks": 1
+        },
+        "call_transcript_archive": {
+          "rows": 2,
+          "fks": 1
+        },
+        "call_transcripts": {
+          "rows": 2,
+          "fks": 1
+        },
+        "collaborators": {
+          "rows": 2,
+          "fks": 1
+        },
+        "company_documents": {
+          "rows": 0,
+          "fks": 1
+        },
+        "company_email_templates": {
+          "rows": 0,
+          "fks": 1
+        },
+        "company_knowledge_base": {
+          "rows": 0,
+          "fks": 1
+        },
+        "company_products": {
+          "rows": 0,
+          "fks": 1
+        },
+        "company_scripts": {
+          "rows": 0,
+          "fks": 1
+        },
+        "company_sms_templates": {
+          "rows": 0,
+          "fks": 1
+        },
+        "contact_documents": {
+          "rows": 0,
+          "fks": 1
+        },
+        "contact_followers": {
+          "rows": 0,
+          "fks": 3
+        },
+        "form_submissions": {
+          "rows": 0,
+          "fks": 1
+        },
+        "forms": {
+          "rows": 0,
+          "fks": 1
+        },
+        "goal_rewards": {
+          "rows": 0,
+          "fks": 1
+        },
+        "google_events": {
+          "rows": 0,
+          "fks": 1
+        },
+        "incoming_leads": {
+          "rows": 0,
+          "fks": 1
+        },
+        "lead_assignments": {
+          "rows": 0,
+          "fks": 1
+        },
+        "lead_dispatch_rules": {
+          "rows": 0,
+          "fks": 3
+        },
+        "lead_distribution_scores": {
+          "rows": 0,
+          "fks": 2
+        },
+        "lead_envelopes": {
+          "rows": 0,
+          "fks": 1
+        },
+        "lead_history": {
+          "rows": 1,
+          "fks": 1
+        },
+        "lead_import_logs": {
+          "rows": 0,
+          "fks": 1
+        },
+        "lead_sources": {
+          "rows": 0,
+          "fks": 1
+        },
+        "page_leads": {
+          "rows": 0,
+          "fks": 1
+        },
+        "pages": {
+          "rows": 0,
+          "fks": 1
+        },
+        "recommended_actions": {
+          "rows": 0,
+          "fks": 1
+        },
+        "role_permissions": {
+          "rows": 14,
+          "fks": 1
+        },
+        "roles": {
+          "rows": 2,
+          "fks": 1
+        },
+        "secure_ia_alerts": {
+          "rows": 0,
+          "fks": 2
+        },
+        "secure_ia_reports": {
+          "rows": 2,
+          "fks": 2
+        },
+        "team_goals": {
+          "rows": 0,
+          "fks": 1
+        },
+        "ticket_messages": {
+          "rows": 47,
+          "fks": 1
+        },
+        "tickets": {
+          "rows": 47,
+          "fks": 1
+        },
+        "user_goals": {
+          "rows": 0,
+          "fks": 2
+        }
+      },
+      "fk_violations_global": [],
+      "fk_violations_count": 0,
+      "triggers": [
+        {
+          "name": "prevent_audit_delete",
+          "tbl_name": "audit_logs",
+          "sql": "CREATE TRIGGER prevent_audit_delete BEFORE DELETE ON audit_logs\n            BEGIN SELECT RAISE(ABORT, 'audit_logs is immutable'); END"
+        },
+        {
+          "name": "prevent_audit_update",
+          "tbl_name": "audit_logs",
+          "sql": "CREATE TRIGGER prevent_audit_update BEFORE UPDATE ON audit_logs\n            BEGIN SELECT RAISE(ABORT, 'audit_logs is immutable'); END"
+        }
+      ],
+      "triggers_count": 2,
+      "placeholder_deleted": null,
+      "placeholder_exists": false,
+      "bookings_empty_contactId": 0,
+      "bookings_total": 1,
+      "call_logs_empty_contactId": 3,
+      "call_logs_total": 6,
+      "row_counts_sensitive": {
+        "bookings": 1,
+        "call_logs": 6,
+        "contacts": 45,
+        "collaborators": 2,
+        "companies": 1,
+        "contact_followers": 0,
+        "tickets": 47,
+        "calendars": 1,
+        "messages": "absent",
+        "conversations": 5,
+        "pipeline_history": 8,
+        "audit_logs": 20,
+        "sms_messages": 0,
+        "notifications": 1,
+        "ai_copilot_analyses": 0,
+        "call_contexts": 0,
+        "recommended_actions": 0,
+        "call_form_responses": 0,
+        "client_messages": 0,
+        "contact_documents": 0,
+        "contact_ai_memory": 0,
+        "call_transcript_archive": 2,
+        "contact_status_history": 0,
+        "system_anomaly_logs": 0
+      },
+      "efef_check": {
+        "fk_assignedTo_to_collaborators_exists": false,
+        "fk_details": null
+      }
+    },
+    {
+      "db_name": "MonBilan",
+      "db_path": "/var/www/planora-data/tenants/c-monbilan.db",
+      "integrity_check": "ok",
+      "pragma_foreign_keys_current": 1,
+      "pragma_defer_foreign_keys": 0,
+      "pragma_recursive_triggers": 0,
+      "tables_total": 89,
+      "fk_summary": {
+        "total_fks_declared": 50,
+        "tables_with_fk": 41,
+        "on_delete_cascade": 2,
+        "on_update_cascade": 0,
+        "on_delete_set_null": 0,
+        "on_delete_restrict": 0,
+        "on_delete_no_action_or_default": 48
+      },
+      "fk_by_table": {
+        "ai_copilot_analyses": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "ai_profile_history": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "ai_profile_suggestions": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "availabilities": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "bookings": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "calendars",
+            "child_col": "calendarId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "calendars": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "call_contexts": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "call_transcript_archive": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "call_logs",
+            "child_col": "callLogId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "call_transcripts": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "call_logs",
+            "child_col": "callLogId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "collaborators": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "company_documents": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "company_email_templates": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "company_knowledge_base": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "company_products": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "company_scripts": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "company_sms_templates": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "contact_documents": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "contacts",
+            "child_col": "contactId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "contact_followers": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 2,
+            "seq": 0,
+            "parent_table": "contacts",
+            "child_col": "contactId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "CASCADE",
+            "match": "NONE"
+          }
+        ],
+        "form_submissions": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "forms",
+            "child_col": "formId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "forms": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "goal_rewards": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "google_events": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "incoming_leads": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_assignments": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_dispatch_rules": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaborator_id",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "lead_envelopes",
+            "child_col": "envelope_id",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 2,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_distribution_scores": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaborator_id",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_envelopes": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_history": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_import_logs": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "lead_sources": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "page_leads": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "pages",
+            "child_col": "pageId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "pages": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "recommended_actions": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "role_permissions": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "roles",
+            "child_col": "roleId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "CASCADE",
+            "match": "NONE"
+          }
+        ],
+        "roles": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "secure_ia_alerts": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "secure_ia_reports": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaboratorId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "team_goals": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "ticket_messages": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "tickets",
+            "child_col": "ticketId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "tickets": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ],
+        "user_goals": [
+          {
+            "id": 0,
+            "seq": 0,
+            "parent_table": "collaborators",
+            "child_col": "collaborator_id",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          },
+          {
+            "id": 1,
+            "seq": 0,
+            "parent_table": "companies",
+            "child_col": "companyId",
+            "parent_col": "id",
+            "on_update": "NO ACTION",
+            "on_delete": "NO ACTION",
+            "match": "NONE"
+          }
+        ]
+      },
+      "fk_impact": {
+        "ai_copilot_analyses": {
+          "rows": 8,
+          "fks": 2
+        },
+        "ai_profile_history": {
+          "rows": 1,
+          "fks": 1
+        },
+        "ai_profile_suggestions": {
+          "rows": 8,
+          "fks": 1
+        },
+        "availabilities": {
+          "rows": 2,
+          "fks": 1
+        },
+        "bookings": {
+          "rows": 39,
+          "fks": 1
+        },
+        "calendars": {
+          "rows": 4,
+          "fks": 1
+        },
+        "call_contexts": {
+          "rows": 0,
+          "fks": 1
+        },
+        "call_transcript_archive": {
+          "rows": 11,
+          "fks": 1
+        },
+        "call_transcripts": {
+          "rows": 13,
+          "fks": 1
+        },
+        "collaborators": {
+          "rows": 4,
+          "fks": 1
+        },
+        "company_documents": {
+          "rows": 0,
+          "fks": 1
+        },
+        "company_email_templates": {
+          "rows": 0,
+          "fks": 1
+        },
+        "company_knowledge_base": {
+          "rows": 0,
+          "fks": 1
+        },
+        "company_products": {
+          "rows": 0,
+          "fks": 1
+        },
+        "company_scripts": {
+          "rows": 0,
+          "fks": 1
+        },
+        "company_sms_templates": {
+          "rows": 0,
+          "fks": 1
+        },
+        "contact_documents": {
+          "rows": 0,
+          "fks": 1
+        },
+        "contact_followers": {
+          "rows": 0,
+          "fks": 3
+        },
+        "form_submissions": {
+          "rows": 0,
+          "fks": 1
+        },
+        "forms": {
+          "rows": 0,
+          "fks": 1
+        },
+        "goal_rewards": {
+          "rows": 0,
+          "fks": 1
+        },
+        "google_events": {
+          "rows": 8,
+          "fks": 1
+        },
+        "incoming_leads": {
+          "rows": 173,
+          "fks": 1
+        },
+        "lead_assignments": {
+          "rows": 0,
+          "fks": 1
+        },
+        "lead_dispatch_rules": {
+          "rows": 4,
+          "fks": 3
+        },
+        "lead_distribution_scores": {
+          "rows": 2,
+          "fks": 2
+        },
+        "lead_envelopes": {
+          "rows": 2,
+          "fks": 1
+        },
+        "lead_history": {
+          "rows": 47,
+          "fks": 1
+        },
+        "lead_import_logs": {
+          "rows": 4,
+          "fks": 1
+        },
+        "lead_sources": {
+          "rows": 2,
+          "fks": 1
+        },
+        "page_leads": {
+          "rows": 0,
+          "fks": 1
+        },
+        "pages": {
+          "rows": 1,
+          "fks": 1
+        },
+        "recommended_actions": {
+          "rows": 16,
+          "fks": 1
+        },
+        "role_permissions": {
+          "rows": 14,
+          "fks": 1
+        },
+        "roles": {
+          "rows": 2,
+          "fks": 1
+        },
+        "secure_ia_alerts": {
+          "rows": 0,
+          "fks": 2
+        },
+        "secure_ia_reports": {
+          "rows": 75,
+          "fks": 2
+        },
+        "team_goals": {
+          "rows": 0,
+          "fks": 1
+        },
+        "ticket_messages": {
+          "rows": 227,
+          "fks": 1
+        },
+        "tickets": {
+          "rows": 227,
+          "fks": 1
+        },
+        "user_goals": {
+          "rows": 0,
+          "fks": 2
+        }
+      },
+      "fk_violations_global": [],
+      "fk_violations_count": 0,
+      "triggers": [
+        {
+          "name": "prevent_audit_delete",
+          "tbl_name": "audit_logs",
+          "sql": "CREATE TRIGGER prevent_audit_delete BEFORE DELETE ON audit_logs\n            BEGIN SELECT RAISE(ABORT, 'audit_logs is immutable'); END"
+        },
+        {
+          "name": "prevent_audit_update",
+          "tbl_name": "audit_logs",
+          "sql": "CREATE TRIGGER prevent_audit_update BEFORE UPDATE ON audit_logs\n            BEGIN SELECT RAISE(ABORT, 'audit_logs is immutable'); END"
+        }
+      ],
+      "triggers_count": 2,
+      "placeholder_deleted": {
+        "id": "__deleted__",
+        "name": "[Contact supprime]",
+        "companyId": "c-monbilan"
+      },
+      "placeholder_exists": true,
+      "bookings_empty_contactId": 2,
+      "bookings_total": 39,
+      "call_logs_empty_contactId": 93,
+      "call_logs_total": 142,
+      "row_counts_sensitive": {
+        "bookings": 39,
+        "call_logs": 142,
+        "contacts": 13,
+        "collaborators": 4,
+        "companies": 1,
+        "contact_followers": 0,
+        "tickets": 227,
+        "calendars": 4,
+        "messages": "absent",
+        "conversations": 104,
+        "pipeline_history": 297,
+        "audit_logs": 1089,
+        "sms_messages": 110,
+        "notifications": 102,
+        "ai_copilot_analyses": 8,
+        "call_contexts": 0,
+        "recommended_actions": 16,
+        "call_form_responses": 0,
+        "client_messages": 1,
+        "contact_documents": 0,
+        "contact_ai_memory": 0,
+        "call_transcript_archive": 11,
+        "contact_status_history": 29,
+        "system_anomaly_logs": 0
+      },
+      "efef_check": {
+        "fk_assignedTo_to_collaborators_exists": false,
+        "fk_details": null
+      }
+    }
+  ],
+  "provisional_verdict": {
+    "total_fk_violations_across_3_dbs": 131,
+    "total_cascade_delete_fks": 6,
+    "placeholder_missing_in": [
+      "CapFinances"
+    ],
+    "efef_fk_exists_anywhere": false,
+    "provisional_status": "NO_GO"
+  }
+}

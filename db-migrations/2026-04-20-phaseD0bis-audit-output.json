@@ -1,0 +1,145 @@
+{
+  "phase": "D-0bis",
+  "type": "cleanup historical FK violations + missing placeholder",
+  "started_at": "2026-04-20T04:59:17.095Z",
+  "completed_at": "2026-04-20T04:59:17.280Z",
+  "actions": {
+    "A1": {
+      "action": "A1_insert_placeholder_capfinances",
+      "db": "CapFinances",
+      "db_path": "/var/www/planora-data/tenants/c1776169036725.db",
+      "integrity_before": "ok",
+      "company_check": {
+        "id": "c1776169036725",
+        "name": "CAPFINANCES"
+      },
+      "before_state": {
+        "id": "__deleted__",
+        "companyId": "c1776169036725",
+        "name": "[Contact supprime]"
+      },
+      "rows_inserted": 0,
+      "already_existed": true,
+      "after_state": {
+        "id": "__deleted__",
+        "companyId": "c1776169036725",
+        "name": "[Contact supprime]",
+        "status": "prospect",
+        "pipeline_stage": "nouveau"
+      },
+      "integrity_after": "ok",
+      "success": true
+    },
+    "A2": {
+      "action": "A2_delete_orphan_roles",
+      "db": "monolithe",
+      "db_path": "/var/www/planora-data/calendar360.db",
+      "integrity_before": "ok",
+      "snapshot_roles_before": [],
+      "snapshot_roles_count": 0,
+      "snapshot_role_permissions_cascade_before": [],
+      "snapshot_role_permissions_cascade_count": 0,
+      "warning": "Expected 12 roles, found 0 (déjà partiellement nettoyé ?)",
+      "total_role_permissions_before": 84,
+      "roles_deleted": 0,
+      "total_role_permissions_after": 84,
+      "role_permissions_cascade_deleted": 0,
+      "roles_remaining_after": 0,
+      "integrity_after": "ok",
+      "fk_violations_roles_after": 0,
+      "success": true
+    },
+    "A3": {
+      "action": "A3_delete_orphan_tickets",
+      "db": "monolithe",
+      "db_path": "/var/www/planora-data/calendar360.db",
+      "integrity_before": "ok",
+      "snapshot_tickets_before": [
+        {
+          "id": "tk17757546732473wpa",
+          "companyId": "c1775049217129",
+          "type": "auto_js_error",
+          "category": "bug",
+          "subject": "Unhandled: ReferenceError: Can't find variable: selectedCrmContact",
+          "status": "open",
+          "priority": "low",
+          "createdAt": "2026-04-09T17:11:13.247Z"
+        },
+        {
+          "id": "tk177575500422688dn",
+          "companyId": "c1775049217129",
+          "type": "auto_js_error",
+          "category": "bug",
+          "subject": "Unhandled: ReferenceError: Can't find variable: selectedCrmContact",
+          "status": "open",
+          "priority": "low",
+          "createdAt": "2026-04-09T17:16:44.226Z"
+        }
+      ],
+      "snapshot_tickets_count": 2,
+      "snapshot_ticket_messages_before": [
+        {
+          "id": "tm1775754673247zyyi",
+          "ticketId": "tk17757546732473wpa",
+          "createdAt": "2026-04-09T17:11:13.247Z"
+        },
+        {
+          "id": "tm1775755004226fe7l",
+          "ticketId": "tk177575500422688dn",
+          "createdAt": "2026-04-09T17:16:44.226Z"
+        }
+      ],
+      "snapshot_ticket_messages_count": 2,
+      "tickets_deleted": 2,
+      "ticket_messages_deleted": 2,
+      "tickets_remaining_after": 0,
+      "integrity_after": "ok",
+      "fk_violations_tickets_after": 0,
+      "success": true
+    },
+    "A4": {
+      "action": "A4_delete_orphan_google_events",
+      "db": "monolithe",
+      "db_path": "/var/www/planora-data/calendar360.db",
+      "integrity_before": "ok",
+      "snapshot_events_before": [],
+      "snapshot_events_count": 0,
+      "warning": "Expected 117 events, found 0",
+      "now_iso": "2026-04-20T04:59:17.242Z",
+      "events_with_future_start_count": 0,
+      "events_with_future_start_list": [],
+      "distribution_by_orphan_collaboratorId": {},
+      "events_deleted": 0,
+      "google_events_orphans_remaining_after": 0,
+      "integrity_after": "ok",
+      "fk_violations_google_events_after": 0,
+      "success": true
+    }
+  },
+  "final_fk_audit": {
+    "monolithe": {
+      "db": "monolithe",
+      "db_path": "/var/www/planora-data/calendar360.db",
+      "fk_violations_count": 0,
+      "fk_violations": []
+    },
+    "CapFinances": {
+      "db": "CapFinances",
+      "db_path": "/var/www/planora-data/tenants/c1776169036725.db",
+      "fk_violations_count": 0,
+      "fk_violations": []
+    },
+    "MonBilan": {
+      "db": "MonBilan",
+      "db_path": "/var/www/planora-data/tenants/c-monbilan.db",
+      "fk_violations_count": 0,
+      "fk_violations": []
+    }
+  },
+  "summary": {
+    "overall_success": true,
+    "total_fk_violations_after_d0bis": 0,
+    "expected_total_violations_after": 0,
+    "matches_expected": true
+  }
+}
