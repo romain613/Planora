@@ -1,0 +1,19 @@
+{
+  "name": "planora-smoke",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "description": "Frontend smoke tests for calendar360.fr — isolated from the main app.",
+  "scripts": {
+    "smoke": "node collab-smoke.mjs",
+    "smoke:visible": "SMOKE_HEADLESS=0 node collab-smoke.mjs",
+    "tour": "node collab-tour.mjs",
+    "tour:visible": "SMOKE_HEADLESS=0 node collab-tour.mjs",
+    "click": "node collab-click.mjs",
+    "click:visible": "SMOKE_HEADLESS=0 node collab-click.mjs",
+    "click:shots": "SMOKE_SCREENSHOTS=1 node collab-click.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0"
+  }
+}
