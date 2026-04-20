@@ -11,6 +11,7 @@ const HomeTab = () => {
   const {
     collab, showNotif,
     bookings, voipCallLogs, smsCredits, contacts,
+    fmtPhone,
     portalTab, setPortalTab,
     portalTabKey, setPortalTabKey,
     phoneDialNumber, setPhoneDialNumber,
@@ -22,6 +23,14 @@ const HomeTab = () => {
     selectedCrmContact, setSelectedCrmContact,
     collabFicheTab, setCollabFicheTab,
     startPhoneCall, startVoipCall,
+    // ═══ REWIRE 2026-04-20 — destructure complémentaire (7 symboles) ═══
+    PIPELINE_STAGES,
+    _tempColor,
+    _tempEmoji,
+    _tempLabel,
+    calendars,
+    company,
+    getLeadTemperature,
   } = useCollabContext();
 
 const todayISO = new Date().toISOString().split('T')[0];

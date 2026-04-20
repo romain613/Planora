@@ -33,6 +33,25 @@ const AgendaTab = () => {
     getBookingAt, getGoogleEventAt, updateBooking,
     portalTab, setPortalTab, setPortalTabKey,
     setPhoneScheduleForm, setPhoneShowScheduleModal,
+    isAvailableSlot,
+    // ═══ REWIRE 2026-04-20 — destructure complémentaire (17 symboles) ═══
+    ZOOM_LEVELS,
+    agendaScrolledRef,
+    basePreset,
+    dayBookings,
+    dayDate,
+    exportICS,
+    googleConnected,
+    googleLoading,
+    gridTheme,
+    hours,
+    monthMonth,
+    monthYear,
+    myGoogleEvents,
+    syncGoogle,
+    today,
+    todayStr,
+    weekDates,
   } = useCollabContext();
 
   return (

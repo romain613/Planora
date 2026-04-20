@@ -72,6 +72,66 @@ router.put('/endpoint', (req, res) => {
 
 ---
 
+## 0bis. RÈGLE FONDAMENTALE — ARCHITECTURE FRONTEND (branchement des symboles)
+
+> **RÈGLE IMPÉRATIVE** — applicable à **toute nouvelle app, module, feature, option, composant**.
+> Gravée le 2026-04-20 après le rewire complet post-Phase 14b.
+
+### Principe
+
+- **Local reste local** : un symbole utilisé **uniquement** dans un composant/scope ne doit **jamais** être transporté via context, props, ou mécanisme partagé. Il reste interne à son composant.
+- **Partagé passe explicitement par le context** : dès qu'un symbole est utilisé dans **≥1 tab/sous-composant externe**, il DOIT transiter par un provider React dédié. Aucune référence implicite, aucun accès à un scope parent via closure lexicale.
+- **Aucun symbole flottant** — chaque identifiant lu ou appelé dans un composant doit avoir une source de résolution **explicite** : import, destructure de context, prop, déclaration locale.
+- **Aucun ancien chemin conservé** — lorsque l'architecture évolue (extraction, refacto), les anciennes références doivent être **entièrement supprimées**. Jamais de cohabitation ancien/nouveau.
+
+### Procédure obligatoire pour un symbole partagé (helper, state, setter, ref, handler)
+
+1. **Déclarer** le symbole au scope top-level du composant parent (pour CollabPortal = indent 2 espaces)
+2. **Exposer** en shorthand dans le `<Provider value={{ ... }}>`
+3. **Destructurer** dans chaque consommateur : `const { symboleX } = useProviderContext();`
+
+### Procédure obligatoire pour un symbole local
+
+- Le déclarer dans le composant qui l'utilise (pas au-dessus, pas ailleurs)
+- Ne PAS l'exposer dans un provider
+- Ne PAS le passer en prop si pas nécessaire
+
+### Procédure obligatoire pour une nouvelle app / module / feature
+
+1. **Créer le répertoire propre dès le départ** sous `app/src/features/<domaine>/<feature>/`
+2. **Séparer clairement** :
+   - `tabs/` — tabs/pages extraits
+   - `context/` — provider React et hook associé
+   - `components/` — sous-composants réutilisés
+   - `helpers/` ou `utils/` — fonctions pures
+3. **Brancher immédiatement** chaque symbole via context, pas en référence implicite
+4. **Auditer avant merge** : scripts `ops/smoke/` doivent passer avec 0 orphelin
+
+### Contrainte négative — jamais faire
+
+- Référencer depuis un tab extrait un symbole du scope parent sans l'avoir routé via context → crash `ReferenceError` au render
+- Laisser un symbole exposé dans le provider sans consommateur → code mort qui induit en erreur
+- Laisser un symbole consommé sans déclaration claire → référence flottante, dette invisible
+- Faire cohabiter deux chemins pour le même symbole (défensif `typeof X !== 'undefined' ? X : null` + destructure) → signal d'un branchement incomplet
+
+### Audit automatique
+
+- `ops/smoke/collab-smoke.mjs` — smoke V1 (scan HTTP page login + bundle)
+- `ops/smoke/collab-tour.mjs` — tour V2 (login + visite chaque tab)
+- `ops/smoke/collab-click.mjs` — tour V3 (login + clic safe par tab, fail-fast auth)
+
+**Après toute extraction de code, refacto ou nouvelle feature, relancer l'audit statique PUIS le smoke runtime — exigence : 0 orphelin déclaré, 0 ReferenceError runtime, 0 free-reference dans le bundle minifié.**
+
+### Historique des violations (pour mémoire)
+
+- **Phase 14b (2026-04-20)** — extraction PhoneTab sans branchement complet : ~123 symboles orphelins, révélés par vagues (toggle*, handlers*, fmt*, etc.) pendant une journée d'itérations. Règle gravée pour empêcher répétition.
+
+### Source de vérité in-code
+
+- [`app/src/features/collab/context/CollabContext.jsx`](app/src/features/collab/context/CollabContext.jsx) — règle citée en tête du fichier, à reproduire en tête de chaque nouveau provider.
+
+---
+
 ## 1. INFRASTRUCTURE
 
 ### Serveur VPS

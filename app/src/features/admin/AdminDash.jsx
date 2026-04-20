@@ -1696,33 +1696,48 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
   }, [company?.id]);
 
   // Initialize Twilio Device (SDK now bundled via npm — no CDN polling needed)
+  // Deferred to first user gesture (browser autoplay policy: AudioContext cannot
+  // start before user interacts — token is pre-fetched at mount so device creation
+  // is instant at first click). Mirrors the lazy-init logic in CollabPortal.jsx.
   useEffect(() => {
     if (!(typeof voipConfigured!=='undefined'?voipConfigured:null)) return;
-    // Find the current collaborator identity: prefer collab with assigned marketplace number
     const myAssigned = (typeof appMyPhoneNumbers!=='undefined'?appMyPhoneNumbers:{}).find(pn => pn.collaboratorId && pn.status === 'assigned');
     const currentCollabId = myAssigned?.collaboratorId || collabs[0]?.id;
     if (!currentCollabId) return;
-    api('/api/voip/token', { method:'POST', body:{ companyId:company.id, collaboratorId:currentCollabId } })
-      .then(data => {
-        if (!data?.token || data.demo) return;
-        const device = new TwilioDevice(data.token, { codecPreferences:['opus','pcmu'], edge:'dublin' });
-        device.on('registered', () => console.log('[VOIP] Device registered for', currentCollabId));
-        device.on('error', (err) => { console.error('[VOIP ERR]', err); notif('Erreur VoIP: '+err.message,'danger'); });
-        device.on('incoming', (call) => {
-          setVoipState('incoming');
-          setVoipIncomingInfo({ from: call.parameters.From });
-          voipCallRef.current = call;
-          api(`/api/voip/lookup?phone=${encodeURIComponent(call.parameters.From)}&companyId=${company.id}`)
-            .then(d => { if(d?.found) setVoipActiveContact(d.contact); });
-          setVoipDialerOpen(true);
-          call.on('cancel', () => { setVoipState('idle'); setVoipIncomingInfo(null); });
-          call.on('disconnect', () => handleVoipCallEnd());
-        });
-        device.register();
-        voipDeviceRef.current = device;
-        console.log('[VOIP] Device created and registering...');
+    const tokenPromise = api('/api/voip/token', { method:'POST', body:{ companyId:company.id, collaboratorId:currentCollabId } })
+      .catch(err => { console.error('[VOIP TOKEN ERR]', err); return null; });
+    let initialized = false;
+    const initDevice = async () => {
+      if (initialized) return;
+      initialized = true;
+      const data = await tokenPromise;
+      if (!data?.token || data.demo) return;
+      const device = new TwilioDevice(data.token, { codecPreferences:['opus','pcmu'], edge:'dublin' });
+      device.on('registered', () => console.log('[VOIP] Device registered for', currentCollabId));
+      device.on('error', (err) => { console.error('[VOIP ERR]', err); notif('Erreur VoIP: '+err.message,'danger'); });
+      device.on('incoming', (call) => {
+        setVoipState('incoming');
+        setVoipIncomingInfo({ from: call.parameters.From });
+        voipCallRef.current = call;
+        api(`/api/voip/lookup?phone=${encodeURIComponent(call.parameters.From)}&companyId=${company.id}`)
+          .then(d => { if(d?.found) setVoipActiveContact(d.contact); });
+        setVoipDialerOpen(true);
+        call.on('cancel', () => { setVoipState('idle'); setVoipIncomingInfo(null); });
+        call.on('disconnect', () => handleVoipCallEnd());
       });
-    return () => { voipDeviceRef.current?.destroy(); };
+      device.register();
+      voipDeviceRef.current = device;
+    };
+    const gestureOpts = { once: true, capture: true, passive: true };
+    document.addEventListener('click',      initDevice, gestureOpts);
+    document.addEventListener('keydown',    initDevice, gestureOpts);
+    document.addEventListener('touchstart', initDevice, gestureOpts);
+    return () => {
+      document.removeEventListener('click',      initDevice, { capture: true });
+      document.removeEventListener('keydown',    initDevice, { capture: true });
+      document.removeEventListener('touchstart', initDevice, { capture: true });
+      voipDeviceRef.current?.destroy();
+    };
   }, [voipConfigured, company?.id, (typeof appMyPhoneNumbers!=='undefined'?appMyPhoneNumbers:{}).length]);
 
   const startVoipCall = async (phoneNumber, contact = null) => {

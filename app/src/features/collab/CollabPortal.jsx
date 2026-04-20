@@ -736,48 +736,65 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   useEffect(() => { voipStateRef.current = (typeof voipState!=='undefined'?voipState:null); }, [voipState]);
   const [voipCurrentCallLogId, setVoipCurrentCallLogId] = useState(null);
   // Initialize Twilio Device for real VoIP calls (SDK now bundled via npm)
+  // Deferred to first user gesture (browser autoplay policy: AudioContext cannot
+  // start until user interacts — otherwise "AudioContext was not allowed to start"
+  // warning spams the console). Token is pre-fetched at mount so the device
+  // instantiation at first click is immediate.
   useEffect(() => {
     if (!(typeof voipConfigured!=='undefined'?voipConfigured:null) || !company?.id) return;
-    // Find this collaborator's assigned number
     const myNumber = ((typeof appMyPhoneNumbers!=='undefined'?appMyPhoneNumbers:null)||[]).find(pn => pn.collaboratorId === collab.id && pn.status === 'assigned');
-    if (!myNumber) return; // No assigned number → no VoIP device
-    console.log('[COLLAB VOIP] Initializing device for', collab.id, 'number:', myNumber.phoneNumber);
-    api('/api/voip/token', { method:'POST', body:{ companyId:company.id, collaboratorId:collab.id } })
-      .then(data => {
-        if (!data?.token || data.demo) { console.warn('[COLLAB VOIP] Demo token, skipping device init'); return; }
-        console.log('[COLLAB VOIP] Got real token, creating Device...');
-        const device = new TwilioDevice(data.token, { codecPreferences:['opus','pcmu'], edge:'dublin' });
-        device.on('registered', () => console.log('[COLLAB VOIP] Device registered ✓'));
-        device.on('error', (err) => { console.error('[COLLAB VOIP ERR]', err); showNotif('Erreur VoIP: '+err.message,'danger'); });
-        device.on('incoming', (call) => {
-          setVoipState('incoming');
-          voipCallRef.current = call;
-          setPhoneIncomingInfo({ from: call.parameters?.From || 'Inconnu' });
-          setPhoneDialNumber(call.parameters?.From || '');
-          setPhoneDialerMinimized(false);
-          // Lookup contact by phone number
-          const incomingNum = call.parameters?.From || '';
-          if (incomingNum) {
-            api(`/api/voip/lookup?phone=${encodeURIComponent(incomingNum)}&companyId=${company.id}`)
-              .then(ct => { if (ct?.name) setPhoneIncomingInfo(prev => ({ ...prev, contactName: ct.name, contactId: ct.id })); })
-              .catch(() => {});
-          }
-          showNotif('Appel entrant...','info');
-          call.on('cancel', () => { setVoipState('idle'); setPhoneIncomingInfo(null); setPhoneDialNumber(''); });
-          call.on('disconnect', () => { setVoipState('idle'); voipCallRef.current = null; setPhoneIncomingInfo(null); setPhoneDialNumber(''); });
-        });
-        device.register();
-        voipDeviceRef.current = device;
-        console.log('[COLLAB VOIP] Device created and registering...');
-      })
-      .catch(err => console.error('[COLLAB VOIP TOKEN ERR]', err));
+    if (!myNumber) return;
+    console.log('[COLLAB VOIP] Pre-fetching token for', collab.id, 'number:', myNumber.phoneNumber);
+    // 1) Fetch token immediately (doesn't require user gesture)
+    const tokenPromise = api('/api/voip/token', { method:'POST', body:{ companyId:company.id, collaboratorId:collab.id } })
+      .catch(err => { console.error('[COLLAB VOIP TOKEN ERR]', err); return null; });
+    // 2) Defer actual Device creation to first user gesture
+    let initialized = false;
+    const initDevice = async () => {
+      if (initialized) return;
+      initialized = true;
+      const data = await tokenPromise;
+      if (!data?.token || data.demo) { console.warn('[COLLAB VOIP] No real token, skipping device init'); return; }
+      console.log('[COLLAB VOIP] User gesture received, creating Device...');
+      const device = new TwilioDevice(data.token, { codecPreferences:['opus','pcmu'], edge:'dublin' });
+      device.on('registered', () => console.log('[COLLAB VOIP] Device registered ✓'));
+      device.on('error', (err) => { console.error('[COLLAB VOIP ERR]', err); showNotif('Erreur VoIP: '+err.message,'danger'); });
+      device.on('incoming', (call) => {
+        setVoipState('incoming');
+        voipCallRef.current = call;
+        setPhoneIncomingInfo({ from: call.parameters?.From || 'Inconnu' });
+        setPhoneDialNumber(call.parameters?.From || '');
+        setPhoneDialerMinimized(false);
+        const incomingNum = call.parameters?.From || '';
+        if (incomingNum) {
+          api(`/api/voip/lookup?phone=${encodeURIComponent(incomingNum)}&companyId=${company.id}`)
+            .then(ct => { if (ct?.name) setPhoneIncomingInfo(prev => ({ ...prev, contactName: ct.name, contactId: ct.id })); })
+            .catch(() => {});
+        }
+        showNotif('Appel entrant...','info');
+        call.on('cancel', () => { setVoipState('idle'); setPhoneIncomingInfo(null); setPhoneDialNumber(''); });
+        call.on('disconnect', () => { setVoipState('idle'); voipCallRef.current = null; setPhoneIncomingInfo(null); setPhoneDialNumber(''); });
+      });
+      device.register();
+      voipDeviceRef.current = device;
+    };
+    const gestureOpts = { once: true, capture: true, passive: true };
+    document.addEventListener('click',       initDevice, gestureOpts);
+    document.addEventListener('keydown',     initDevice, gestureOpts);
+    document.addEventListener('touchstart',  initDevice, gestureOpts);
     // Listen for floating keypad dial messages
     const onPopupMsg = (e) => {
       if(e.data?.type==='c360-dial'&&e.data.number) { setPhoneDialNumber(e.data.number); setTimeout(()=>{ const btn = document.querySelector('[data-dial-call-btn]'); if(btn) btn.click(); }, 100); }
       if(e.data?.type==='c360-hangup') { const btn = document.querySelector('[data-dial-hangup-btn]'); if(btn) btn.click(); }
     };
     window.addEventListener('message', onPopupMsg);
-    return () => { window.removeEventListener('message', onPopupMsg); if(voipDeviceRef.current) { voipDeviceRef.current.destroy(); voipDeviceRef.current = null; } };
+    return () => {
+      document.removeEventListener('click',      initDevice, { capture: true });
+      document.removeEventListener('keydown',    initDevice, { capture: true });
+      document.removeEventListener('touchstart', initDevice, { capture: true });
+      window.removeEventListener('message', onPopupMsg);
+      if(voipDeviceRef.current) { voipDeviceRef.current.destroy(); voipDeviceRef.current = null; }
+    };
   }, [voipConfigured, company?.id, collab.id, ((typeof appMyPhoneNumbers!=='undefined'?appMyPhoneNumbers:null)||[]).length]);
 
   // Load call forms assigned to this collaborator
@@ -3424,6 +3441,19 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       // Home tab
       bookings, voipCallLogs, smsCredits,
       googleEventsProp,
+      fmtDur,
+      togglePhoneLeftPanel,
+      togglePhoneDND,
+      // Vague 1b — exposed helpers/handlers declared in CollabPortal
+      fmtPhone,
+      isModuleOn,
+      handleCollabUpdateContact,
+      handlePipelineStageChange,
+      setPostCallResultModal,
+      setPerduMotifModal,
+      generateCallAnalysis,
+      cScoreColor, cScoreLabel,
+      isAvailableSlot,
       portalTab, setPortalTab,
       portalTabKey, setPortalTabKey,
       phoneDialNumber, setPhoneDialNumber,
@@ -3442,6 +3472,85 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       setAvails, setVacations,
       saveAvail, saveAvailBuffer, saveAvailMaxPerDay, saveAvailBreaks,
       toggleDay, updateSlot, addSlot, removeSlot,
+      // ═══ REWIRE 2026-04-20 — exposures complémentaires pour tabs (78 symboles) ═══
+      CALL_TAGS,
+      CRM_STD_COLS,
+      PHONE_MODULES,
+      ZOOM_LEVELS,
+      _defaultLiveConfig,
+      _tempColor,
+      _tempEmoji,
+      _tempLabel,
+      acceptCollabIncomingCall,
+      addToBlacklist,
+      agendaScrolledRef,
+      autoDialerNext,
+      basePreset,
+      collabContactTags,
+      collabNotesTimerRef,
+      collabPaginatedContacts,
+      collabPipelineAnalytics,
+      collabsProp,
+      contactsLocalEditRef,
+      contactsRef,
+      dayBookings,
+      dayDate,
+      endPhoneCall,
+      exportICS,
+      fetchCallTranscript,
+      getCollabLeadScore,
+      getLeadTemperature,
+      googleConnected,
+      googleLoading,
+      gridTheme,
+      handleAddCustomStage,
+      handleCollabCreateContact,
+      handleCollabDeleteContact,
+      handleColumnDragEnd,
+      handleColumnDragStart,
+      handleColumnDrop,
+      handleDeleteCustomStage,
+      handleDragEnd,
+      handleDragLeave,
+      handleDragOver,
+      handleDragStart,
+      handleDrop,
+      handleQuickAddContact,
+      handleUpdateCustomStage,
+      hours,
+      isAdminView,
+      linkVisitorToContacts,
+      monthMonth,
+      monthYear,
+      myCrmContacts,
+      myGoogleEvents,
+      openCallDetail,
+      perduMotifModal,
+      phoneTeamChatRef,
+      playDtmf,
+      postCallResultModal,
+      prefillKeypad,
+      rejectCollabIncomingCall,
+      removeFromBlacklist,
+      removeScheduledCall,
+      saveCallRecording,
+      savePhoneCallRating,
+      savePhoneCallTag,
+      saveScriptsDual,
+      setV7TransferModal,
+      setV7TransferTarget,
+      startAutoDialer,
+      stopAutoDialer,
+      syncGoogle,
+      today,
+      toggleModule,
+      togglePhoneAutoRecap,
+      togglePhoneAutoSMS,
+      togglePhoneFav,
+      togglePhoneRecording,
+      togglePhoneRightPanel,
+      v7FollowersMap,
+      weekDates,
     }}>
     <div style={{ display:"flex", minHeight:"100vh", background:T.bg, fontFamily:"'Onest','Outfit',system-ui,sans-serif", color:T.text }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Onest:wght@300;400;500;600;700;800&display=swap'); * {margin:0;padding:0;box-sizing:border-box;} ::-webkit-scrollbar{width:5px;} ::-webkit-scrollbar-thumb{background:${T.border2};border-radius:3px;}

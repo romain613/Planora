@@ -15,3 +15,15 @@ backups/
 *.p7b
 .claude/
 node_modules
+
+# Local source backups (timestamp-suffixed)
+*.pre-*.bak
+*.bak-*
+
+# Build artefacts intermédiaires (dist temporaires)
+app/dist-minified.bak/
+
+# Smoke/test tooling runtime outputs
+ops/smoke/node_modules/
+ops/smoke/last-*.json
+ops/smoke/screenshots/
