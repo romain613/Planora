@@ -8,7 +8,7 @@
 
 import React, { useState, useMemo, useEffect, Fragment } from "react";
 import { T } from "../../../theme";
-import { I, Btn, Card, Avatar, Badge, Modal, Input, ValidatedInput, Stars, Spinner, EmptyState, HelpTip } from "../../../shared/ui";
+import { I, Btn, Card, Avatar, Badge, Modal, Input, ValidatedInput, Stars, Spinner, EmptyState, HelpTip, HookIsolator } from "../../../shared/ui";
 import { displayPhone, formatPhoneFR } from "../../../shared/utils/phone";
 import { isValidEmail, isValidPhone } from "../../../shared/utils/validators";
 import { fmtDate, DAYS_FR, MONTHS_FR } from "../../../shared/utils/dates";
@@ -17,6 +17,7 @@ import { sendNotification, buildNotifyPayload } from "../../../shared/utils/noti
 import { api } from "../../../shared/services/api";
 import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";
+import { FicheClientMsgScreen, FicheSuiviScreen, FicheDocsLinkedScreen } from "../screens";
 
 const CrmTab = () => {
   const ctx = useCollabContext();
@@ -59,8 +60,6 @@ const CrmTab = () => {
     contractForm, setContractForm,
     contactAnalysesHistory, setContactAnalysesHistory,
     contactAnalysesHistoryModal, setContactAnalysesHistoryModal,
-    histOpen, setHistOpen,
-    statusHist, setStatusHist,
     dragContact, setDragContact,
     dragOverStage, setDragOverStage,
     dragColumnId, setDragColumnId,
@@ -957,6 +956,7 @@ const CrmTab = () => {
 </Modal>
 
 {/* ── FICHE CLIENT MODAL ── */}
+{selectedCrmContact && (
 <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>{setSelectedCrmContact(null);setCollabFicheTab("notes");}}>
   <div style={{background:T.surface,borderRadius:16,width:"100%",maxWidth:700,maxHeight:"90vh",overflow:"auto",padding:28,boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}} onClick={e=>e.stopPropagation()}>
     {(()=>{
@@ -1763,6 +1763,7 @@ const CrmTab = () => {
     })()}
   </div>
 </div>
+)}
     </>
   );
 };

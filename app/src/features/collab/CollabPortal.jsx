@@ -3238,7 +3238,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       handleCollabSendChat, handleCollabChatFiles, handleCollabChatPaste,
       handleCollabShareContactCard,
       // Objectifs tab
-      goalsLoading, myGoals, myTeamGoals, myRewards,
+      goalsLoading, myGoals, setMyGoals, myTeamGoals, myRewards, setMyRewards,
       // Phone/Pipeline Live tab — VoIP + dialer + conversations + history + AI copilot live
       phoneSubTab, setPhoneSubTab,
       phoneActiveCall, setPhoneActiveCall,
@@ -3439,7 +3439,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       myBookings, myCalendars, monthDays, agendaFillRate,
       getBookingAt, getGoogleEventAt, updateBooking,
       // Home tab
-      bookings, voipCallLogs, smsCredits,
+      bookings, voipCallLogs, setVoipCallLogs, smsCredits,
       googleEventsProp,
       fmtDur,
       togglePhoneLeftPanel,
@@ -3458,6 +3458,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       portalTabKey, setPortalTabKey,
       phoneDialNumber, setPhoneDialNumber,
       phoneRightTab, setPhoneRightTab,
+      phoneRightCollapsed, setPhoneRightCollapsed,
+      phoneRightAccordion, setPhoneRightAccordion,
+      phoneLeftCollapsed, setPhoneLeftCollapsed,
       pipelineRightContact, setPipelineRightContact,
       phoneShowScheduleModal, setPhoneShowScheduleModal,
       phoneScheduleForm, setPhoneScheduleForm,

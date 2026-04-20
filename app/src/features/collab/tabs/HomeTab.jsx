@@ -1,8 +1,8 @@
 // Phase 13a — extracted Home tab from CollabPortal.jsx (was lines 3605-4439 IIFE).
 
-import React from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { T } from "../../../theme";
-import { I, Btn, Card, Avatar, Stat, Stars } from "../../../shared/ui";
+import { I, Btn, Card, Avatar, Stat, Stars, HookIsolator } from "../../../shared/ui";
 import { api } from "../../../shared/services/api";
 import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";

@@ -15,6 +15,7 @@ import { sendNotification, buildNotifyPayload } from "../../../shared/utils/noti
 import { api, recUrl, API_BASE, collectEnv } from "../../../shared/services/api";
 import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";
+import { FicheDocsPanelScreen, PhoneTrainingScreen } from "../screens";
 
 const PhoneTab = () => {
   const ctx = useCollabContext();
@@ -68,7 +69,7 @@ const PhoneTab = () => {
     phoneScheduledCalls, setPhoneScheduledCalls,
     schedContactMode, setSchedContactMode, schedSearchQ, setSchedSearchQ,
     phoneCalMonth, setPhoneCalMonth,
-    phoneStatsPeriod, setPhoneStatsPeriod, phoneStatsOpen, setPhoneStatsOpen,
+    phoneStatsPeriod, setPhoneStatsPeriod,
     todayCallCount,
     phoneShowCampaignModal, setPhoneShowCampaignModal,
     phoneCampaigns, setPhoneCampaigns, phoneDailyGoal, setPhoneDailyGoal,
@@ -101,14 +102,14 @@ const PhoneTab = () => {
     phoneDialNumber, setPhoneDialNumber,
     phoneShowScheduleModal, setPhoneShowScheduleModal,
     phoneScheduleForm, setPhoneScheduleForm,
-    voipDevice, voipCall, voipCallRef,
+    voipCallRef,
     voipState, setVoipState,
     voipCurrentCallLogId, setVoipCurrentCallLogId,
     voipCredits, voipConfigured,
     appMyPhoneNumbers, appPhonePlans, appConversations, setAppConversations,
     pdNumbers, setPdNumbers, pdParsedList, setPdParsedList, pdDuplicates, setPdDuplicates,
     pdStatus, setPdStatus, pdCurrentIdx, setPdCurrentIdx, pdResults, setPdResults,
-    pdResult, pdStageId, pdContactList,
+    pdStageId, pdContactList,
     collabCallForms, setCollabCallForms,
     callFormData, setCallFormData, callFormResponses, setCallFormResponses,
     callFormResponseAccordion, setCallFormResponseAccordion,
@@ -116,7 +117,7 @@ const PhoneTab = () => {
     selConvId, setSelConvId, convEvents, setConvEvents,
     convNoteText, setConvNoteText, convSmsText, setConvSmsText,
     convSearch, setConvSearch, convFilter, setConvFilter, convLoading, setConvLoading,
-    selectedLine, setSelectedLine, zoom, setZoom,
+    selectedLine, setSelectedLine,
     cockpitOpen, setCockpitOpen, cockpitMinimized, setCockpitMinimized,
     liveConfig, saveLiveConfig,
     phoneQuickAddName, setPhoneQuickAddName,

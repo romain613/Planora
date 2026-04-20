@@ -2,7 +2,7 @@
 
 import React from "react";
 import { T } from "../../../theme";
-import { I, Btn, Card, Avatar, Badge, Modal, Spinner } from "../../../shared/ui";
+import { I, Btn, Card, Avatar, Badge, Modal, Spinner, Stat } from "../../../shared/ui";
 import { DAYS_FR, DAYS_SHORT, MONTHS_FR, getDow, fmtDate } from "../../../shared/utils/dates";
 import { sendNotification, buildNotifyPayload } from "../../../shared/utils/notifications";
 import { _T } from "../../../shared/state/tabState";
