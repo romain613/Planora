@@ -1,24 +1,39 @@
 # PLANORA / Calendar360 — Mémoire Projet
 
-> Dernière mise à jour : 2026-04-19 (V7 P0 fonctionnel en prod + onboarding data eng en cours)
+> Dernière mise à jour : **2026-04-20** — Phase E.3 clôturée, **Option A cristallisée** (mono = source unique, tenants archivés)
 > Mainteneur : MH (rc.sitbon@gmail.com, supra admin)
 > Collaborateur data eng : en cours d'onboarding (accès SSH à configurer, VS Code/Cursor en install)
+>
+> **⚠ Lecture obligatoire pour toute reprise** :
+> - §0 = règle d'isolation par entreprise (**cible long terme**)
+> - **§10 = état actuel stable** (Option A, 6 companies en `legacy`, tenants archivés)
+> - Ne pas confondre **la cible** (§0) avec **le runtime actuel** (§10).
 
 ---
 
-## 0. RÈGLE FONDAMENTALE — ISOLATION DB PAR ENTREPRISE
+## 0. RÈGLE FONDAMENTALE — ISOLATION DB PAR ENTREPRISE (cible long terme)
 
-> **UN CLIENT = UNE BASE DE DONNÉES DÉDIÉE**
+> 🟢 **ÉTAT ACTUEL (2026-04-20) — Option A active** : toutes les 6 companies sont en
+> `tenantMode='legacy'` dans Control Tower. Le monolithe `calendar360.db` est la **seule
+> source de vérité runtime**. Les tenant DBs existantes ont été **archivées** (gel
+> 2026-04-16, archivage E.3.6 — voir §10).
 >
-> Décision architecturale actée par MH (2026-04-19).
+> **La règle ci-dessous reste la cible architecturale long terme** (Piste 3 — vrai
+> multi-tenant), **mais elle n'est PAS le runtime actuel**. Pour implémenter / opérer
+> aujourd'hui, suivre §10 (Option A cristallisée).
 
-### Règle absolue
-Chaque entreprise cliente possède **sa propre base de données SQLite séparée**, stockée
-dans `/var/www/planora-data/tenants/<companyId>.db`. Il n'existe **aucune exception**.
+> **UN CLIENT = UNE BASE DE DONNÉES DÉDIÉE** (cible)
+>
+> Décision architecturale initiale MH (2026-04-19).
+> Cible future réservée à la Piste 3 (vrai multi-tenant), **non démarrée à ce jour**.
 
-### Périmètre actuel (entreprises avec base dédiée)
-- **CapFinances** (`c1776169036725`) → `/var/www/planora-data/tenants/c1776169036725.db`
-- **MonBilandeCompetences.fr** (`c-monbilan`) → `/var/www/planora-data/tenants/c-monbilan.db`
+### Règle absolue (cible — non appliquée en runtime actuel)
+Chaque entreprise cliente doit (à terme) posséder **sa propre base de données SQLite
+séparée**, stockée dans `/var/www/planora-data/tenants/<companyId>.db`.
+
+### Périmètre historique (2 entreprises provisionnées puis archivées)
+- **CapFinances** (`c1776169036725`) → `/var/backups/planora/tenants-frozen-archived-20260420-171003/c1776169036725.db` (archived E.3.6)
+- **MonBilandeCompetences.fr** (`c-monbilan`) → `/var/backups/planora/tenants-frozen-archived-20260420-171003/c-monbilan.db` (archived E.3.6)
 
 ### Règle pour toute nouvelle entreprise
 Lors de la création d'une nouvelle entreprise (inscription, onboarding, migration manuelle) :
@@ -32,43 +47,48 @@ Lors de la création d'une nouvelle entreprise (inscription, onboarding, migrati
 5. L'espace client de l'entreprise (storage fichiers, uploads) suit la même isolation :
    `/var/www/planora-data/storage/<companyId>/`
 
-### Implications code à respecter
-- **Aucune route backend ne doit importer `db` du monolithe directement** pour des opérations
-  sur les données business d'une entreprise. Toutes les routes qui touchent aux contacts,
-  bookings, call_logs, messages, call_transcripts, contact_followers, etc. DOIVENT passer
-  par le tenantResolver pour obtenir le bon handle DB.
-- Le monolithe (`calendar360.db`) ne doit plus servir que pour :
-  - Les anciennes entreprises non encore migrées (legacy, à phaser out progressivement)
-  - Les tables globales partagées (ex : `supra_admins`)
-- Toute nouvelle fonctionnalité (V7, V8, etc.) doit être conçue multi-tenant dès le départ,
-  avec le resolver comme seul point d'accès DB.
+### Implications code (cible Piste 3 — **NE PAS APPLIQUER en Option A actuelle**)
 
-### Pattern type à utiliser dans les routes backend
+> ⚠ Ces règles sont la **cible long terme**, pas le runtime actuel.
+> **En Option A (§10), le chemin officiel court terme est `import { db } from '../db/database.js'`**.
+> Toute nouvelle route V7 P1+ / V8 utilise le monolithe direct avec `WHERE companyId`.
+
+- (Cible future) Aucune route backend ne doit importer `db` du monolithe directement pour des
+  opérations sur les données business d'une entreprise. Toutes les routes qui touchent aux
+  contacts, bookings, call_logs, etc. DOIVENT passer par le tenantResolver pour obtenir le
+  bon handle DB.
+- (Cible future) Le monolithe (`calendar360.db`) ne doit plus servir que pour :
+  - Les anciennes entreprises non encore migrées (legacy)
+  - Les tables globales partagées (ex : `supra_admins`)
+
+### Pattern type à utiliser dans les routes backend (cible — **pas en Option A**)
 ```js
-// ❌ MAUVAIS — importe le db monolithe, ignore le tenant
+// ❌ CIBLE FUTURE MAUVAIS — importe le db monolithe, ignore le tenant
+// ✅ OPTION A ACTUELLE = CHEMIN OFFICIEL — le monolithe EST la source de vérité
 import { db } from '../db/database.js';
 router.put('/endpoint', (req, res) => {
-  const row = db.prepare('SELECT * FROM contacts WHERE id = ?').get(id);
+  const row = db.prepare('SELECT * FROM contacts WHERE id = ? AND companyId = ?').get(id, req.auth.companyId);
 });
 
-// ✅ BON — utilise le resolver pour obtenir le bon handle
-import { getDbForCompany } from '../db/tenantResolver.js';
-router.put('/endpoint', (req, res) => {
-  const db = getDbForCompany(req.auth.companyId);
-  const row = db.prepare('SELECT * FROM contacts WHERE id = ?').get(id);
-});
+// ⚠ CIBLE FUTURE (Piste 3) — à ne PAS utiliser en Option A : renvoie 409 TENANT_MODE_NOT_ACTIVE
+// import { withTenant } from '../helpers/withTenantDb.js';
+// router.put('/endpoint', requireAuth, withTenant((req, res, db, tenant) => {
+//   const row = db.prepare('SELECT * FROM contacts WHERE id = ?').get(id);
+// }));
 ```
 
-### À auditer régulièrement
-- Les routes qui font `import { db } from '../db/database.js'` → potentiellement buggées
-  pour les entreprises en mode shadow/tenant. **Le bug V7 transfert (2026-04-19) en est
-  un cas typique** : `transfer.js` utilise le monolithe direct, donc ne trouve pas les
-  contacts quand l'utilisateur est sur une entreprise à base dédiée.
-- Les tenant DBs doivent avoir TOUTES les tables du monolithe (pas seulement 88/93) au fur
-  et à mesure que des features sont ajoutées. À ce jour CapFinances/MonBilan ont 88 tables,
-  le monolithe en a 93 → 5 tables manquantes à identifier et synchroniser.
-- Chaque nouvelle migration/feature qui ajoute une table au monolithe DOIT aussi
-  la créer dans toutes les tenant DBs existantes (script idempotent de propagation).
+### À auditer régulièrement (cible — réservé Piste 3 quand démarrée)
+
+> 🟡 Ces audits sont à **reprendre lors du lancement de la Piste 3** (vrai multi-tenant).
+> En Option A actuelle, ils sont **non applicables** (aucune company en mode `shadow` ou `tenant`).
+
+- (Cible Piste 3) Les routes qui font `import { db } from '../db/database.js'` → potentiellement
+  buggées pour les entreprises en mode shadow/tenant. En Option A, ce pattern est le chemin
+  officiel — **pas d'audit à faire dessus**.
+- (Cible Piste 3) Les tenant DBs (si recréées) devront avoir TOUTES les tables du monolithe,
+  avec un script idempotent de propagation à chaque évolution schéma.
+- (Historique E.1) Au moment du gel 2026-04-16, les 2 tenants avaient 89 tables vs 95 au
+  monolithe — diff détaillé dans [db-migrations/phase-E1-cartographie-20260420/E1-synthese-MH.md](db-migrations/phase-E1-cartographie-20260420/E1-synthese-MH.md) §2.
 
 ---
 
@@ -152,12 +172,13 @@ router.put('/endpoint', (req, res) => {
 | **Build output** | `/var/www/planora/app/dist/` | Où `npm run build` écrit |
 | **PIÈGE — ancien dist** | `/var/www/planora/dist/` | A son propre index.html, NE PAS UTILISER |
 | **NGINX SERT ICI** | `/var/www/vhosts/calendar360.fr/httpdocs/` | **Toujours copier le build ici !** |
-| **Base monolithe** | `/var/www/planora-data/calendar360.db` | SQLite WAL, 93 tables |
-| **Control Tower** | `/var/www/planora-data/control_tower.db` | Métadonnées multi-tenant |
-| **Bases tenant** | `/var/www/planora-data/tenants/<companyId>.db` | **Peuplées** pour CapFinances (1.6M, 88 tables) et MonBilan (3.4M, 88 tables). Voir §0. |
+| **Base monolithe (SOURCE DE VÉRITÉ Option A)** | `/var/www/planora-data/calendar360.db` | SQLite WAL, **95 tables**. **Le backend lit/écrit ici exclusivement.** |
+| **Control Tower** | `/var/www/planora-data/control_tower.db` | Registre des 6 companies (toutes `tenantMode='legacy'`), `tenant_status_history` (8 rows). |
+| **Bases tenant** | `/var/www/planora-data/tenants/` | **Dossier VIDE** (préservé pour fallback `TENANTS_DIR`). DBs historiques archivées vers `/var/backups/planora/tenants-frozen-archived-20260420-171003/` (E.3.6). |
 | **Fichiers upload** | `/var/www/planora-data/storage/<companyId>/` | Par entreprise |
-| **Backend** | `/var/www/planora/server/` | Node.js Express |
-| **PM2 config** | `/var/www/planora/ecosystem.config.cjs` | |
+| **Backend** | `/var/www/planora/server/` | Node.js Express — **aucun fichier `.db` dans ce dossier** (fantômes archivés E.3.7 vers `/var/backups/planora/fantom-db-20260420-165926/`) |
+| **PM2 config** | `/var/www/planora/ecosystem.config.cjs` | Définit 4 env vars : `DB_PATH`, `CONTROL_TOWER_PATH`, `TENANTS_DIR`, `STORAGE_DIR` (E.3.8-E) |
+| **Archives** | `/var/backups/planora/` | 6 `.tar.gz` (baseline + pre-step2/4/8E + fantômes + tenants) |
 
 ### Commande de déploiement COMPLÈTE
 ```bash
@@ -201,54 +222,73 @@ Définis comme array : `{id:"...", label:"..."}` — actuellement : infos, notes
 
 ---
 
-## 3. SYSTÈME DB HYBRIDE MULTI-TENANT
+## 3. SYSTÈME DB HYBRIDE MULTI-TENANT — État après E.3 (Option A)
 
-### Architecture 3 tiers
+### 🟢 État runtime actuel (2026-04-20)
 
-**Tier 1 — Monolithe** (`calendar360.db`)
-- Base unique avec TOUTES les données de TOUTES les entreprises
+**Option A cristallisée** : le système hybride 3 tiers existe au niveau du **code et du
+schéma**, mais **un seul tier est actif en production** :
+
+| Tier | Rôle théorique | **Rôle effectif en Option A** |
+|---|---|---|
+| Tier 1 — Monolithe | Données legacy + tables globales | **Source de vérité unique pour toutes les données business** |
+| Tier 2 — Control Tower | Registre routing tenant | Registre **informatif** : toutes les 6 companies en `tenantMode='legacy'` |
+| Tier 3 — Bases tenant | DBs dédiées par entreprise | **Archivées** (2 DBs historiques dans `/var/backups/…tenants-frozen-archived-…/`) |
+
+### Tier 1 — Monolithe `calendar360.db`
+- Base unique avec toutes les données de toutes les entreprises
 - Isolation par colonne `companyId` sur chaque table business
-- 93 tables : companies, collaborators, contacts, bookings, call_logs, etc.
-- **C'est ce qui est LIVE en production actuellement**
+- **95 tables** (au 2026-04-20)
+- **Source de vérité unique LIVE en production.** Toutes les 73 routes backend y lisent/écrivent.
 
-**Tier 2 — Control Tower** (`control_tower.db`)
-- Registre central des tenants
-- Tables : `companies` (avec `tenantMode`, `tenantFeatures`), `tenant_databases`, `sessions`, `supra_admins`, `tenant_shadow_diffs`
-- Gère le routing : quel mode pour quelle entreprise
+### Tier 2 — Control Tower `control_tower.db`
+- Registre central des companies
+- 9 tables (dont 2 `sessions` et `supra_admins` en doublon inutile — cf. dettes Piste 2)
+- **6 companies** enregistrées, **toutes en `tenantMode='legacy'`** (distribution après E.3.4)
+- `tenant_databases` : 2 rows (CapFinances + MonBilan) qui pointent vers des DBs archivées
+- `tenant_status_history` : 8 entries tracent chaque décision (pilot-migration 2 entries +
+  E.3.2 backfill 4 entries + E.3.4 flip shadow→legacy 2 entries)
 
-**Tier 3 — Bases par entreprise** (`tenants/<companyId>.db`)
-- **POPULÉ et ACTIF** pour CapFinances (`c1776169036725.db`, 1.6 Mo, 88 tables) et
-  MonBilandeCompetences.fr (`c-monbilan.db`, 3.4 Mo, 88 tables).
-- Voir §0 pour la règle d'isolation DB par entreprise — **toute nouvelle entreprise
-  ouverte sur Planora doit avoir sa propre base dédiée**.
+### Tier 3 — Bases tenant (archivées — Option A)
+- **Plus aucune tenant DB active**
+- CapFinances (`c1776169036725.db`, 1.6 Mo, 89 tables, 240 rows au gel)
+  et MonBilan (`c-monbilan.db`, 3.5 Mo, 89 tables, 3847 rows au gel) sont **archivées** depuis
+  2026-04-20 17:10 UTC vers `/var/backups/planora/tenants-frozen-archived-20260420-171003/`.
+- Gelées depuis 2026-04-16 (aucune écriture depuis).
+- SHA-256 bit-à-bit préservés (E.3.6 §3.2).
 
-### Modes de routing (tenantResolver.js)
+### Modes de routing (tenantResolver.js) — aperçu runtime actuel
 
-| Mode | Lecture | Écriture | Status |
-|------|---------|----------|--------|
-| **legacy** | Monolithe seul | Monolithe seul | Actif pour les entreprises historiques non encore migrées |
-| **shadow** | Monolithe + tenant en parallèle, compare, retourne monolithe | Monolithe seul | **Actif pour CapFinances et MonBilan** (feature `contacts`) |
-| **tenant** | Base tenant (fallback monolithe) | Base tenant | Cible finale pour toutes les entreprises une fois la migration stabilisée |
+| Mode | Nb companies actuelles | Comportement |
+|------|---:|---|
+| **legacy** | **6** (toutes) | Monolithe seul, `WHERE companyId` pour isoler |
+| **shadow** | 0 | — |
+| **tenant** | 0 | — |
 
-### Résolution du routing
-```
-Requête → extraire companyId (auth middleware)
-→ resolveTenant(companyId) via Control Tower (cache 10min)
-→ getRouteMode(companyId, feature)
-  → kill-switch si tenantMode='legacy' → legacy
-  → sinon check tenantFeatures[feature]
-  → sinon fallback tenantMode
-→ route vers la bonne DB
-```
+`tenantResolver.resolveTenant(id)` fonctionne encore (utilisé par `routes/tenantAdmin.js`)
+mais `getTenantDb(id)` lèverait `TENANT_MODE_NOT_ACTIVE` (409) pour toutes les companies
+— comportement souhaité.
 
-### Variables d'environnement DB
-- `TENANTS_DIR` : `/var/www/planora-data/tenants` (défaut)
-- `STORAGE_DIR` : `/var/www/planora-data/storage`
-- `CONTROL_TOWER_PATH` : `/var/www/planora-data/control_tower.db`
+### Variables d'environnement DB (pm2 — E.3.8-E)
 
-### Données en prod
-- 285 contacts, 6 entreprises, 11 collaborateurs
-- Julie = collaboratrice principale pour les tests
+Définies dans `ecosystem.config.cjs`, **injectées dans le process au démarrage** :
+
+| Var | Valeur |
+|---|---|
+| `DB_PATH` | `/var/www/planora-data/calendar360.db` (monolithe officiel) |
+| `CONTROL_TOWER_PATH` | `/var/www/planora-data/control_tower.db` |
+| `TENANTS_DIR` | `/var/www/planora-data/tenants` (dossier préservé vide) |
+| `STORAGE_DIR` | `/var/www/planora-data/storage` |
+| `NODE_ENV` | `production` |
+| `PORT` | `3001` |
+
+**Guard actif** dans `db/database.js` (E.3.8-E) : si `NODE_ENV=production` ET `DB_PATH` absent,
+le backend **refuse de démarrer** (exception claire au lieu de fallback silencieux).
+
+### Données en prod (après E.3)
+- **Monolithe** : 248 contacts, 48 bookings, 232 call_logs, 847 tickets, 1509 audit_logs, 412 pipeline_history, 6 contact_followers (V7), 12 collaborateurs, 6 companies, …
+- **6 companies** : voir §10 §10.5 (classification complète)
+- Julie Desportes (CapFinances) = collaboratrice principale pour les tests V7
 
 ---
 
@@ -369,14 +409,76 @@ plutôt que d'attendre le crash en prod.
   directement dans HookIsolator. Grep automatique à faire avant chaque deploy :
   `grep -n '{(()=>{' App.jsx | head -10` puis vérifier qu'aucune ne contient `useState` ou `useEffect` à l'intérieur.
 
-### Backend — bugs connus (non-bloquants, à traiter plus tard)
+### Backend — bugs connus (historiques, partiellement résolus par E.3)
 Trouvés dans les logs pm2 (2026-04-19). Aucun ne fait crash le process, juste des warnings réguliers :
 - `[CRON RECYCLE LOST ERROR] no such column: ph.created_at` — la table `pipeline_history` utilise probablement `createdAt` (camelCase) et non `created_at`. À corriger dans le SQL du cron.
 - `[SMART AUTO] Rule 1 error: no such column: updatedAt` — colonne manquante dans la table ciblée par la Rule 1.
 - `[AI AGENT DB ERR] no such column: "$.overall"` — requête JSON mal formée. Le `$.overall` devrait être en quotes simples.
-- `[DB] Fallback DB path used: /var/www/planora/server/calendar360.db — Set DB_PATH in .env for production` — DB_PATH pas défini dans .env, fallback utilisé à chaque restart.
+- ✅ `[DB] Fallback DB path used: …` — **RÉSOLU E.3.8-E** : `DB_PATH` défini dans `ecosystem.config.cjs` + guard `NODE_ENV=production` refuse le fallback.
 - `[MEDIA STREAM] DB save error: FOREIGN KEY constraint failed` — enregistrement VoIP qui ne respecte pas une FK.
 - `[EMAIL ERR] API Key is not enabled` — Resend/SendGrid key désactivée, emails non envoyés.
+
+---
+
+## 5bis. 🟡 DETTES APPLICATIVES RÉSIDUELLES (Piste 2 — non traitées)
+
+> Ces items sont **identifiés**, **traçables** (preuves dans les rapports E.1/E.2/E.3),
+> mais **NON traités** dans la phase E.3 clôturée. Ils forment le backlog de la **Piste 2**
+> (à démarrer séparément). **Aucune action à entreprendre sans validation MH explicite.**
+
+### 5bis.1 — 5 `audit_logs` écrits sans `companyId` (code bug)
+
+Dans `mono.audit_logs`, 5 rows ont `companyId=''` alors qu'elles devraient avoir une company :
+
+| entityType | action | count | Nature suspect |
+|---|---|---:|---|
+| `contact` | `contact_updated` | 3 | audit sans companyId (2026-04-19) |
+| `contact` | `contact_deleted` | 1 | audit sans companyId (2026-03-26) |
+| `collaborator` | `collaborator_created` | 1 | audit sans companyId (2026-04-17) |
+
+**Cause probable** : le code applicatif appelant `logAudit(...)` omet `companyId` dans certaines
+branches. À identifier via grep sur les call-sites (`db/database.js` + helpers/audit).
+Échantillon 30 rows + distribution complète dans [db-migrations/phase-E3-correction-20260420/E3-step3-orphans-archive.json](db-migrations/phase-E3-correction-20260420/E3-step3-orphans-archive.json) `.audit_empty_companyId`.
+
+### 5bis.2 — 2 bookings `companyId IS NULL` + `startTime='undefined'` (bug frontend)
+
+`mono.bookings` : 2 rows orphelins, calendarId pointe vers [USER-ABANDONED-1] (u1774867731875, comp-first).
+`startTime` est la **string JS `"undefined"`** au lieu d'une date → bug historique frontend.
+Archive : `E3-step3-orphans-archive.json` `.bookings_null`.
+
+### 5bis.3 — Warnings VOIP / MEDIA STREAM / GOOGLE SYNC (historiques)
+
+- `[VOIP SECURITY] Twilio signature mismatch` (récurrent, contourné avec warning)
+- `[MEDIA STREAM] DB save error: FOREIGN KEY constraint failed` (enregistrement VoIP)
+- `[GOOGLE SYNC ERROR] EAI_AGAIN oauth2.googleapis.com` (DNS intermittent)
+- `[EMAIL ERR] API Key is not enabled` (Resend/SendGrid)
+- `[CRON RECYCLE LOST ERROR] no such column: ph.created_at`
+- `[SMART AUTO] Rule 1 error: no such column: updatedAt`
+- `[AI AGENT DB ERR] no such column: "$.overall"`
+
+Chacun doit être traité séparément. **Aucun n'est bloquant en production actuelle.**
+
+### 5bis.4 — Code mort (déclaré dormant en E.2.5)
+
+Module multi-tenant écrit mais non branché en Option A :
+- `services/shadowCompare.js` — 0 consommateur, classé **conservé dormant** ou **archivé attic** selon décision Piste 3
+- `helpers/withTenantDb.js` — wrapper prêt, 0 consommateur runtime
+- `db/test/testShadowCompare.mjs`, `testMultitenantPhase1.mjs`, `testTenantMigration.mjs` — 3 scripts de tests qui passent mais testent du code dormant
+
+Détail complet dans [db-migrations/phase-E2-plan-correction-20260420/E2-dettes-backend.md](db-migrations/phase-E2-plan-correction-20260420/E2-dettes-backend.md) (33 dettes classifiées).
+
+### 5bis.5 — Tables CT en doublon inutile
+
+- `control_tower.db`.sessions (0 row — mono.sessions est la source réelle, 78 rows)
+- `control_tower.db`.supra_admins (0 row — mono.supra_admins est la source réelle, 1 row)
+
+**Suggéré E.2.5 D12/D13** : `DROP TABLE` dans CT schema (sous-step à traiter Piste 2).
+
+### 5bis.6 — CLAUDE.md incohérence historique
+
+Le pattern `getDbForCompany` cité dans §0 (pattern-type "✅ BON") **n'existe pas dans le code**.
+Le bon nom est `getTenantDb` (dans `tenantResolver.js`) ou `withTenant` / `runWithTenant` (dans
+`helpers/withTenantDb.js`). Cible à corriger si Piste 3 démarrée.
 
 ---
 
@@ -540,10 +642,21 @@ ignorer le suivi, ne PAS ignorer le reporting. C'est une fonctionnalité cœur b
 
 ---
 
-## 9. HANDOFF / ÉTAT COURANT DE LA SESSION (2026-04-19)
+## 9. HANDOFF / ÉTAT COURANT DE LA SESSION (2026-04-19 + mise à jour 2026-04-20)
 
 > Cette section permet à toute nouvelle instance Claude (Cowork, Claude Code dans VS Code,
 > Cursor, etc.) de reprendre le contexte sans repartir de zéro.
+>
+> **⚠ Depuis la rédaction initiale (2026-04-19), la phase E.3 a été exécutée (2026-04-20) :
+> 8 steps, Option A cristallisée. État final à lire en §10.**
+> Les "Points d'attention pour la prochaine session" ci-dessous sont partiellement résolus :
+> - Audit diff monolithe vs tenants : ✅ fait en E.1
+> - Audit routes `import { db }` direct : ✅ fait en E.1 (73/85 fichiers identifiés, **c'est
+>   désormais le chemin officiel en Option A** — plus à migrer)
+> - `PRAGMA foreign_keys` : ✅ actif sur les 4 DBs (0 violation), voir §10
+> - Setup git : ⏸ repo `romain613/Planora` **public** sur GitHub — livrables E.1/E.2/E.3
+>   **restent hors repo** (PII clients). Décision pistes 1/2/3 en suspens.
+> - Cleanup App.jsx.bak : non traité, pas urgent.
 
 ### Résumé de la session du 2026-04-19
 
@@ -646,3 +759,135 @@ prend le relais, voici le contexte minimum à assimiler :
    - **TOUJOURS backup avant de modifier** un fichier sensible sur le VPS
    - **TOUJOURS copier le build dans httpdocs** après un `npm run build` sinon nginx
      sert l'ancienne version
+
+---
+
+## 10. 🟢 OPTION A — ÉTAT CRISTALLISÉ (2026-04-20 17:10 UTC, Phase E.3 clôturée)
+
+> **Source de vérité unique pour toute reprise / nouvelle session. Lire en priorité.**
+> Cette section décrit **l'état runtime actuel** (pas la cible future §0).
+
+### 10.1 Principe Option A en une phrase
+
+> **Le monolithe `calendar360.db` est la seule source de vérité active. Toutes les 6 companies
+> sont en `tenantMode='legacy'` dans Control Tower. Aucun `shadow`, aucun `tenant` actif.
+> Les tenant DBs historiques sont archivées (dossier source vide mais préservé).**
+
+### 10.2 Chemin DB officiel — verrouillé à 2 niveaux
+
+**Runtime** (E.3.8-E) :
+- `db/database.js` contient un guard : `if (!process.env.DB_PATH && process.env.NODE_ENV === 'production') throw new Error(...)`
+- pm2 `ecosystem.config.cjs` injecte `DB_PATH=/var/www/planora-data/calendar360.db` + 3 autres vars
+- Démarrage sans DB_PATH en prod → exception claire (pas de fallback silencieux)
+- Healthcheck `GET /api/health` → `dbPath: "/var/www/planora-data/calendar360.db"`
+
+**Filesystem** (E.3.7 + E.3.6) :
+- `/var/www/planora/server/` : **0 fichier `.db*`** (fantômes archivés vers `/var/backups/planora/fantom-db-20260420-165926/`)
+- `/var/www/planora-data/tenants/` : **dossier vide préservé** (tenant DBs archivées vers `/var/backups/planora/tenants-frozen-archived-20260420-171003/`)
+
+### 10.3 Règles backend/data IMPÉRATIVES (court terme Option A)
+
+Pour toute nouvelle route métier / feature V7 P1+ / V8 / Projet 26 / etc. :
+
+✅ **À FAIRE** :
+1. `import { db } from '../db/database.js'`
+2. Ajouter `WHERE companyId = ?` sur chaque requête touchant des données business
+3. Pour les actions supra (impersonation), fallback `req.auth.companyId || req.auth._activeCompanyId || req.body.companyId` (cf. V7 transfer §4)
+4. Loguer tout audit via `audit_logs` avec le `companyId` bien renseigné (cf. dette 5bis.1)
+
+❌ **À NE PAS FAIRE** :
+1. Appeler `resolveTenant` depuis une route métier (seul `routes/tenantAdmin.js` a le droit)
+2. Importer `withTenant` / `runWithTenant` dans une route
+3. Importer/appeler `shadowCompare`
+4. Écrire dans une tenant DB (elles sont archivées)
+5. Créer de nouvelles tenant DBs pour une company
+6. Ajouter une row dans `ct.companies` en `tenantMode='shadow'` ou `'tenant'`
+7. Ouvrir une DB via un path autre que `/var/www/planora-data/calendar360.db`
+
+### 10.4 État mesurable du runtime
+
+Après E.3 clôturée (dernière mesure 2026-04-20 17:10 UTC) :
+
+| Indicateur | Valeur | Source |
+|---|---|---|
+| PM2 process | PID 70664, online, uptime continu depuis 16:50 UTC | `pm2 list` |
+| Guard DB_PATH | actif | `db/database.js` L10-13 |
+| 4 env vars | injectées | `/proc/70664/environ` |
+| DB fichier ouvert | `/var/www/planora-data/calendar360.db` (+WAL+SHM) | `lsof -p 70664` |
+| Healthcheck | `{"status":"ok","db":"connected","companies":6,"collaborateurs":12}` | `GET /api/health` |
+| FK violations | 0 sur les 4 DBs | `PRAGMA foreign_key_check` |
+| Integrity check | ok sur les 4 DBs | `PRAGMA integrity_check` |
+| Fantômes runtime | aucun | `lsof` + `find /var/www/planora/server -name "*.db*"` |
+| Tenant DBs actives | aucune | `/var/www/planora-data/tenants/` vide |
+
+### 10.5 Classification finale des 10 companyId (post-E.3)
+
+| # | companyId | Nom | Classe | Dans CT ? | Status | Commentaire |
+|---|---|---|---|:---:|---|---|
+| 1 | `c1776169036725` | CAPFINANCES | active-migrated | ✅ legacy | active | V7 transfer testé fonctionnel |
+| 2 | `c-monbilan` | MonBilandeCompetences.fr | active-migrated | ✅ legacy | active | |
+| 3 | `c1775722958849` | GENETICAT | active-legacy | ✅ legacy | active | 185 contacts actifs |
+| 4 | `comp-first` | Competences First | dormant-real | ✅ legacy | active | |
+| 5 | `c1774809632450` | Creatland | dormant-real | ✅ legacy | active | |
+| 6 | `c1` | Calendar360 | internal-test | ✅ legacy | **archived** | Compte test interne, plan='internal' |
+| 7 | `c1774825229294` | ([USER-ABANDONED-1] signup) | signup-abandoned | ❌ | archivé | 6 audit_logs seulement |
+| 8 | `c1774898326318` | (CAW / [USER-ABANDONED-2]) | signup-abandoned | ❌ | archivé | 11 audit_logs seulement |
+| 9 | `c1775049199206` | ([ORG-ABANDONED-2] probe) | security-probe-log | ❌ | archivé | Tentative switch company bloquée |
+| 10 | `c1775050406399` | ([ORG-ABANDONED-1] probe) | security-probe-log | ❌ | archivé | Idem |
+
+Plus 2 cas spéciaux :
+- `""` (253 audit_logs) : 98 % légitimes (login_failed, supra_login, company_switch), 5 bugs à traiter Piste 2
+- `NULL` (2 bookings) : rows malformées historiques, à documenter Piste 2
+
+### 10.6 Archives disponibles pour rollback
+
+Toutes dans `/var/backups/planora/` :
+
+| Archive | Date | Rôle |
+|---|---|---|
+| `phaseE3-baseline-20260420-125532.tar.gz` | 2026-04-20 12:55 | État avant toute modif E.3 |
+| `phaseE3-pre-step2-20260420-130056.tar.gz` | 2026-04-20 13:00 | Avant INSERT CT |
+| `phaseE3-pre-step4-20260420-131022.tar.gz` | 2026-04-20 13:10 | Avant flip shadow→legacy |
+| `phaseE3-pre-step8E-20260420-164918.tar.gz` | 2026-04-20 16:49 | Avant guard + env vars |
+| `fantom-db-20260420-165926.tar.gz` | 2026-04-20 16:59 | 6 DBs fantômes archivées |
+| `tenants-frozen-archived-20260420-171003.tar.gz` | 2026-04-20 17:10 | 2 tenants DBs |
+
+### 10.7 Audit trail (Control Tower `tenant_status_history`)
+
+8 entries tracent chaque décision data :
+
+| id | companyId | previousMode | newMode | actor | reason |
+|---:|---|---|---|---|---|
+| 1-2 | c1776169036725, c-monbilan | legacy | legacy | script | pilot-migration-commit (2026-04-16, initial) |
+| 3-6 | c1775722958849, comp-first, c1774809632450, c1 | NULL | legacy | MH | E3-step2 backfill-to-CT |
+| 7-8 | c1776169036725, c-monbilan | shadow | legacy | MH | E3-step4 flip shadow→legacy |
+
+### 10.8 Livrables E.1 + E.2 + E.3 (tous hors repo public)
+
+Index complet : [db-migrations/phase-E3-correction-20260420/E3-CLOSURE-MH.md](db-migrations/phase-E3-correction-20260420/E3-CLOSURE-MH.md)
+
+- **E.1 cartographie** (6 fichiers) : [db-migrations/phase-E1-cartographie-20260420/](db-migrations/phase-E1-cartographie-20260420/)
+- **E.2 plan correction** (7 MD + 2 JSON) : [db-migrations/phase-E2-plan-correction-20260420/](db-migrations/phase-E2-plan-correction-20260420/)
+- **E.3 exécution** (14 fichiers) : [db-migrations/phase-E3-correction-20260420/](db-migrations/phase-E3-correction-20260420/)
+
+### 10.9 🔵 Vision Piste 3 — Vrai multi-tenant (non lancée)
+
+La règle §0 (1 client = 1 DB dédiée) est la cible long terme. Pour y aller :
+1. Déclencheur : décision business (ex: 1er client qui exige SLA data isolation, ou 50+ companies)
+2. Restaurer les tenant DBs archivées (étape inverse de E.3.6)
+3. Brancher `resolveTenant` dans les routes métier (refacto des 73 fichiers)
+4. Réhydratation data mono → tenant par company (migration one-shot)
+5. Flip `tenantMode='legacy' → 'tenant'` par company après validation data
+6. Tests + observation shadow diff
+
+**Effort** : plusieurs semaines. **Ne pas lancer sans spec MH dédiée.**
+
+### 10.10 Comment reprendre dans une nouvelle session
+
+1. **Lire CLAUDE.md §10 EN PRIORITÉ** (cette section — état runtime)
+2. Lire §0 + §0bis pour comprendre les règles architecturales
+3. Lire §5 + §5bis pour comprendre les bugs connus et dettes
+4. Lire `HANDOFF-2026-04-19.md §13` pour la chronologie E.3
+5. Lire `db-migrations/phase-E3-correction-20260420/E3-CLOSURE-MH.md` pour le détail exhaustif
+6. **Avant toute modification** : vérifier que l'action respecte les règles §10.3 (impératives)
+7. **Séparer les 3 pistes** : ne pas mélanger Option A actuelle / dettes Piste 2 / vision Piste 3
