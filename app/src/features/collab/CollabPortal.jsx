@@ -21,6 +21,7 @@ import { COMPANIES, INIT_COLLABS, defAvail, INIT_AVAILS, INIT_CALS, INIT_BOOKING
 
 // Phase 3 — API service
 import { API_BASE, recUrl, collectEnv, api, getAutoTicketCompanyId, setAutoTicketCompanyId } from "../../shared/services/api";
+import { TAB_ID } from "../../shared/state/tabId";
 
 // Phase 4 — extracted screens (relative path from features/collab/)
 import {
@@ -2691,6 +2692,10 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       const VALID = ['nouveau','contacte','qualifie','rdv_programme','nrp','client_valide','perdu', ...((typeof pipelineStages!=='undefined'?pipelineStages:null)||[]).map(s=>s.id)];
       if (!VALID.includes(updates.pipeline_stage)) { console.warn('[CONTACT] Stage invalide:', updates.pipeline_stage); updates.pipeline_stage = 'nouveau'; }
     }
+    // S2 P0 Patch C: capturer updatedAt AVANT l'optimistic update pour l'envoyer au backend
+    // (sinon le check 409 côté backend ne déclenche jamais — on enverrait la valeur déjà écrasée)
+    const prevContact = (contacts || []).find(c => c.id === id);
+    const prevUpdatedAt = prevContact?.updatedAt || '';
     // Optimistic update local state + mark as recently edited (protect from auto-refresh)
     // V5: Injecter updatedAt local pour que le badge inactivite disparaisse immediatement
     contactsLocalEditRef.current = Date.now();
@@ -2703,7 +2708,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     if (typeof setAllContacts === 'function') { try { setAllContacts(p => Array.isArray(p) ? p.map(c => c.id === id ? {...c, ...updates} : c) : p); } catch {} }
     // V4: Save to backend — source/origin/tabId + gestion 409 Conflict + contact frais
     const saveToBackend = (attempt = 1) => {
-      api(`/api/data/contacts/${id}`, { method:"PUT", body:{ ...updates, companyId: company?.id, _tabId: TAB_ID, _source: updates._source || 'manual', _origin: updates._origin || '', _reason: updates._reason || '' } })
+      api(`/api/data/contacts/${id}`, { method:"PUT", body:{ ...updates, companyId: company?.id, _tabId: TAB_ID, _updatedAt: prevUpdatedAt, _source: updates._source || 'manual', _origin: updates._origin || '', _reason: updates._reason || '' } })
         .then(r => {
           if (r?.error && r?.contact) {
             // V3: 409 Conflict — données modifiées entre-temps, utiliser le contact frais

@@ -56,10 +56,6 @@ import {
 import CollabPortal from "./features/collab/CollabPortal";
 import AdminDash from "./features/admin/AdminDash";
 
-// ─── V3: TAB ISOLATION — identifiant unique par onglet, volatile, jamais persisté ───
-const TAB_ID = crypto.randomUUID ? crypto.randomUUID() : 'tab-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
-
-
 // HookIsolator: wraps IIFE-with-hooks in a real React component
 // so each tab gets its own hook scope (prevents React #311 on tab switch)
 
