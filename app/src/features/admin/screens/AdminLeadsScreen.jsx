@@ -20,6 +20,10 @@ import {
   Spinner, Req, Skeleton, Input, Stat, Modal, ConfirmModal, EmptyState,
   HelpTip, ValidatedInput, ErrorBoundary
 } from "../../../shared/ui";
+import {
+  ENVELOPE_ICONS, ENVELOPE_PRIORITIES, resolveEnvelopeIcon, resolveEnvelopePriority,
+  DEFAULT_ENVELOPE_COLOR, DEFAULT_ENVELOPE_ICON, DEFAULT_ENVELOPE_PRIORITY,
+} from "../data/envelopeOptions.js";
 
 export default function AdminLeadsScreen({ collab, collabs, company, contacts, pushNotification }) {
 
@@ -124,7 +128,7 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
               if(checkedCollabs.length>0) {
                 Promise.all(checkedCollabs.map(c=>api('/api/leads/dispatch-rules', { method:'POST', body:{ companyId:company.id, envelope_id:r.id, collaborator_id:c.id, percentage:c.percentage||0, priority:1, dispatch_count:0, max_daily:c.maxDaily||0 } }))).then(()=>{ loadData(); });
               } else { loadData(); }
-              setShowAddEnvelope(false); setNewEnvelope({name:'',dispatch_type:'manual',dispatch_mode:'percentage',dispatch_time:'09:00',dispatch_limit:0,auto_dispatch:false,dispatch_start_date:'',dispatch_end_date:'',_collabs:[]});
+              setShowAddEnvelope(false); setNewEnvelope({name:'',color:DEFAULT_ENVELOPE_COLOR,icon:DEFAULT_ENVELOPE_ICON,priority:DEFAULT_ENVELOPE_PRIORITY,dispatch_type:'manual',dispatch_mode:'percentage',dispatch_time:'09:00',dispatch_limit:0,auto_dispatch:false,dispatch_start_date:'',dispatch_end_date:'',_collabs:[]});
             });
           };
           const handleDeleteEnvelope = (id) => { api(`/api/leads/envelopes/${id}`, { method:'DELETE' }).then(loadData); };
@@ -278,7 +282,7 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
                   }
                 });
                 Promise.all(promises).then(()=>{ loadData(); if(selectedRuleEnv===editEnvId) loadRules(editEnvId); });
-                setEditEnvId(null); setShowAddEnvelope(false); setNewEnvelope({name:'',dispatch_type:'manual',dispatch_mode:'percentage',dispatch_time:'09:00',dispatch_limit:0,auto_dispatch:false,dispatch_start_date:'',dispatch_end_date:'',_collabs:[]}); pushNotification('Enveloppe modifiee','','success');
+                setEditEnvId(null); setShowAddEnvelope(false); setNewEnvelope({name:'',color:DEFAULT_ENVELOPE_COLOR,icon:DEFAULT_ENVELOPE_ICON,priority:DEFAULT_ENVELOPE_PRIORITY,dispatch_type:'manual',dispatch_mode:'percentage',dispatch_time:'09:00',dispatch_limit:0,auto_dispatch:false,dispatch_start_date:'',dispatch_end_date:'',_collabs:[]}); pushNotification('Enveloppe modifiee','','success');
               }
             });
           };
@@ -359,7 +363,7 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
             <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:20}}>
               <h1 style={{fontSize:24,fontWeight:800,color:T.text,letterSpacing:'-0.02em'}}>Centre de leads</h1>
               <div style={{display:'flex',gap:8}}>
-                <Btn primary onClick={()=>{setEditEnvId(null);setWizardStep(0);setNewEnvelope({name:'',dispatch_type:'manual',dispatch_mode:'percentage',dispatch_time:'09:00',dispatch_limit:0,auto_dispatch:false,dispatch_start_date:'',dispatch_end_date:'',dispatch_interval_minutes:0,_collabs:(collabs||[]).map(c=>({id:c.id,name:c.name,color:c.color,checked:false,percentage:0,maxDaily:0}))});setShowAddEnvelope(true);}} style={{background:'linear-gradient(135deg,#22C55E,#16A34A)',border:'none',boxShadow:'0 2px 8px #22C55E40'}}><I n="plus" s={14}/> Nouveau flux</Btn>
+                <Btn primary onClick={()=>{setEditEnvId(null);setWizardStep(0);setNewEnvelope({name:'',color:DEFAULT_ENVELOPE_COLOR,icon:DEFAULT_ENVELOPE_ICON,priority:DEFAULT_ENVELOPE_PRIORITY,dispatch_type:'manual',dispatch_mode:'percentage',dispatch_time:'09:00',dispatch_limit:0,auto_dispatch:false,dispatch_start_date:'',dispatch_end_date:'',dispatch_interval_minutes:0,_collabs:(collabs||[]).map(c=>({id:c.id,name:c.name,color:c.color,checked:false,percentage:0,maxDaily:0}))});setShowAddEnvelope(true);}} style={{background:'linear-gradient(135deg,#22C55E,#16A34A)',border:'none',boxShadow:'0 2px 8px #22C55E40'}}><I n="plus" s={14}/> Nouveau flux</Btn>
                 <Btn onClick={()=>setShowImport('csv')}><I n="upload" s={13}/> Import CSV</Btn>
                 <Btn onClick={()=>setShowImport('gsheet')}><I n="file-spreadsheet" s={13}/> Connecter Sheet</Btn>
               </div>
@@ -499,7 +503,7 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
               <I n="inbox" s={40} style={{color:T.text2,opacity:.3,marginBottom:12}}/>
               <div style={{fontSize:15,fontWeight:600,marginBottom:6}}>Aucun flux configure</div>
               <div style={{fontSize:13,marginBottom:16}}>Creez votre premier flux pour commencer a recevoir et distribuer des leads.</div>
-              <Btn onClick={()=>{setEditEnvId(null);setWizardStep(0);setNewEnvelope({name:'',dispatch_type:'manual',dispatch_mode:'percentage',dispatch_time:'09:00',dispatch_limit:0,auto_dispatch:false,dispatch_start_date:'',dispatch_end_date:'',dispatch_interval_minutes:0,_collabs:(collabs||[]).map(c=>({id:c.id,name:c.name,color:c.color,checked:false,percentage:0,maxDaily:0}))});setShowAddEnvelope(true);}} style={{background:'linear-gradient(135deg,#22C55E,#16A34A)',color:'#fff',fontWeight:700,border:'none'}}><I n="plus" s={14}/> Creer un flux</Btn>
+              <Btn onClick={()=>{setEditEnvId(null);setWizardStep(0);setNewEnvelope({name:'',color:DEFAULT_ENVELOPE_COLOR,icon:DEFAULT_ENVELOPE_ICON,priority:DEFAULT_ENVELOPE_PRIORITY,dispatch_type:'manual',dispatch_mode:'percentage',dispatch_time:'09:00',dispatch_limit:0,auto_dispatch:false,dispatch_start_date:'',dispatch_end_date:'',dispatch_interval_minutes:0,_collabs:(collabs||[]).map(c=>({id:c.id,name:c.name,color:c.color,checked:false,percentage:0,maxDaily:0}))});setShowAddEnvelope(true);}} style={{background:'linear-gradient(135deg,#22C55E,#16A34A)',color:'#fff',fontWeight:700,border:'none'}}><I n="plus" s={14}/> Creer un flux</Btn>
             </div>}
 
             <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(380px,1fr))',gap:16}}>
@@ -519,11 +523,18 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
               const totalAssignedEnv = rulesForCard.reduce((s,r)=>s+(r.assigned_count||0),0);
               const avgAssigned = rulesForCard.length>0?totalAssignedEnv/rulesForCard.length:0;
 
+              const envPriority = resolveEnvelopePriority(env.priority);
+              const envColor = env.color || DEFAULT_ENVELOPE_COLOR;
+              const envIcon = resolveEnvelopeIcon(env.icon);
               return <div key={env.id} style={{background:T.card,borderRadius:14,border:`2px solid ${borderColor}`,padding:20,position:'relative',transition:'border-color .2s'}}>
                 {/* LIGNE 1 — Header */}
                 <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
                   <div style={{width:10,height:10,borderRadius:'50%',background:status.dot,boxShadow:`0 0 6px ${status.dot}60`}}/>
+                  <div title={`Identité : ${envPriority.label}`} style={{width:28,height:28,borderRadius:8,background:envColor,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',flexShrink:0}}>
+                    <I n={envIcon} s={14}/>
+                  </div>
                   <span style={{fontSize:17,fontWeight:800,color:T.text,flex:1}}>{env.name}</span>
+                  {env.priority==='high' && <span title="Priorité haute" style={{fontSize:10,fontWeight:700,padding:'3px 8px',borderRadius:6,background:envPriority.accent,color:envPriority.color,border:`1px solid ${envPriority.color}40`}}>HAUTE</span>}
                   <span style={{fontSize:10,fontWeight:600,padding:'3px 8px',borderRadius:6,background:(env.source_type==='gsheet'?'#34D399':'#3B82F6')+'18',color:env.source_type==='gsheet'?'#059669':'#2563EB'}}>{env.source_type==='gsheet'?'Google Sheet':'CSV'}</span>
                   <span style={{fontSize:10,fontWeight:600,padding:'3px 8px',borderRadius:6,background:DISPATCH_MODE_COLORS[env.dispatch_mode||'percentage']+'18',color:DISPATCH_MODE_COLORS[env.dispatch_mode||'percentage']}}>{getModeLabel(env)}</span>
                 </div>
@@ -598,7 +609,11 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
                     const existingRules = env.rules||[];
                     setEditEnvId(env.id);setWizardStep(0);
                     setNewEnvelope({
-                      name:env.name, dispatch_type:env.dispatch_type||'manual', dispatch_mode:env.dispatch_mode||'percentage',
+                      name:env.name,
+                      color:env.color||DEFAULT_ENVELOPE_COLOR,
+                      icon:resolveEnvelopeIcon(env.icon),
+                      priority:env.priority||DEFAULT_ENVELOPE_PRIORITY,
+                      dispatch_type:env.dispatch_type||'manual', dispatch_mode:env.dispatch_mode||'percentage',
                       dispatch_time:env.dispatch_time||'09:00', dispatch_limit:env.dispatch_limit||0,
                       auto_dispatch:!!env.auto_dispatch, dispatch_start_date:env.dispatch_start_date||'',
                       dispatch_end_date:env.dispatch_end_date||'', dispatch_interval_minutes:env.dispatch_interval_minutes||0,
@@ -1202,6 +1217,39 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
                 {wizardStep===0 && <div style={{display:'flex',flexDirection:'column',gap:12}}>
                   <label style={{fontSize:12,fontWeight:600,color:T.text}}>Nom du flux</label>
                   <input value={(typeof newEnvelope!=='undefined'?newEnvelope:{}).name} onChange={e=>(typeof setNewEnvelope==='function'?setNewEnvelope:function(){})({...newEnvelope,name:e.target.value})} placeholder="Ex: Leads Google Ads Mars" style={{padding:10,borderRadius:8,border:`1px solid ${T.border}`,fontSize:13,background:T.card,color:T.text}}/>
+
+                  {/* Identité visuelle (L2) — couleur / icône / priorité */}
+                  <div style={{padding:12,borderRadius:8,background:T.bg,border:`1px solid ${T.border}`,display:'flex',flexDirection:'column',gap:10}}>
+                    <div style={{fontSize:11,fontWeight:700,color:T.text2,textTransform:'uppercase',letterSpacing:0.5}}>Identité visuelle</div>
+                    <div style={{display:'flex',gap:12,alignItems:'center'}}>
+                      <div style={{display:'flex',flexDirection:'column',gap:4}}>
+                        <label style={{fontSize:10,color:T.text3,fontWeight:600}}>Couleur</label>
+                        <input type="color" value={(typeof newEnvelope!=='undefined'?newEnvelope:{}).color||DEFAULT_ENVELOPE_COLOR} onChange={e=>(typeof setNewEnvelope==='function'?setNewEnvelope:function(){})({...newEnvelope,color:e.target.value})} style={{width:46,height:36,padding:0,border:`1px solid ${T.border}`,borderRadius:6,background:T.card,cursor:'pointer'}}/>
+                      </div>
+                      <div style={{flex:1,display:'flex',flexDirection:'column',gap:4}}>
+                        <label style={{fontSize:10,color:T.text3,fontWeight:600}}>Icône</label>
+                        <select value={(typeof newEnvelope!=='undefined'?newEnvelope:{}).icon||DEFAULT_ENVELOPE_ICON} onChange={e=>(typeof setNewEnvelope==='function'?setNewEnvelope:function(){})({...newEnvelope,icon:e.target.value})} style={{padding:'8px 10px',borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,background:T.card,color:T.text}}>
+                          {ENVELOPE_ICONS.map(opt=><option key={opt.key} value={opt.key}>{opt.label}</option>)}
+                        </select>
+                      </div>
+                      <div style={{display:'flex',flexDirection:'column',gap:4,alignItems:'center'}}>
+                        <label style={{fontSize:10,color:T.text3,fontWeight:600}}>Aperçu</label>
+                        <div style={{width:36,height:36,borderRadius:8,background:(typeof newEnvelope!=='undefined'?newEnvelope:{}).color||DEFAULT_ENVELOPE_COLOR,display:'flex',alignItems:'center',justifyContent:'center',color:'#fff'}}>
+                          <I n={resolveEnvelopeIcon((typeof newEnvelope!=='undefined'?newEnvelope:{}).icon)} s={18}/>
+                        </div>
+                      </div>
+                    </div>
+                    <div>
+                      <label style={{fontSize:10,color:T.text3,fontWeight:600,display:'block',marginBottom:6}}>Priorité</label>
+                      <div style={{display:'flex',gap:6}}>
+                        {ENVELOPE_PRIORITIES.map(p=>{
+                          const active = ((typeof newEnvelope!=='undefined'?newEnvelope:{}).priority||DEFAULT_ENVELOPE_PRIORITY)===p.key;
+                          return <button key={p.key} type="button" onClick={()=>(typeof setNewEnvelope==='function'?setNewEnvelope:function(){})({...newEnvelope,priority:p.key})} style={{flex:1,padding:'8px 10px',borderRadius:6,border:active?`1.5px solid ${p.color}`:`1px solid ${T.border}`,background:active?p.accent:T.card,color:active?p.color:T.text2,fontSize:12,fontWeight:active?700:500,cursor:'pointer',transition:'all .15s'}}>{p.label}</button>;
+                        })}
+                      </div>
+                    </div>
+                  </div>
+
                   <label style={{fontSize:12,fontWeight:600,color:T.text}}>Source des leads</label>
                   <select value={(typeof newEnvelope!=='undefined'?newEnvelope:{})._sourceType||'csv'} onChange={e=>(typeof setNewEnvelope==='function'?setNewEnvelope:function(){})({...newEnvelope,_sourceType:e.target.value})} style={{padding:10,borderRadius:8,border:`1px solid ${T.border}`,fontSize:13,background:T.card,color:T.text}}>
                     <option value="csv">Import CSV</option>
