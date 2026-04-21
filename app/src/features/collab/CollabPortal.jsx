@@ -2958,6 +2958,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     if (newStage === 'client_valide' && !contractData) {
       setContractModal({ contactId, note });
       setContractForm({ amount:'', number:'', date:new Date().toISOString().split('T')[0] });
+      delete pipelineActionLockRef.current[contactId];
       return;
     }
     const updates = { pipeline_stage: newStage };
