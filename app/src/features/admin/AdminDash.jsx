@@ -1587,14 +1587,45 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
       const code = genCode().slice(0,4) + "-" + genCode().slice(0,4);
       const nameParts = (c.name||"").trim().split(" ").filter(Boolean);
       const pw = (nameParts.length > 0 ? nameParts.map(n=>(n[0]||"").toLowerCase()).join("") : "user") + Math.floor(1000+Math.random()*9000);
-      const newCollab = { ...c, id:`u${Date.now()}`, companyId:company.id, code, password:pw };
+      // Phase 3 bis — extraction des champs transitoires d'assignation template
+      // (ils ne doivent PAS être envoyés à POST /api/collaborators)
+      const _assignPipelineMode = c._assignPipelineMode || "free";
+      const _assignPipelineTemplateId = c._assignPipelineTemplateId || null;
+      const { _assignPipelineMode: _omitMode, _assignPipelineTemplateId: _omitId, ...cClean } = c;
+      const newCollab = { ...cClean, id:`u${Date.now()}`, companyId:company.id, code, password:pw };
       setCollabs(prev => [...prev, newCollab]);
       setAvails(prev => ({ ...prev, [newCollab.id]: defAvail() }));
       setShowNewCollab(false);
       setCreatedCollab(newCollab);
       pushNotification("Collaborateur créé", newCollab.name+" — "+newCollab.email, "success");
       api("/api/collaborators", { method:"POST", body:newCollab })
-        .then(r => { if(!r?.success) pushNotification("Erreur","Création échouée: "+(r?.error||'erreur inconnue'),"danger"); })
+        .then(r => {
+          if(!r?.success) {
+            pushNotification("Erreur","Création échouée: "+(r?.error||'erreur inconnue'),"danger");
+            return;
+          }
+          // Phase 3 bis — si template choisi à la création, assignation immédiate via migrate
+          // Collab tout neuf = zéro contact → fallbackStage non requis, pre-flight trivial.
+          if (_assignPipelineMode === "template" && _assignPipelineTemplateId) {
+            api(`/api/admin/pipeline-templates/collaborators/${encodeURIComponent(newCollab.id)}/migrate`, {
+              method: "POST",
+              body: { templateId: _assignPipelineTemplateId, fallbackStage: null },
+            })
+              .then(r2 => {
+                if (r2?.error) {
+                  pushNotification("Pipeline", "Assignation template échouée: " + r2.error, "danger");
+                  return;
+                }
+                pushNotification("Pipeline", `Template assigné : ${r2.targetTemplateName || 'OK'}`, "success");
+                // Mettre à jour le state local du nouveau collab avec le mode template
+                setCollabs(prev => prev.map(cc => cc.id === newCollab.id
+                  ? { ...cc, pipelineMode: r2.newMode, pipelineSnapshotId: r2.snapshotId }
+                  : cc
+                ));
+              })
+              .catch(err => pushNotification("Pipeline", "Assignation template échouée: " + err.message, "danger"));
+          }
+        })
         .catch(err => pushNotification("Erreur","Création échouée: "+err.message,"danger"));
       // Auto-send welcome email with credentials
       if (newCollab.email) {
@@ -2809,7 +2840,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
             {(typeof showNewCollab!=='undefined'?showNewCollab:null) && (
               <Card style={{ marginBottom:20, border:`1px solid ${T.accentBorder}` }}>
                 <h3 style={{ fontSize:15, fontWeight:700, marginBottom:16 }}>Nouveau collaborateur</h3>
-                <NewCollabForm onClose={() => setShowNewCollab(false)} onCreate={handleCreateCollab}/>
+                <NewCollabForm onClose={() => setShowNewCollab(false)} onCreate={handleCreateCollab} companyId={company?.id}/>
               </Card>
             )}
 

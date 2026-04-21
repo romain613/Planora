@@ -1,10 +1,29 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { T } from "../../../theme";
 import { COMMON_TIMEZONES } from "../../../shared/utils/constants";
 import { isValidEmail } from "../../../shared/utils/validators";
 import { I, Btn, Input, ValidatedInput, Stars } from "../../../shared/ui";
+import { api } from "../../../shared/services/api";
 
-const NewCollabForm = ({ onClose, onCreate }) => {
+const NewCollabForm = ({ onClose, onCreate, companyId }) => {
+  // Pipeline Templates — assignation optionnelle à la création
+  const [pipelineMode, setPipelineMode] = useState("free");
+  const [pipelineTemplateId, setPipelineTemplateId] = useState("");
+  const [pipelineTemplatesList, setPipelineTemplatesList] = useState([]);
+  const [loadingTpls, setLoadingTpls] = useState(false);
+
+  useEffect(() => {
+    if (!companyId) return;
+    setLoadingTpls(true);
+    api(`/api/admin/pipeline-templates?companyId=${encodeURIComponent(companyId)}`)
+      .then((r) => {
+        if (Array.isArray(r)) {
+          setPipelineTemplatesList(r.filter((t) => t.isPublished && !t.isArchived));
+        }
+      })
+      .catch(() => {})
+      .finally(() => setLoadingTpls(false));
+  }, [companyId]);
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
@@ -54,6 +73,65 @@ const NewCollabForm = ({ onClose, onCreate }) => {
         <div><label style={{ display:"block", fontSize:12, fontWeight:600, color:T.text2, marginBottom:5 }}>Rôle</label><div style={{ display:"flex", gap:6 }}>{["member","admin"].map(r=>(<div key={r} onClick={()=>setRole(r)} style={{ padding:"8px 16px", borderRadius:8, cursor:"pointer", border:`1px solid ${role===r?T.accent:T.border}`, background:role===r?T.accentBg:T.surface, color:role===r?T.accent:T.text2, fontSize:12, fontWeight:600 }}>{r==="admin"?"Admin":"Membre"}</div>))}</div></div>
         <div><label style={{ display:"block", fontSize:12, fontWeight:600, color:T.text2, marginBottom:5 }}>Priorité</label><Stars count={priority} onChange={setPriority} size={18}/></div>
         <div><label style={{ display:"block", fontSize:12, fontWeight:600, color:T.text2, marginBottom:5 }}>Couleur</label><div style={{ display:"flex", gap:4 }}>{colors.map(c=><div key={c} onClick={()=>setColor(c)} style={{ width:24, height:24, borderRadius:6, background:c, cursor:"pointer", border:color===c?"2px solid "+T.text:"2px solid transparent" }}/>)}</div></div>
+      </div>
+      {/* Pipeline Équipe — assignation optionnelle */}
+      <div style={{ marginTop:14, padding:"12px 14px", borderRadius:10, background:T.bg, border:`1px solid ${T.border}` }}>
+        <div style={{ fontSize:12, fontWeight:600, color:T.text2, marginBottom:8, display:"flex", alignItems:"center", gap:6 }}>
+          <I n="layout" s={14}/> Pipeline Équipe
+        </div>
+        <div style={{ display:"flex", gap:6, marginBottom: pipelineMode==="template" ? 10 : 0 }}>
+          {[
+            { key:"free", label:"Mode libre", desc:"Le collaborateur configure lui-même son pipeline" },
+            { key:"template", label:"Template imposé", desc:"Structure définie par un template publié" },
+          ].map(o => (
+            <div
+              key={o.key}
+              onClick={() => { setPipelineMode(o.key); if (o.key !== "template") setPipelineTemplateId(""); }}
+              style={{
+                flex:1, padding:"8px 12px", borderRadius:8, cursor:"pointer",
+                border:`1px solid ${pipelineMode===o.key?T.accent:T.border}`,
+                background:pipelineMode===o.key?T.accentBg:T.surface,
+                color:pipelineMode===o.key?T.accent:T.text2,
+                fontSize:12, fontWeight:600, textAlign:"center",
+                transition:"all .15s",
+              }}
+              title={o.desc}
+            >
+              {o.label}
+            </div>
+          ))}
+        </div>
+        {pipelineMode === "template" && (
+          <div>
+            <select
+              value={pipelineTemplateId}
+              onChange={(e) => setPipelineTemplateId(e.target.value)}
+              style={{
+                width:"100%", padding:"8px 10px", borderRadius:8,
+                border:`1px solid ${pipelineTemplateId ? T.border : T.accent + "80"}`,
+                background:T.surface, color:T.text, fontSize:12,
+              }}
+            >
+              <option value="">— Sélectionner un template publié —</option>
+              {pipelineTemplatesList.map((t) => (
+                <option key={t.id} value={t.id}>{t.name} (v{t.latestVersion || 1})</option>
+              ))}
+            </select>
+            {loadingTpls && (
+              <div style={{ fontSize:11, color:T.text3, marginTop:5 }}>Chargement des templates…</div>
+            )}
+            {!loadingTpls && pipelineTemplatesList.length === 0 && (
+              <div style={{ fontSize:11, color:T.text3, marginTop:5, fontStyle:"italic" }}>
+                Aucun template publié. Créez-en un depuis l'onglet "Templates Pipeline Live".
+              </div>
+            )}
+            {!loadingTpls && pipelineTemplatesList.length > 0 && !pipelineTemplateId && (
+              <div style={{ fontSize:11, color:T.danger, marginTop:5 }}>
+                Sélectionnez un template pour continuer.
+              </div>
+            )}
+          </div>
+        )}
       </div>
       {/* Chat permission toggle */}
       <div style={{ display:"flex", alignItems:"center", gap:10, marginTop:14, padding:"10px 14px", borderRadius:10, background:chatEnabled?T.accentBg:T.bg, border:`1px solid ${chatEnabled?T.accentBorder:T.border}`, cursor:"pointer", transition:"all .15s" }} onClick={()=>setChatEnabled(!chatEnabled)}>
@@ -238,7 +316,7 @@ const NewCollabForm = ({ onClose, onCreate }) => {
       </>)}
       <div style={{ display:"flex", gap:8, marginTop:16, justifyContent:"flex-end" }}>
         <Btn onClick={onClose}>Annuler</Btn>
-        <Btn primary disabled={!name||!email} onClick={()=>onCreate({name,email,phone:phone||null,role,priority,color,timezone:timezone||null,chat_enabled:chatEnabled?1:0,sms_enabled:smsEnabled?1:0,secure_ia_phone:secureIaPhone?1:0,secure_ia_words_json:JSON.stringify(secureIaWords),ai_copilot_enabled:aiCopilotEnabled?1:0,ai_copilot_role:aiCopilotRole,ai_copilot_objective:aiCopilotObjective,ai_copilot_target:aiCopilotTarget,ai_copilot_level:aiCopilotEnabled?aiCopilotLevel:'off',ai_role_type:aiRoleType,ai_service_type:aiServiceType,ai_main_mission:aiMainMission,ai_call_type_default:aiCallTypeDefault,ai_call_goal_default:aiCallGoalDefault,ai_target_default:aiTargetDefault,ai_language:aiLanguage,ai_tone_style:aiToneStyle,ai_script_trame:aiScriptTrame})}><I n="check" s={14}/> Créer le collaborateur</Btn>
+        <Btn primary disabled={!name||!email||(pipelineMode==="template"&&!pipelineTemplateId)} onClick={()=>onCreate({name,email,phone:phone||null,role,priority,color,timezone:timezone||null,chat_enabled:chatEnabled?1:0,sms_enabled:smsEnabled?1:0,secure_ia_phone:secureIaPhone?1:0,secure_ia_words_json:JSON.stringify(secureIaWords),ai_copilot_enabled:aiCopilotEnabled?1:0,ai_copilot_role:aiCopilotRole,ai_copilot_objective:aiCopilotObjective,ai_copilot_target:aiCopilotTarget,ai_copilot_level:aiCopilotEnabled?aiCopilotLevel:'off',ai_role_type:aiRoleType,ai_service_type:aiServiceType,ai_main_mission:aiMainMission,ai_call_type_default:aiCallTypeDefault,ai_call_goal_default:aiCallGoalDefault,ai_target_default:aiTargetDefault,ai_language:aiLanguage,ai_tone_style:aiToneStyle,ai_script_trame:aiScriptTrame,_assignPipelineMode:pipelineMode,_assignPipelineTemplateId:pipelineTemplateId||null})}><I n="check" s={14}/> Créer le collaborateur</Btn>
       </div>
     </div>
   );
