@@ -2686,7 +2686,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     api("/api/data/contacts", { method:"POST", body:nc });
     return nc;
   };
-  const handleCollabUpdateContact = (id, updates) => {
+  const handleCollabUpdateContact = (id, updates, onDone = null) => {
     // Securite: valider pipeline_stage si present
     if (updates.pipeline_stage) {
       const VALID = ['nouveau','contacte','qualifie','rdv_programme','nrp','client_valide','perdu', ...((typeof pipelineStages!=='undefined'?pipelineStages:null)||[]).map(s=>s.id)];
@@ -2732,6 +2732,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
             if ((typeof selectedCrmContact!=='undefined'?selectedCrmContact:null)?.id === id) (typeof setSelectedCrmContact==='function'?setSelectedCrmContact:function(){})(fresh);
             if ((typeof pipelineRightContact!=='undefined'?pipelineRightContact:null)?.id === id) (typeof setPipelineRightContact==='function'?setPipelineRightContact:function(){})(fresh);
             showNotif('Contact mis à jour par une autre source — données rechargées', 'warning');
+            // S2 P0 Patch B: callback final (save n'a pas persisté la modif locale)
+            if (typeof onDone === 'function') onDone(false);
           } else if (!r || r.error) {
             console.error('[CONTACT SAVE] Erreur serveur:', r?.error, '→ retry', attempt);
             if (attempt < 3) setTimeout(() => saveToBackend(attempt + 1), 1000 * attempt);
@@ -2739,6 +2741,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
               // S2 P0 Patch A: rollback UI sur échec définitif serveur
               rollbackFields();
               showNotif('Modification annulée (erreur serveur persistante)', 'danger');
+              if (typeof onDone === 'function') onDone(false);
             }
           } else {
             console.log('[CONTACT SAVE] OK:', id, Object.keys(updates).join(', '));
@@ -2750,6 +2753,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
             }
             // V3: délai de protection 5s post-succès
             setTimeout(() => { if (Date.now() - contactsLocalEditRef.current > 4000) contactsLocalEditRef.current = 0; }, 5000);
+            // S2 P0 Patch B: callback final succès
+            if (typeof onDone === 'function') onDone(true);
           }
         })
         .catch(err => {
@@ -2767,7 +2772,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
               } else {
                 rollbackFields();
               }
-            }).catch(() => { rollbackFields(); });
+              if (typeof onDone === 'function') onDone(false);
+            }).catch(() => { rollbackFields(); if (typeof onDone === 'function') onDone(false); });
           }
         });
     };
@@ -2820,7 +2826,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     // V3: verrou anti-double-clic — empêche 2 changements simultanés sur le même contact
     if (pipelineActionLockRef.current[contactId]) { console.warn('[PIPELINE] Action en cours pour', contactId, '→ ignoré'); return; }
     pipelineActionLockRef.current[contactId] = true;
-    setTimeout(() => { delete pipelineActionLockRef.current[contactId]; }, 5000); // timeout sécurité 5s
+    // S2 P0 Patch B: safety net porté à 10s (couvre 3 retries du save, 1+2+3s backoff).
+    // Le lock est surtout libéré via callback après réponse backend (voir plus bas).
+    setTimeout(() => { delete pipelineActionLockRef.current[contactId]; }, 10000);
     // ── SECURITE: valider que le stage existe ──
     const VALID_STAGES = ['nouveau','contacte','qualifie','rdv_programme','nrp','client_valide','perdu', ...((typeof pipelineStages!=='undefined'?pipelineStages:null)||[]).map(s=>s.id)];
     if (!VALID_STAGES.includes(newStage)) {
@@ -2926,9 +2934,13 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     }
     // V3: _forceStageChange = action utilisateur explicite, autorise la descente de stage côté backend
     // V4: source=manual + origin contextualisé pour traçabilité
-    handleCollabUpdateContact(contactId, { ...updates, _forceStageChange: true, _source: 'manual', _origin: 'pipeline_stage_change', _reason: note || '' });
-    // Déverrouiller après save
-    delete pipelineActionLockRef.current[contactId];
+    // S2 P0 Patch B: lock libéré via callback onDone après cycle complet du save (succès/échec/409),
+    // pas en synchrone juste après le lancement du save (qui laissait le lock en réalité aveugle).
+    handleCollabUpdateContact(
+      contactId,
+      { ...updates, _forceStageChange: true, _source: 'manual', _origin: 'pipeline_stage_change', _reason: note || '' },
+      () => { delete pipelineActionLockRef.current[contactId]; }
+    );
     // Log pipeline history
     if (fromStage !== newStage) {
       api('/api/data/pipeline-history', { method:'POST', body:{ contactId, companyId:company?.id, fromStage, toStage:newStage, userId:collab.id, userName:collab.name, note }});
