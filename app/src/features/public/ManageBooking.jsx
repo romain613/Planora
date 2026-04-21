@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../../shared/services/api";
 import { I, Logo } from "../../shared/ui";
+import { useBrand } from "../../shared/brand/useBrand";
 
 const ManageBooking = ({ token }) => {
   const [data, setData] = useState(null);
@@ -15,6 +16,7 @@ const ManageBooking = ({ token }) => {
   const [rtime, setRtime] = useState(null);
   const [rmonthOffset, setRmonthOffset] = useState(0);
   const [loadingSlots, setLoadingSlots] = useState(false);
+  const brand = useBrand();
 
   useEffect(() => {
     api(`/api/manage/${token}`).then(d => { setData(d); setLoading(false); }).catch(() => setLoading(false));
@@ -96,7 +98,7 @@ const ManageBooking = ({ token }) => {
             Reprendre un rendez-vous
           </a>
         )}
-        <div style={{ marginTop:24, fontSize:11, color:"#94A3B8" }}>Propulsé par <a href="https://calendar360.fr" style={{ color:color, textDecoration:"none", fontWeight:600 }}>Calendar360</a></div>
+        <div style={{ marginTop:24, fontSize:11, color:"#94A3B8" }}>Propulsé par <a href="https://calendar360.fr" style={{ color:color, textDecoration:"none", fontWeight:600 }}>{brand.name}</a></div>
       </div>
     </div>
   );
@@ -275,7 +277,7 @@ const ManageBooking = ({ token }) => {
 
           {/* Footer */}
           <div style={{ textAlign:"center", fontSize:11, color:"#94A3B8", marginTop:24 }}>
-            Propulsé par <a href="https://calendar360.fr" style={{ color:color, textDecoration:"none", fontWeight:600 }}>Calendar360</a>
+            Propulsé par <a href="https://calendar360.fr" style={{ color:color, textDecoration:"none", fontWeight:600 }}>{brand.name}</a>
           </div>
         </div>
       </div>

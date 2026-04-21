@@ -16,9 +16,11 @@ import { api, recUrl, API_BASE, collectEnv } from "../../../shared/services/api"
 import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";
 import { FicheDocsPanelScreen, PhoneTrainingScreen } from "../screens";
+import { useBrand } from "../../../shared/brand/useBrand";
 
 const PhoneTab = () => {
   const ctx = useCollabContext();
+  const brand = useBrand();
   const {
     collab, company, contacts, bookings, collabs, showNotif,
     googleEventsProp,
@@ -682,7 +684,7 @@ const PhoneTab = () => {
                     const line = selectedLine||((typeof appMyPhoneNumbers!=='undefined'?appMyPhoneNumbers:null)||[]).find(pn=>pn.collaboratorId===collab.id&&pn.status==='assigned')?.phoneNumber||'';
                     const w = window.open('','_blank','width=320,height=520,top=100,left=100,toolbar=no,menubar=no,scrollbars=no,resizable=yes,status=no');
                     if(!w) { showNotif('Popup bloquee — autorisez les popups','danger'); return; }
-                    w.document.title='Clavier - Calendar360';
+                    w.document.title='Clavier - '+brand.name;
                     w.document.body.innerHTML='';
                     w.document.head.innerHTML='<meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,system-ui,sans-serif;background:linear-gradient(160deg,#0F172A,#1E293B);color:#fff;height:100vh;display:flex;flex-direction:column;overflow:hidden;user-select:none}.input{padding:12px;text-align:center}.input input{width:100%;padding:10px;border-radius:12px;border:1.5px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#fff;font-size:22px;font-weight:700;font-family:monospace;text-align:center;outline:none;letter-spacing:1.5px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:0 12px}.grid .key{padding:12px 0;border-radius:12px;text-align:center;cursor:pointer;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);font-size:24px;font-weight:500;color:#fff;transition:all .1s}.grid .key:hover{background:rgba(255,255,255,0.12);transform:scale(1.04)}.actions{display:flex;justify-content:center;gap:16px;padding:14px}.call-btn{width:56px;height:56px;border-radius:28px;background:linear-gradient(135deg,#22C55E,#16A34A);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 0 25px rgba(34,197,94,0.35);border:none;color:#fff;font-size:22px;transition:transform .15s}.call-btn:hover{transform:scale(1.08)}.del-btn{width:44px;height:44px;border-radius:22px;background:rgba(255,255,255,0.2);border:1.5px solid rgba(255,255,255,0.3);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff;font-size:20px;transition:all .15s}.del-btn:hover{background:rgba(255,255,255,0.3)}.line{text-align:center;padding:8px;font-size:12px;color:#94A3B8;border-top:1px solid rgba(255,255,255,0.06)}.line .dot{display:inline-block;width:6px;height:6px;border-radius:3px;background:#22C55E;margin-right:5px;box-shadow:0 0 6px #22C55E60}</style>';
                     const lineFmt = line ? line.replace(/^\\+33/,"0").replace(/(\\d{2})(?=\\d)/g,"$1 ") : '';

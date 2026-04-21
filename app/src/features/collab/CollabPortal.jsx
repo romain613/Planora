@@ -46,6 +46,8 @@ import AgendaTab from "./tabs/AgendaTab";
 import CrmTab from "./tabs/CrmTab";
 import PhoneTab from "./tabs/PhoneTab";
 
+import { useBrand } from "../../shared/brand/useBrand";
+
 const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCalendars, avails, setAvails, vacations, setVacations, contacts, setContacts, onBack, voipCredits, voipCallLogs, setVoipCallLogs, voipConfigured, appMyPhoneNumbers, appPhonePlans, appConversations, setAppConversations, pipelineStages, setPipelineStages, contactFieldDefs, setContactFieldDefs, collabs: collabsProp, googleEvents: googleEventsProp, setGoogleEvents, isAdminView, smsCredits }) => {
   // collabs = list of all collaborators in the company (for chat DM, etc.)
   const collabs = collabsProp || [];
@@ -60,8 +62,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const [showIaWidget, setShowIaWidget] = useState(false);
   const [csvImportModal, setCsvImportModal] = useState(null); // V2 unified CSV import modal — global scope
   const PORTAL_TAB_TITLES = { home:"Aujourd'hui", agenda:"Agenda", crm:"CRM", phone:"Pipeline Live", settings:"Paramètres" };
-  const setPortalTab = (v) => { const val = typeof v === "function" ? v(portalTab) : v; _setPortalTab(val); localStorage.setItem("c360-portalTab", val); setPortalTabKey(k=>k+1); document.title = "Calendar360 — " + (PORTAL_TAB_TITLES[val]||val); };
-  useEffect(() => { document.title = "Calendar360 — " + (PORTAL_TAB_TITLES[portalTab]||portalTab); }, []);
+  const brand = useBrand();
+  const setPortalTab = (v) => { const val = typeof v === "function" ? v(portalTab) : v; _setPortalTab(val); localStorage.setItem("c360-portalTab", val); setPortalTabKey(k=>k+1); document.title = brand.name + " — " + (PORTAL_TAB_TITLES[val]||val); };
+  useEffect(() => { document.title = brand.name + " — " + (PORTAL_TAB_TITLES[portalTab]||portalTab); }, []);
   // Fetch unread signalement count
   useEffect(() => {
     if (!collab?.id) return;

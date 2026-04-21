@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { T } from "../../theme";
 import { api } from "../../shared/services/api";
 import { I, Logo } from "../../shared/ui";
+import { useBrand } from "../../shared/brand/useBrand";
 
 const ClientPortal = ({ token }) => {
   const [data, setData] = useState(null);
@@ -9,6 +10,7 @@ const ClientPortal = ({ token }) => {
   const [msgText, setMsgText] = useState("");
   const [sending, setSending] = useState(false);
   const [msgSent, setMsgSent] = useState(false);
+  const brand = useBrand();
 
   useEffect(() => {
     api(`/api/espace/${token}`).then(d => { setData(d); setLoading(false); }).catch(() => setLoading(false));
@@ -149,7 +151,7 @@ const ClientPortal = ({ token }) => {
 
           {/* Footer */}
           <div style={{ textAlign:"center", fontSize:11, color:"#94A3B8", marginTop:16, paddingBottom:24 }}>
-            Propulsé par <a href="https://calendar360.fr" style={{ color:color, textDecoration:"none", fontWeight:600 }}>Calendar360</a>
+            Propulsé par <a href="https://calendar360.fr" style={{ color:color, textDecoration:"none", fontWeight:600 }}>{brand.name}</a>
           </div>
         </div>
       </div>

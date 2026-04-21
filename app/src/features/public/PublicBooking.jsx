@@ -4,6 +4,7 @@ import { _T } from "../../shared/state/tabState";
 import { api } from "../../shared/services/api";
 import { COMMON_TIMEZONES } from "../../shared/utils/constants";
 import { Btn, I, Input, Logo } from "../../shared/ui";
+import { useBrand } from "../../shared/brand/useBrand";
 
 const PublicBooking = ({ companySlug, calSlug }) => {
   const [calData, setCalData] = useState(null);
@@ -18,6 +19,7 @@ const PublicBooking = ({ companySlug, calSlug }) => {
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
   const [monthOffset, setMonthOffset] = useState(0);
+  const brand = useBrand();
   const [selectedDuration, setSelectedDuration] = useState(null);
 
   // Timezone states
@@ -128,7 +130,7 @@ const PublicBooking = ({ companySlug, calSlug }) => {
             <div style={{ fontSize:15, fontWeight:700, color:"#111" }}>{comp.name}</div>
           </div>
         </div>
-        <div style={{ fontSize:10, color:"#94A3B8" }}>Propulsé par <span style={{ fontWeight:600, color:color }}>Calendar360</span></div>
+        <div style={{ fontSize:10, color:"#94A3B8" }}>Propulsé par <span style={{ fontWeight:600, color:color }}>{brand.name}</span></div>
       </div>
 
       <div style={{ flex:1, display:"flex", justifyContent:"center", padding:"32px 16px" }}>
@@ -466,7 +468,7 @@ const PublicBooking = ({ companySlug, calSlug }) => {
 
           {/* Footer */}
           <div style={{ textAlign:"center", fontSize:11, color:"#94A3B8", marginTop:8, marginBottom:20 }}>
-            Propulsé par <a href="https://calendar360.fr" target="_blank" rel="noopener noreferrer" style={{ fontWeight:700, color:color, textDecoration:"none" }}>Calendar360</a>
+            Propulsé par <a href="https://calendar360.fr" target="_blank" rel="noopener noreferrer" style={{ fontWeight:700, color:color, textDecoration:"none" }}>{brand.name}</a>
           </div>
         </div>
       </div>

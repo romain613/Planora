@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../../shared/services/api";
 import { displayPhone } from "../../shared/utils/phone";
+import { useBrand } from "../../shared/brand/useBrand";
 
 const PublicPage = ({ companySlug, pageSlug }) => {
   const [pageData, setPageData] = useState(null);
@@ -10,6 +11,7 @@ const PublicPage = ({ companySlug, pageSlug }) => {
   const [leadSubmitting, setLeadSubmitting] = useState(false);
   const [leadDone, setLeadDone] = useState(false);
   const [openFaq, setOpenFaq] = useState(null);
+  const brand = useBrand();
 
   useEffect(() => {
     api(`/api/pages/public/${companySlug}/${pageSlug}`).then(d => {
@@ -22,7 +24,7 @@ const PublicPage = ({ companySlug, pageSlug }) => {
   // SEO meta tags
   useEffect(() => {
     if (!pageData?.seo) return;
-    document.title = pageData.seo.title || pageData.name || 'Calendar360';
+    document.title = pageData.seo.title || pageData.name || brand.name;
     const setMeta = (attr, name, content) => {
       if (!content) return;
       let tag = document.querySelector(`meta[${attr}="${name}"]`);
@@ -33,7 +35,7 @@ const PublicPage = ({ companySlug, pageSlug }) => {
     setMeta('name','keywords', pageData.seo.keywords);
     setMeta('property','og:title', pageData.seo.title);
     setMeta('property','og:description', pageData.seo.description);
-    return () => { document.title = 'Calendar360'; };
+    return () => { document.title = brand.name; };
   }, [pageData]);
 
   const submitLead = async () => {
@@ -423,7 +425,7 @@ const PublicPage = ({ companySlug, pageSlug }) => {
           </div>
           <div style={{ borderTop:"1px solid rgba(255,255,255,.08)", paddingTop:20, display:"flex", justifyContent:"space-between", alignItems:"center", flexWrap:"wrap", gap:12 }}>
             <div style={{ fontSize:11, opacity:.35 }}>© {new Date().getFullYear()} {companyName} — Tous droits réservés</div>
-            <a href="https://calendar360.fr" target="_blank" rel="noreferrer" style={{ fontSize:10, opacity:.2, textDecoration:"none", color:"#fff" }}>Propulsé par Calendar360</a>
+            <a href="https://calendar360.fr" target="_blank" rel="noreferrer" style={{ fontSize:10, opacity:.2, textDecoration:"none", color:"#fff" }}>Propulsé par {brand.name}</a>
           </div>
         </div>
       </footer>

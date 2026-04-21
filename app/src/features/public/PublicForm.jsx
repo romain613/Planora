@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { api } from "../../shared/services/api";
+import { useBrand } from "../../shared/brand/useBrand";
 
 const PublicForm = ({ companySlug, formSlug }) => {
   const [formData, setFormData] = useState(null);
@@ -8,6 +9,7 @@ const PublicForm = ({ companySlug, formSlug }) => {
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
   const [error, setError] = useState(null);
+  const brand = useBrand();
 
   useEffect(() => {
     api(`/api/forms/public/${companySlug}/${formSlug}`).then(d => {
@@ -140,7 +142,7 @@ const PublicForm = ({ companySlug, formSlug }) => {
         </button>
 
         <div style={{textAlign:"center",marginTop:20,fontSize:11,color:"#999"}}>
-          Propulsé par <a href="https://calendar360.fr" style={{color:color,textDecoration:"none",fontWeight:600}}>Calendar360</a>
+          Propulsé par <a href="https://calendar360.fr" style={{color:color,textDecoration:"none",fontWeight:600}}>{brand.name}</a>
         </div>
       </div>
     </div>

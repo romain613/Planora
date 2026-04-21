@@ -37,13 +37,16 @@ import {
 // Phase 9a — extracted forms barrel
 import { NewCollabForm, NewCompanyForm, PlacesAutocomplete, TemplateEditorPopup, NewCalForm } from "./forms";
 
+import { useBrand } from "../../shared/brand/useBrand";
+
 const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, setBookings, avails, setAvails, collabs, setCollabs, cals, setCals, darkMode, setDarkMode, blackouts, setBlackouts, vacations, setVacations, isSupraAdmin, allCompanies, setAllCompanies, allUsers, setAllUsers, allCalendars, setAllCalendars, allBookings, setAllBookings, allContacts, setAllContacts, activityLog, setActivityLog, smsCredits, setSmsCredits, smsHistory, setSmsHistory, voipCredits, setVoipCredits, voipCallLogs, setVoipCallLogs, voipConfigured, setVoipConfigured, appPhonePlans, setAppPhonePlans, appMyPhoneNumbers, setAppMyPhoneNumbers, appAvailableNumbers, setAppAvailableNumbers, contacts, setContacts, onSwitchCompany, pipelineStages, setPipelineStages, contactFieldDefs, setContactFieldDefs }) => {
   const [tab, _setTab] = useState(() => { try { return localStorage.getItem("c360-tab") || "home"; } catch { return "home"; } });
   const [tabKey, setTabKey] = useState(0); // for re-triggering animation on tab change
   const TAB_TITLES = { home:"Dashboard", calendars:"Calendriers", team:"Équipe", bookings:"Rendez-vous", agenda:"Agenda", workflows:"Workflows", routing:"Routing", polls:"Sondages", tables:"Tables", contacts:"Contacts CRM", phone:"Téléphone", boutique:"Boutique Telecom", analytics:"Analytics", perfCollab:"Perf Collab", forms:"Formulaires", pages:"Pages", "knowledge-base":"Base IA", settings:"Paramètres", messages:"Messages", support:"Support", vision:"Vision", leads:"Leads", objectifs:"Objectifs", signalements:"Signalements", "ai-agents":"Agents IA", "call-forms":"Formulaires d'appel", "sms-monitoring":"Suivi SMS" };
-  const setTab = (v) => { const val = typeof v === "function" ? v(tab) : v; _setTab(val); localStorage.setItem("c360-tab", val); setTabKey(k=>k+1); document.title = "Calendar360 — " + (TAB_TITLES[val]||val); document.querySelector('.dash-main')?.scrollTo({ top:0, behavior:'smooth' }); };
+  const brand = useBrand();
+  const setTab = (v) => { const val = typeof v === "function" ? v(tab) : v; _setTab(val); localStorage.setItem("c360-tab", val); setTabKey(k=>k+1); document.title = brand.name + " — " + (TAB_TITLES[val]||val); document.querySelector('.dash-main')?.scrollTo({ top:0, behavior:'smooth' }); };
   // Set title on mount
-  useEffect(() => { document.title = "Calendar360 — " + (TAB_TITLES[tab]||tab); }, []);
+  useEffect(() => { document.title = brand.name + " — " + (TAB_TITLES[tab]||tab); }, []);
   // liveConfig for AdminDash settings (document templates, etc.)
   const _adminLiveConfigKey = 'c360-live-config-' + (company?.id || 'default');
   const _defaultLiveConfig = { detectionsEnabled:{}, documentTemplates:[
@@ -1904,7 +1907,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
           </div>
           <div style={{ marginTop:12, padding:"8px 10px", borderRadius:8, background:T.bg, border:`1px solid ${T.border}`, fontSize:12 }}>
             <div style={{ fontWeight:600 }}>{company?.name||"Calendar360"}</div>
-            <div style={{ color:T.text3, fontSize:11, marginTop:2 }}>{company?.slug||"app"}.calendar360.fr</div>
+            <div style={{ color:T.text3, fontSize:11, marginTop:2 }}>{company?.slug||"app"}.{brand.domain}</div>
           </div>
         </div>
         <nav style={{ flex:1, padding:"0 8px", overflowY:"auto" }}>
@@ -2693,7 +2696,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                     </div>
                     <div style={{ padding:"8px 12px", borderRadius:8, background:T.bg, border:`1px solid ${T.border}`, marginBottom:12, display:"flex", alignItems:"center", gap:8 }}>
                       <I n="link" s={13} style={{ color:T.text3, flexShrink:0 }}/>
-                      <span title={`calendar360.fr/book/${company.slug}/${cal.slug}`} style={{ fontSize:12, color:T.accent, fontWeight:600, fontFamily:"monospace", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1 }}>calendar360.fr/book/{company.slug}/{cal.slug}</span>
+                      <span title={`${brand.domain}/book/${company.slug}/${cal.slug}`} style={{ fontSize:12, color:T.accent, fontWeight:600, fontFamily:"monospace", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1 }}>{brand.domain}/book/{company.slug}/{cal.slug}</span>
                       <span onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(`https://calendar360.fr/book/${company.slug}/${cal.slug}`); notif("URL copiée !"); }} style={{ cursor:"pointer", padding:"3px 8px", borderRadius:6, background:T.accentBg, color:T.accent, fontSize:11, fontWeight:600, flexShrink:0, display:"flex", alignItems:"center", gap:4 }}><I n="copy" s={11}/> Copier</span>
                     </div>
                     <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:12 }}>
@@ -2720,7 +2723,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                       <div style={{ padding:14, borderRadius:10, background:T.bg, border:`1px solid ${T.border}`, marginBottom:12 }}>
                         <div style={{ fontSize:11, fontWeight:600, color:T.text2, marginBottom:8 }}>Code d'intégration (iframe)</div>
                         <div style={{ position:"relative" }}>
-                          <pre style={{ padding:"10px 12px", borderRadius:8, background:T.surface, border:`1px solid ${T.border}`, fontSize:10, fontFamily:"monospace", color:T.accent, overflow:"auto", whiteSpace:"pre-wrap", wordBreak:"break-all", margin:0, lineHeight:1.5 }}>{`<iframe src="https://calendar360.fr/book/${company.slug}/${cal.slug}" width="100%" height="700" frameborder="0" style="border-radius:12px;border:1px solid #E2E8F0;"></iframe>`}</pre>
+                          <pre style={{ padding:"10px 12px", borderRadius:8, background:T.surface, border:`1px solid ${T.border}`, fontSize:10, fontFamily:"monospace", color:T.accent, overflow:"auto", whiteSpace:"pre-wrap", wordBreak:"break-all", margin:0, lineHeight:1.5 }}>{`<iframe src="https://${brand.domain}/book/${company.slug}/${cal.slug}" width="100%" height="700" frameborder="0" style="border-radius:12px;border:1px solid #E2E8F0;"></iframe>`}</pre>
                           <span onClick={() => { navigator.clipboard.writeText(`<iframe src="https://calendar360.fr/book/${company.slug}/${cal.slug}" width="100%" height="700" frameborder="0" style="border-radius:12px;border:1px solid #E2E8F0;"></iframe>`); notif("Code embed copié !"); }} style={{ position:"absolute", top:6, right:6, cursor:"pointer", padding:"3px 8px", borderRadius:6, background:T.accentBg, color:T.accent, fontSize:10, fontWeight:600 }}>Copier</span>
                         </div>
                         <div style={{ marginTop:8, fontSize:10, color:T.text3 }}>Collez ce code sur votre site web pour afficher la page de réservation.</div>
@@ -4313,7 +4316,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
               {/* Slug / URL editor */}
               <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20, marginLeft:44, padding:"8px 14px", borderRadius:10, background:T.bg, border:`1px solid ${T.border}` }}>
                 <I name="link" size={14} style={{color:T.text3,flexShrink:0}}/>
-                <span style={{ fontSize:12, color:T.text3, flexShrink:0, fontFamily:"monospace" }}>calendar360.fr/page/{company?.slug||"..."}/</span>
+                <span style={{ fontSize:12, color:T.text3, flexShrink:0, fontFamily:"monospace" }}>{brand.domain}/page/{company?.slug||"..."}/</span>
                 <input value={bpSlug} onChange={e => (typeof setBpSlug==='function'?setBpSlug:function(){})(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g,''))} placeholder="mon-slug-unique" style={{ flex:1, padding:"4px 8px", borderRadius:6, border:`1px solid ${T.border}`, fontSize:13, fontFamily:"monospace", background:T.surface, color:T.accent, fontWeight:600, outline:"none", minWidth:120 }}/>
                 <Btn small onClick={() => navigator.clipboard.writeText(`https://calendar360.fr/page/${company?.slug||"app"}/${bpSlug}`).then(()=>notif("URL copiée !"))}><I name="copy" size={12}/></Btn>
               </div>
@@ -4406,7 +4409,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                         <span style={{ width:8, height:8, borderRadius:4, background:"#27C840" }}/>
                       </div>
                       <div style={{ flex:1, padding:"3px 8px", borderRadius:5, background:T.surface, border:`1px solid ${T.border}`, fontSize:9, color:T.text3, fontFamily:"monospace", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                        calendar360.fr/page/{company?.slug||"..."}/{(typeof bpSlug!=='undefined'?bpSlug:null)||"slug"}
+                        {brand.domain}/page/{company?.slug||"..."}/{(typeof bpSlug!=='undefined'?bpSlug:null)||"slug"}
                       </div>
                     </div>
                     <div style={{ maxHeight:480, overflowY:"auto", background:"#FFFFFF" }}>
@@ -4667,7 +4670,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
               </Card>
               <Card>
                 <h3 style={{ fontSize:15, fontWeight:700, marginBottom:16 }}><I n="code" s={16}/> Embed & API</h3>
-                {[{l:"Inline embed",d:'<div id="calendar360-inline"></div>'},{l:"Popup widget",d:'<script src="calendar360.js"></script>'},{l:"Lien direct",d:(company?.slug||"app")+".calendar360.fr"},{l:"API REST",d:"/api/v1/bookings"},{l:"Webhook URL",d:"/webhooks/events"}].map((e,i)=>(<div key={i} style={{padding:"8px 12px",borderRadius:8,background:T.bg,border:`1px solid ${T.border}`,marginBottom:6}}><div style={{fontSize:12,fontWeight:600}}>{e.l}</div><div style={{fontSize:11,fontFamily:"monospace",color:T.accent}}>{e.d}</div></div>))}
+                {[{l:"Inline embed",d:'<div id="calendar360-inline"></div>'},{l:"Popup widget",d:'<script src="calendar360.js"></script>'},{l:"Lien direct",d:(company?.slug||"app")+"."+brand.domain},{l:"API REST",d:"/api/v1/bookings"},{l:"Webhook URL",d:"/webhooks/events"}].map((e,i)=>(<div key={i} style={{padding:"8px 12px",borderRadius:8,background:T.bg,border:`1px solid ${T.border}`,marginBottom:6}}><div style={{fontSize:12,fontWeight:600}}>{e.l}</div><div style={{fontSize:11,fontFamily:"monospace",color:T.accent}}>{e.d}</div></div>))}
               </Card>
               {/* ── SMS RECHARGE SYSTEM ── */}
               <Card style={{gridColumn:"1/-1", background:"linear-gradient(135deg,#FAFAF8,#F5F3FF)", border:`1.5px solid ${T.accentBorder}`}}>
@@ -5858,7 +5861,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                     {/* Preview header bar */}
                     <div style={{padding:"8px 16px",background:"#fff",borderBottom:"1px solid #E2E8F0",display:"flex",alignItems:"center",gap:6}}>
                       <div style={{width:8,height:8,borderRadius:4,background:"#FF5F57"}}/><div style={{width:8,height:8,borderRadius:4,background:"#FEBC2E"}}/><div style={{width:8,height:8,borderRadius:4,background:"#28C840"}}/>
-                      <div style={{flex:1,textAlign:"center",fontSize:10,color:"#999",fontFamily:"monospace"}}>calendar360.fr/form/{company?.slug}/...</div>
+                      <div style={{flex:1,textAlign:"center",fontSize:10,color:"#999",fontFamily:"monospace"}}>{brand.domain}/form/{company?.slug}/...</div>
                     </div>
                     <div style={{padding:24}}>
                       <div style={{width:50,height:5,borderRadius:3,background:(typeof fbColor!=='undefined'?fbColor:null),marginBottom:16}}/>
@@ -5905,7 +5908,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                         )}
                       </div>
 
-                      {(typeof fbShowLogo!=='undefined'?fbShowLogo:null) && <div style={{textAlign:"center",marginTop:16,fontSize:10,color:"#999"}}>Propulsé par <span style={{color:(typeof fbColor!=='undefined'?fbColor:null),fontWeight:600}}>Calendar360</span></div>}
+                      {(typeof fbShowLogo!=='undefined'?fbShowLogo:null) && <div style={{textAlign:"center",marginTop:16,fontSize:10,color:"#999"}}>Propulsé par <span style={{color:(typeof fbColor!=='undefined'?fbColor:null),fontWeight:600}}>{brand.name}</span></div>}
                     </div>
                   </div>
 
@@ -5913,7 +5916,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                   {selForm && !(typeof fbPreviewMode!=='undefined'?fbPreviewMode:null) && (
                     <Card style={{marginTop:12}}>
                       <div style={{fontSize:12,fontWeight:700,marginBottom:8}}><I n="share-2" s={13}/> Partager & Intégrer</div>
-                      <div style={{padding:8,borderRadius:6,background:T.bg,border:`1px solid ${T.border}`,fontSize:10,fontFamily:"monospace",wordBreak:"break-all",color:T.text2,marginBottom:8}}>https://calendar360.fr/form/{company.slug}/{selForm.slug}</div>
+                      <div style={{padding:8,borderRadius:6,background:T.bg,border:`1px solid ${T.border}`,fontSize:10,fontFamily:"monospace",wordBreak:"break-all",color:T.text2,marginBottom:8}}>https://{brand.domain}/form/{company.slug}/{selForm.slug}</div>
                       <div style={{display:"flex",gap:6}}>
                         <Btn small onClick={()=>{navigator.clipboard.writeText(`https://calendar360.fr/form/${company.slug}/${selForm.slug}`);notif("Lien copié !");}}><I n="link" s={12}/> Lien</Btn>
                         <Btn small onClick={()=>{navigator.clipboard.writeText(`<iframe src="https://calendar360.fr/form/${company.slug}/${selForm.slug}" width="100%" height="700" frameborder="0"></iframe>`);notif("Code iframe copié !");}}><I n="code" s={12}/> Iframe</Btn>
@@ -6856,7 +6859,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                     <tbody>
                       {(typeof allCompanies!=='undefined'?allCompanies:{}).filter(c=>!visionSearch||c.name.toLowerCase().includes((typeof visionSearch!=='undefined'?visionSearch:{}).toLowerCase())||c.domain.toLowerCase().includes((typeof visionSearch!=='undefined'?visionSearch:{}).toLowerCase())).map(co=>(
                         <tr key={co.id} style={{borderBottom:`1px solid ${T.border}22`}}>
-                          <td style={{padding:"12px 14px"}}><div style={{fontWeight:600}}>{co.name}</div><div style={{fontSize:11,color:T.text3}}>calendar360.fr/book/{co.slug}/...</div></td>
+                          <td style={{padding:"12px 14px"}}><div style={{fontWeight:600}}>{co.name}</div><div style={{fontSize:11,color:T.text3}}>{brand.domain}/book/{co.slug}/...</div></td>
                           <td style={{padding:"12px 14px"}}><Badge color={co.plan==="enterprise"?T.purple:co.plan==="pro"?T.accent:T.text3}>{co.plan==="enterprise"?"Entreprise":co.plan==="pro"?"Pro":"Gratuit"}</Badge></td>
                           <td style={{padding:"12px 14px"}}><Badge color={co.active?T.success:T.danger}>{co.active?"Actif":"Inactif"}</Badge></td>
                           <td style={{padding:"12px 14px",fontSize:12,color:T.text2}}>{fmtDate(co.createdAt)}</td>
