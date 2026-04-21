@@ -421,8 +421,477 @@ Aucun module ne subit de rupture. Tout est additif.
 
 ---
 
-## 14. Historique des versions du document
+## 14. Placement & navigation dans l'app
+
+### Décision figée
+
+> Admin → **Équipe** → nouvel onglet **« Templates Pipeline Live »**
+
+Pas dans « Paramètres ». Raisons :
+
+- « Paramètres » contient les configs techniques globales (SMS sender, forecast, etc.)
+- « Templates Pipeline Live » est une **brique organisationnelle** (qui fait quoi dans l'équipe), sa place logique est à côté de la gestion des collaborateurs
+- Proximité immédiate avec la modale création/édition collab (où s'opère l'assignation)
+
+### Visibilité
+
+- Onglet visible uniquement si `req.auth.role === 'admin'` OU `req.auth.role === 'supra'`
+- Collab standard : onglet masqué, accès direct par URL bloqué backend (403)
+- Si company n'a pas encore la feature activée (flag `companies.featuresJson` ou équivalent) : onglet grisé avec badge "Premium" → cohérence monétisation future
+
+### Wireframe textuel de navigation
+
+```
+┌──────────────────────────────────────────────────────────┐
+│  ÉQUIPE                                                  │
+│  ┌──────────┬──────────┬──────────────────────────────┐  │
+│  │ Membres  │ Rôles    │ Templates Pipeline Live      │  │
+│  └──────────┴──────────┴──────────────────────────────┘  │
+│                                                          │
+│  [ + Nouveau template ]   [ Filtrer ] [ Trier ]          │
+│                                                          │
+│  ┌────────────────────────────────────────────────────┐  │
+│  │ Immobilier — v2 publié    3 collabs    [⋮]         │  │
+│  │ Closing IV — v1 publié    5 collabs    [⋮]         │  │
+│  │ Relance tiède — brouillon 0 collabs    [⋮]         │  │
+│  └────────────────────────────────────────────────────┘  │
+└──────────────────────────────────────────────────────────┘
+```
+
+---
+
+## 15. Architecture d'écran — Builder LEGO (Phase 2)
+
+### Structure en 3 zones + header
+
+```
+┌──────────────────────────────────────────────────────────────────┐
+│ HEADER : [Nom template] [Description]  [Statut ▼] [Preview] [Save]│
+├────────────────┬───────────────────────────────┬─────────────────┤
+│ A. BIBLIOTHÈQUE│  B. CANVAS (drag & drop)      │ C. CONFIG COL.  │
+│                │                               │                 │
+│ Presets        │   [New] [Cont] [Qual] [RDV]   │ Nom             │
+│ - Standard     │                               │ Couleur         │
+│ - Immobilier   │   [drop zone]                 │ Icône           │
+│ - Closing      │                               │ Position        │
+│                │   [Perdu]                     │                 │
+│ Colonne vide   │                               │ Règles (v1.1+)  │
+│ Recherche      │                               │                 │
+└────────────────┴───────────────────────────────┴─────────────────┘
+```
+
+### Zone A — Bibliothèque (gauche, ~220 px)
+
+- **Presets Planora** (ship-with v1) — 5-7 templates prêts à dupliquer :
+  - Standard (≈ DEFAULT_STAGES actuels)
+  - Immobilier
+  - Closing
+  - Relance tiède
+  - Onboarding SaaS
+  - Assurance
+  - B2B long cycle
+- **Colonnes types** drag-to-canvas : Nouveau, Contacté, Qualifié, RDV programmé, Négociation, Signature, Client validé, Perdu, NRP, Relance, Onboarding, etc.
+- Bouton **« Colonne vide »** pour créer sans preset
+- Recherche par libellé
+- Filtre par couleur (repérage visuel rapide)
+
+### Zone B — Canvas (centre, flex-1)
+
+- Rendu mini-kanban **exactement comme le verra le collab** (couleur, icône, label, position)
+- Chaque colonne = carte draggable
+- Dropzones entre colonnes (surbrillance au hover) pour insertion
+- Drop sur colonne existante = no-op (évite accidents)
+- Corbeille en bas pour supprimer par drag-out
+- Indicateur "Position N" en coin bas de chaque carte
+- Zoom contextuel 80 % pour voir 8+ colonnes sans scroll
+
+### Zone C — Panneau de configuration (droite, ~300 px)
+
+Apparaît au clic sur une colonne du canvas. Champs :
+
+- **Libellé** (input, max 30 chars, requis)
+- **Couleur** (color picker + palette de 8 présets)
+- **Icône** (picker lucide avec recherche, 20 icônes business curées par défaut)
+- **Position** (input number, auto-ajusté au drag mais éditable)
+- **Règles métier** (toggles désactivés en v1, actifs en v1.1+) :
+  - Exige une note pour entrer dans cette colonne
+  - Exige un RDV confirmé
+  - Exige un contrat signé
+  - SMS auto entrée / sortie (réutilise l'infra SMS existante)
+  - Bloque manuellement la sortie (colonne terminale)
+- **Supprimer cette colonne** (confirm si contacts potentiellement impactés en mode édition de template publié)
+
+### Header
+
+- Nom du template (inline edit)
+- Description (inline edit, tooltip)
+- Icône + couleur du template (identité visuelle dans la liste)
+- Statut : dropdown `Brouillon / Publié / Archivé`
+- **Preview** : overlay plein écran montrant le pipeline tel qu'il apparaîtrait au collab, avec 3 contacts fictifs dans chaque colonne
+- **Save** : valide le builder et retour liste
+- **Historique** (icône 🕐) : ouvre la liste des snapshots passés (v1, v2…) en lecture seule
+
+---
+
+## 16. Flow UX admin — création d'un template
+
+### Étapes
+
+1. Équipe → Templates Pipeline Live → `+ Nouveau template`
+2. **Modal de démarrage** :
+   - Choix 1 : « Partir d'un preset » (ouvre bibliothèque dans modal → clone)
+   - Choix 2 : « Partir d'un vide »
+   - Choix 3 : « Dupliquer un existant » (dropdown des templates de la company)
+3. **Saisie meta** (petit form initial) :
+   - Nom (requis, 3-40 chars)
+   - Description (optionnel)
+   - Icône + couleur (identité dans la liste)
+4. Redirection vers le builder en mode brouillon automatique
+5. Admin travaille : ajoute, supprime, réordonne, configure
+6. **Auto-save en brouillon** toutes les 30 s (toast discret « Sauvegardé »)
+7. Satisfait → **Preview** → valide visuellement → **Publier**
+8. Confirm modal : « Publier rendra ce template assignable aux collaborateurs. Vous pourrez toujours le modifier, mais les modifs créeront une v2 qui ne sera pas propagée automatiquement. Continuer ? »
+9. Publication → retour liste avec badge « Publié v1 ✓ »
+
+### Modes brouillon / publié / archivé
+
+| Mode | Assignable ? | Modifiable ? | Supprimable ? |
+|---|---|---|---|
+| Brouillon | ❌ non | ✅ oui (in-place) | ✅ oui (zéro dépendance) |
+| Publié | ✅ oui | ✅ oui → crée v(N+1) | ❌ non (archiver à la place) |
+| Archivé | ❌ non | ❌ non | ✅ oui **si et seulement si** aucun snapshot référencé par un collab actif |
+
+### Edge cases du builder
+
+- **Template sans colonne** : validation empêche la publication (minimum 2 colonnes requises)
+- **Deux colonnes même label** : warning soft, non bloquant (ex : deux étapes « En attente » à phases différentes)
+- **Couleur à contraste insuffisant** : warning soft, non bloquant
+- **Plus de 12 colonnes** : warning « Pipeline très long, risque UX dégradée pour le collab. Continuer ? » → non bloquant
+
+---
+
+## 17. Flow UX admin — assignation à un collab
+
+### Champ dans la modale création/édition collab
+
+Nouveau champ entre « Rôle » et « Capacité » :
+
+```
+Template Pipeline Live
+┌─────────────────────────────────────┐
+│ [Sélectionner un template     ▼]    │
+└─────────────────────────────────────┘
+Si aucun template : le collaborateur
+configure lui-même son pipeline.
+```
+
+Dropdown :
+- Option 1 : **« Mode libre (aucun template) »** ← défaut
+- Séparateur
+- Options 2+ : liste des templates **publiés** de la company, avec icône + couleur + nom + « vN »
+
+### Preview au survol
+
+Au hover sur une option, popover à droite affiche :
+- Mini-kanban (8 colonnes max visibles, reste en « + N autres »)
+- Nom template + version + nb de collabs déjà assignés
+- Description
+
+### Pre-flight check (changement de mode)
+
+#### Cas A — nouveau collab avec template
+
+Zéro contact, zéro impact. Save direct.
+
+#### Cas B — collab existant : `free` → `template` (ou changement de template)
+
+Modal pre-flight obligatoire :
+
+```
+┌─────────────────────────────────────────────────────┐
+│ Impact de ce changement                             │
+│                                                     │
+│ Julie Desportes a 42 contacts dans son pipeline.    │
+│                                                     │
+│ • 39 contacts compatibles avec le nouveau template  │
+│ • 3 contacts sont sur des colonnes absentes :       │
+│   ┌──────────────────────────────────────────────┐  │
+│   │ • 2 sur "Qualification froide"               │  │
+│   │ • 1 sur "Relance J+7"                        │  │
+│   └──────────────────────────────────────────────┘  │
+│                                                     │
+│ Ces 3 contacts seront migrés vers :                 │
+│ [ Nouveau                              ▼ ]          │
+│                                                     │
+│ 3 contacts ont un RDV confirmé à venir, vérifiez    │
+│ leur suivi après migration. [ Voir détails ]        │
+│                                                     │
+│   [ Annuler ]       [ Confirmer la migration ]      │
+└─────────────────────────────────────────────────────┘
+```
+
+#### Cas C — collab existant : `template` → `free`
+
+Modal symétrique, 2 options explicites :
+
+```
+┌─────────────────────────────────────────────────────┐
+│ Passage en mode libre                               │
+│                                                     │
+│ Julie pourra modifier librement son pipeline.       │
+│                                                     │
+│ • 28 contacts conservent leur colonne               │
+│ • 2 contacts sont sur "Closing hot" (colonne du     │
+│   template Closing qui n'existe pas en mode libre)  │
+│                                                     │
+│ Que faire de ces 2 contacts ?                       │
+│ ◉ Les migrer vers : [ Nouveau     ▼ ]               │
+│ ○ Les conserver tels quels (stage orphelin, affiché │
+│   comme "Nouveau" avec étiquette d'origine)         │
+│                                                     │
+│   [ Annuler ]       [ Confirmer ]                   │
+└─────────────────────────────────────────────────────┘
+```
+
+---
+
+## 18. Flow UX collab — réception du template
+
+### Première connexion après assignation
+
+1. Collab se connecte au portail
+2. Chargement portail → `GET /api/data/pipeline-stages-resolved`
+3. Résolution : mode `template`, stages du snapshot
+4. **Notification in-app discrète** en haut à droite :
+   > Votre pipeline a été configuré par votre administrateur : **Closing IV**. [ En savoir plus ]
+5. **Badge permanent** au-dessus du kanban Pipeline Live :
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Pipeline Équipe : Closing IV                            │
+│ Défini par Romain (admin). Contactez-le pour toute      │
+│ modification de structure.                              │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Choix du libellé badge — décision figée
+
+**« Pipeline Équipe »** plutôt que « Pipeline imposé ». Raisons :
+
+- Connotation positive et collective vs contrainte subie
+- Aligne le collab sur l'identité équipe, pas sur la restriction individuelle
+- Réduit le risque de ticket support « mon pipeline est bloqué »
+
+Hover tooltip : date d'assignation + version du template.
+Clic : modal read-only « Template Closing IV v2 — 8 colonnes — Admin : Romain — En vigueur depuis le 15/05/2026 ».
+
+### UI mutations cachées en mode template
+
+Sont masqués :
+- Bouton « + Ajouter un statut » dans le menu Pipeline
+- Menu contextuel « Renommer / Supprimer / Changer couleur » sur chaque colonne
+- Drag-réorder des colonnes
+
+Restent disponibles (non impactés) :
+- Tout le reste du portail : CRM, fiche contact, actions rapides, VoIP, etc.
+- Drag-drop des CONTACTS entre colonnes (pipeline fonctionne normalement)
+- Zoom, collapse de colonne, filtres
+
+### Notification de nouvelle version disponible (Phase 5)
+
+Si admin publie v2 du template assigné :
+- Toast in-app discret à la prochaine connexion : « Une nouvelle version de votre pipeline est disponible. Elle sera appliquée lorsque votre administrateur la déploiera. »
+- Pas d'action requise côté collab (attend la push admin)
+
+---
+
+## 19. Flow migration entre versions (Phase 5) — UX détaillée
+
+### Vue admin — page d'un template publié
+
+```
+┌─────────────────────────────────────────────────────────┐
+│ Template : Closing IV                                   │
+│                                                         │
+│ Versions :                                              │
+│   ● v2 (publié)  ────  0 collabs    [Éditer] [Publier]  │
+│   ○ v1 (ancien)  ────  5 collabs    [Voir]              │
+│                                                         │
+│ 5 collabs utilisent la version 1 de ce template.        │
+│ Voulez-vous les migrer vers la v2 ?                     │
+│                                                         │
+│   [ Migrer vers v2 (pre-flight check) ]                 │
+└─────────────────────────────────────────────────────────┘
+```
+
+### Clic « Migrer vers v2 » → pre-flight modal
+
+Affiche :
+- Diff visuel v1 → v2 (colonnes ajoutées, supprimées, renommées, réordonnées)
+- Nombre de contacts sur chaque colonne disparue
+- Pour chaque colonne disparue, dropdown de mapping vers une colonne v2
+- Alertes : contacts avec RDV confirmés, contacts avec contrat actif
+
+### Diff visuel (exemple)
+
+```
+v1                          v2
+┌────────────┐              ┌────────────┐
+│ Nouveau    │──identique──►│ Nouveau    │
+├────────────┤              ├────────────┤
+│ Contacté   │──identique──►│ Contacté   │
+├────────────┤              ├────────────┤
+│ Qualifié   │──renommé────►│ Qualifié + │
+│            │              │ engagé     │
+├────────────┤              ├────────────┤
+│ Closing    │──supprimée──►(aucune)
+│ hot        │              ⚠ 3 contacts à migrer
+├────────────┤              ├────────────┤
+│ Perdu      │──identique──►│ Perdu      │
+└────────────┘              ├────────────┤
+                            │ Abandonné  │  ← nouvelle
+                            └────────────┘
+```
+
+### Mapping obligatoire
+
+Pour chaque colonne supprimée v1→v2 contenant ≥1 contact : admin doit **choisir une cible** parmi les colonnes v2 (pas d'option « aucune migration »). Garantit l'invariant #7.
+
+### Exécution
+
+- Animation de progression : « Migration en cours... 3/3 collabs »
+- Par collab : migration contacts → update `pipelineSnapshotId` → invalidation cache
+- Si contact a transaction en cours (édition concurrente) → 409 Conflict → migration différée, log explicite
+- Rapport final : « Migration terminée : 15 contacts migrés, 0 erreur. [Voir audit log] »
+
+---
+
+## 20. Positionnement SaaS — HubSpot / Pipedrive
+
+### Références
+
+**HubSpot CRM**
+- Pipelines multiples par company, assignables par rôle/équipe
+- Stages éditables, propagation automatique (pas de versioning visible)
+- Probabilité de closing par stage (%) pour forecast
+- Automation par stage (send email, assign task, change property)
+
+**Pipedrive**
+- Pipelines multiples par owner (user-owned ou partagés)
+- Rotten days (stage time limit), auto-warn si deal stagnant
+- Permissions granulaires par pipeline
+- Stages avec `probability` et `duration`
+
+### Ce qu'on garde
+- Pipelines assignables par rôle (adapté à notre notion de template par collab)
+- Stage templates prédéfinis (bibliothèque de presets)
+- Probability / duration / automation par stage → ≥ v1.1/v2
+
+### Ce qu'on fait différemment
+- **Mode libre coexistant** : HubSpot/Pipedrive imposent à tous ; nous gardons la flexibilité hybride
+- **Snapshot figé + re-sync explicite** : innovation UX vs auto-propagation HubSpot. Cible : équipes sensibles à la stabilité (immobilier, closing, assurance)
+- **Verrou UI + backend strict** systématique
+
+### Ce qu'on n'innove pas en v1
+- Pas de multi-pipelines par collab (1 template / collab en v1)
+- Pas de deal probability / forecast par stage (module forecast existant)
+- Pas d'automation complète par stage (sauf SMS auto existant)
+
+### Positionnement marketing potentiel
+
+> Planora Pipeline Templates — imposez la structure sans sacrifier la liberté. Équipes expérimentées en mode libre, équipes structurées sur un modèle cadré. Migration de version sous contrôle, zéro surprise.
+
+---
+
+## 21. Challenge / auto-critique de la conception
+
+### Tensions identifiées et mitigations
+
+#### Tension 1 — Badge « imposé » perçu négativement
+- **Mitigation** : renommage « **Pipeline Équipe** » (fait §18)
+- Tooltip expliquant la valeur ajoutée
+- Onboarding first-connection : walkthrough 3 étapes
+
+#### Tension 2 — 1 template par collab : trop restrictif ?
+- **Décision v1** : rester à 1/collab
+- Multi-templates = design majeur (navigation, bascule, reporting), reporté v2
+- Compromis v1 : template unique avec toutes les colonnes si besoin double-flux
+
+#### Tension 3 — Builder trop complexe si règles métier dès v1
+- **Décision** : v1 = builder simple (label + couleur + icône + ordre)
+- Règles métier → v1.1+ ou v2
+- Trade-off accepté : moins « premium » mais expédiable plus vite
+
+#### Tension 4 — Overlap avec les leads envelopes
+- **Clarification** : deux axes orthogonaux
+  - **Enveloppe** = classification du **contact**
+  - **Template pipeline** = structure de travail du **collab**
+- Un contact X dans enveloppe « Lead SEO » traité par Julie (template Closing IV) peut être dans la colonne « Qualifié » du template. Cohabitent sans conflit.
+- Recommandation : documenter cette dualité dans l'onboarding admin.
+
+#### Tension 5 — Admin oublie de mettre à jour un template
+- Pas de TTL forcé en v1
+- Dashboard admin : affichage « Dernière modification v1 : il y a 183 jours » + alerte soft > 180 j
+- v2 potentiel : templates « recommandés » par Planora (plateforme)
+
+#### Tension 6 — Race condition admin A + admin B éditent le même template
+- **Mitigation** : locking optimiste via `updatedAt`
+- Si admin B save avec un `updatedAt` stale → 409 Conflict + message clair « Un autre admin a modifié ce template, rechargez pour fusionner »
+- Pattern déjà éprouvé dans `handleCollabUpdateContact`
+
+#### Tension 7 — Preview dans la modale assignation est-il fidèle ?
+- Le preview réutilise le composant de rendu du kanban collab (même code)
+- 3 contacts fictifs injectés pour visualiser
+- Zero drift visuel garanti
+
+### Alternatives considérées et rejetées
+
+| Alternative | Rejet, pourquoi |
+|---|---|
+| Live binding collab → template (pas de snapshot) | Invariant #4 — tracking versions impossible, collabs subissent modifs |
+| Auto-sync nouvelle version | Invariant #5 — casse muscle memory |
+| UI-only enforcement | Bypass trivial par curl |
+| Templates modifiables in-place sans versioning | Pas d'audit, pas de reporting, pas de rollback |
+| Bibliothèque globale Planora (templates shared cross-company) | v1 = company-scope. Bibliothèque globale = v3 « marketplace templates » |
+| Multi-templates par collab | Design majeur navigation, reporté v2 |
+| Règles métier complètes dès v1 | Complexité explosive, reporté v1.1/v2 |
+
+---
+
+## 22. Indicateurs de succès (post-launch)
+
+| KPI | Cible v1 | Mesure |
+|---|---|---|
+| Adoption | > 30 % des collabs actifs sous template à 3 mois | `COUNT(collabs WHERE pipelineMode='template') / COUNT(active collabs)` |
+| Usage admin | ≥ 2 templates publiés par company active | `COUNT(DISTINCT pipelineTemplates WHERE isPublished=1 GROUP BY companyId) HAVING count ≥ 2` |
+| Stabilité migrations | 0 perte de données détectée sur 6 mois | Audit logs + comparaison pre/post migration |
+| Support | ≤ 1 ticket / 100 collabs / mois liés à pipeline locked | Tracking support Planora |
+| Satisfaction admin | NPS feature > 30 à J+30 après adoption | Survey in-app |
+
+---
+
+## 23. Récap des décisions de conception (amendement v1.1)
+
+| Point | Décision |
+|---|---|
+| Emplacement | Admin → Équipe → « Templates Pipeline Live » (pas Paramètres) |
+| Builder | 3 zones (biblio / canvas / config) + header |
+| Presets ship-with | 5-7 templates (Standard, Immobilier, Closing, Relance, Onboarding SaaS, Assurance, B2B long cycle) |
+| Règles métier par colonne | Reporté v1.1+ |
+| Multi-templates par collab | Reporté v2+ |
+| Badge collab | « Pipeline Équipe » (pas « imposé ») |
+| Assignation UX | Dropdown + hover preview + pre-flight check modal |
+| Migration versions | Diff visuel + mapping obligatoire + rapport final |
+| Free ↔ Template | 2 directions, pre-flight check dans les deux sens |
+| Orphelins (direction template→free) | Option « migrer » OU « conserver avec étiquette d'origine » |
+| Optimistic locking templates | `updatedAt` check, 409 si édition admin concurrente |
+| Inspiration SaaS | HubSpot (assignation par rôle) + Pipedrive (bibliothèque stages). Innovation = coexistence libre + snapshot figé |
+
+---
+
+## 24. Historique des versions du document
 
 | Version | Date | Auteur | Changement |
 |---|---|---|---|
 | v1 | 2026-04-21 | Claude (validé MH) | Création initiale post-audit Pipeline Live + validation conception complète |
+| v1.1 | 2026-04-21 | Claude (validé MH) | Amendement — UX builder + flows détaillés (sections 14-23) : placement navigation, architecture écran 3 zones, flows admin/collab, migration versionnée UX, positionnement SaaS, auto-critique, KPIs |
