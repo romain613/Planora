@@ -2696,6 +2696,20 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     // (sinon le check 409 côté backend ne déclenche jamais — on enverrait la valeur déjà écrasée)
     const prevContact = (contacts || []).find(c => c.id === id);
     const prevUpdatedAt = prevContact?.updatedAt || '';
+    // S2 P0 Patch A: snapshot des champs modifiés pour rollback sur échec définitif
+    // Rollback CHAMP PAR CHAMP (pas full contact) pour ne pas écraser d'autres
+    // modifications concurrentes sur ce contact. Seuls les champs user (non préfixés _) snappés.
+    const prevFields = {};
+    for (const k of Object.keys(updates)) {
+      if (!k.startsWith('_')) prevFields[k] = prevContact ? prevContact[k] : undefined;
+    }
+    const rollbackFields = () => {
+      setContacts(p => p.map(c => c.id === id ? {...c, ...prevFields} : c));
+      if ((typeof selectedCrmContact!=='undefined'?selectedCrmContact:null)?.id === id) (typeof setSelectedCrmContact==='function'?setSelectedCrmContact:function(){})(p => p ? {...p, ...prevFields} : p);
+      if ((typeof pipelineRightContact!=='undefined'?pipelineRightContact:null)?.id === id) (typeof setPipelineRightContact==='function'?setPipelineRightContact:function(){})(p => p ? {...p, ...prevFields} : p);
+      if (typeof setSelectedContact === 'function') { try { setSelectedContact(p => p?.id === id ? {...p, ...prevFields} : p); } catch {} }
+      if (typeof setAllContacts === 'function') { try { setAllContacts(p => Array.isArray(p) ? p.map(c => c.id === id ? {...c, ...prevFields} : c) : p); } catch {} }
+    };
     // Optimistic update local state + mark as recently edited (protect from auto-refresh)
     // V5: Injecter updatedAt local pour que le badge inactivite disparaisse immediatement
     contactsLocalEditRef.current = Date.now();
@@ -2721,7 +2735,11 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
           } else if (!r || r.error) {
             console.error('[CONTACT SAVE] Erreur serveur:', r?.error, '→ retry', attempt);
             if (attempt < 3) setTimeout(() => saveToBackend(attempt + 1), 1000 * attempt);
-            else showNotif('Erreur: modification non sauvegardée. Réessayez.', 'danger');
+            else {
+              // S2 P0 Patch A: rollback UI sur échec définitif serveur
+              rollbackFields();
+              showNotif('Modification annulée (erreur serveur persistante)', 'danger');
+            }
           } else {
             console.log('[CONTACT SAVE] OK:', id, Object.keys(updates).join(', '));
             // V3: si le backend retourne le contact frais, synchroniser le state
@@ -2738,15 +2756,18 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
           console.error('[CONTACT SAVE] Echec réseau:', err.message, '→ retry', attempt);
           if (attempt < 3) setTimeout(() => saveToBackend(attempt + 1), 1000 * attempt);
           else {
-            showNotif('Erreur réseau: modification non sauvegardée', 'danger');
+            showNotif('Modification annulée (erreur réseau)', 'danger');
             // V3: refetch individuel — ne pas écraser les autres contacts modifiés localement
+            // S2 P0 Patch A: si refetch échoue, rollback champ par champ au lieu de laisser l'optimistic update
             api(`/api/data/contacts/${id}?companyId=${company?.id}`).then(fresh => {
               if (fresh && fresh.id) {
                 setContacts(p => p.map(c => c.id === id ? fresh : c));
                 if ((typeof selectedCrmContact!=='undefined'?selectedCrmContact:null)?.id === id) (typeof setSelectedCrmContact==='function'?setSelectedCrmContact:function(){})(fresh);
                 if ((typeof pipelineRightContact!=='undefined'?pipelineRightContact:null)?.id === id) (typeof setPipelineRightContact==='function'?setPipelineRightContact:function(){})(fresh);
+              } else {
+                rollbackFields();
               }
-            }).catch(() => {});
+            }).catch(() => { rollbackFields(); });
           }
         });
     };
