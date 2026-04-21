@@ -38,6 +38,8 @@ import {
 import { CollabProvider } from "./context/CollabContext";
 // Phase 4 Templates Pipeline — résolution runtime des stages + flag readOnly
 import { usePipelineResolved } from "./hooks/usePipelineResolved";
+// Contact Share V1 — partage contact + RDV inter-collab
+import ContactShareModal from "./components/ContactShareModal";
 import AiProfileTab from "./tabs/AiProfileTab";
 import TablesTab from "./tabs/TablesTab";
 import MessagesTab from "./tabs/MessagesTab";
@@ -183,6 +185,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const [contactSaveStatus, setContactSaveStatus] = useState({});
   // S3.1 — ref miroir de contactSaveStatus, lue dans le handler subscribe (closure-safe)
   const contactSaveStatusRef = useRef({});
+  // Contact Share V1 — état d'ouverture du modal de partage (contact cible ou null)
+  const [contactShareTarget, setContactShareTarget] = useState(null);
   useEffect(() => { contactSaveStatusRef.current = contactSaveStatus; }, [contactSaveStatus]);
 
   // S3.1 — BroadcastChannel cross-tab : init + subscribe au mount, close au unmount
@@ -3540,6 +3544,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       pipelineStages, setPipelineStages,
       // Phase 4 — résolution runtime + flag readOnly + metadata template
       pipelineReadOnly, pipelineTemplateMeta,
+      // Contact Share V1
+      contactShareTarget, setContactShareTarget,
       contactFieldDefs, setContactFieldDefs,
       pipelinePopupContact, setPipelinePopupContact,
       pipelinePopupHistory, setPipelinePopupHistory,
@@ -6148,6 +6154,38 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     )}
 
     </div>
+    {/* Contact Share V1 — modal de partage contact + RDV */}
+    {contactShareTarget && (
+      <ContactShareModal
+        open={true}
+        onClose={() => setContactShareTarget(null)}
+        contact={contactShareTarget}
+        currentCollabId={collab?.id}
+        companyId={company?.id}
+        collaborators={collabsProp || collabs || []}
+        calendars={calendars || []}
+        showNotif={showNotif}
+        onSuccess={(r) => {
+          // Update local state : marquer le contact comme partagé
+          setContacts(prev => prev.map(c => c.id === contactShareTarget.id
+            ? { ...c, sharedWithId: r.sharedWithId, sharedById: r.sharedById, sharedAt: r.sharedAt, shareNote: contactShareTarget._shareNote || c.shareNote }
+            : c
+          ));
+          if (typeof setPipelineRightContact === 'function') {
+            setPipelineRightContact(p => p && p.id === contactShareTarget.id
+              ? { ...p, sharedWithId: r.sharedWithId, sharedById: r.sharedById, sharedAt: r.sharedAt }
+              : p
+            );
+          }
+          // Si un booking a été créé, on rafraîchit les bookings depuis le backend
+          if (r.bookingId && typeof setBookings === 'function') {
+            api(`/api/bookings?companyId=${encodeURIComponent(company?.id || '')}`).then(rows => {
+              if (Array.isArray(rows)) setBookings(rows);
+            }).catch(() => {});
+          }
+        }}
+      />
+    )}
     </CollabProvider>
   );
 };

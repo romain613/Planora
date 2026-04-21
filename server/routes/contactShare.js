@@ -1,0 +1,87 @@
+// ═══════════════════════════════════════════════════════════════════════════
+// Routes Contact Share V1 — partage contact + RDV inter-collab
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Endpoints :
+//   POST /api/contact-share/send              — partage un contact + crée un RDV
+//   POST /api/contact-share/desync/:contactId — désynchronise le partage
+//
+// Toutes les routes : requireAuth + enforceCompany (scope company).
+
+import { Router } from 'express';
+import { db } from '../db/database.js';
+import { requireAuth, enforceCompany } from '../middleware/auth.js';
+import { sendContactToCollab, desyncContactShare } from '../services/contactShare/share.js';
+
+const router = Router();
+
+// Map message → HTTP status
+const ERR_MAP = {
+  CONTACT_ID_REQUIRED: 400,
+  TARGET_COLLAB_REQUIRED: 400,
+  ACTOR_COLLAB_REQUIRED: 401,
+  COMPANY_ID_REQUIRED: 400,
+  CANNOT_SHARE_WITH_SELF: 400,
+  CONTACT_NOT_FOUND: 404,
+  CONTACT_WRONG_COMPANY: 403,
+  TARGET_COLLAB_INVALID: 404,
+  ACTOR_COLLAB_INVALID: 401,
+  NOT_AUTHORIZED_ON_CONTACT: 403,
+  NOT_AUTHORIZED_ON_SHARE: 403,
+  CONTACT_NOT_SHARED: 400,
+};
+
+// ─── POST /api/contact-share/send ──────────────────────────────────────────
+router.post('/send', requireAuth, enforceCompany, (req, res) => {
+  try {
+    const {
+      contactId,
+      targetCollaboratorId,
+      bookingDate,
+      bookingTime,
+      bookingDuration,
+      calendarId,
+      note,
+    } = req.body || {};
+
+    const actorCollaboratorId = req.auth.collaboratorId;
+    const companyId = req.auth.companyId || req.auth._activeCompanyId || req.body.companyId;
+    if (!actorCollaboratorId) return res.status(401).json({ error: 'AUTH_REQUIRED' });
+
+    const result = sendContactToCollab(db, {
+      contactId,
+      targetCollaboratorId,
+      actorCollaboratorId,
+      companyId,
+      bookingDate,
+      bookingTime,
+      bookingDuration,
+      calendarId,
+      note,
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('[CONTACT_SHARE SEND]', err);
+    const status = ERR_MAP[err.message] || 500;
+    res.status(status).json({ error: err.message });
+  }
+});
+
+// ─── POST /api/contact-share/desync/:contactId ──────────────────────────────
+router.post('/desync/:contactId', requireAuth, enforceCompany, (req, res) => {
+  try {
+    const contactId = req.params.contactId;
+    const actorCollaboratorId = req.auth.collaboratorId;
+    const companyId = req.auth.companyId || req.auth._activeCompanyId;
+    if (!actorCollaboratorId) return res.status(401).json({ error: 'AUTH_REQUIRED' });
+
+    const result = desyncContactShare(db, { contactId, actorCollaboratorId, companyId });
+    res.json(result);
+  } catch (err) {
+    console.error('[CONTACT_SHARE DESYNC]', err);
+    const status = ERR_MAP[err.message] || 500;
+    res.status(status).json({ error: err.message });
+  }
+});
+
+export default router;

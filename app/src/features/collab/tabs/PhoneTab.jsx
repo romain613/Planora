@@ -139,6 +139,8 @@ const PhoneTab = () => {
     pipelineStages, PIPELINE_STAGES, orderedStages,
     // Phase 4 Templates — badge + readOnly
     pipelineReadOnly, pipelineTemplateMeta,
+    // Contact Share V1 — partage + RDV inter-collab
+    setContactShareTarget,
     // ═══ REWIRE 2026-04-20 — destructure complémentaire (64 symboles) ═══
     CALL_TAGS,
     PHONE_MODULES,
@@ -1877,6 +1879,45 @@ if (n === ph) matched.set(c.id, c);
         </div>
       </div>;
     })()}
+
+    {/* ── Contact Share V1 — envoyer à un collègue / statut partage / désync ── */}
+    <div style={{display:'flex',alignItems:'center',gap:6,marginTop:8,paddingTop:6,borderTop:`1px solid ${T.border}30`,flexWrap:'wrap'}}>
+      {(() => {
+        const sharedWithId = ct.sharedWithId;
+        const sharedById = ct.sharedById;
+        const isSender = sharedById && sharedById === collab?.id;
+        const isReceiver = sharedWithId && sharedWithId === collab?.id;
+        const otherId = isSender ? sharedWithId : (isReceiver ? sharedById : null);
+        const other = otherId ? (collabs||[]).find(c=>c.id===otherId) : null;
+        if (isSender) {
+          return <>
+            <span style={{fontSize:10,fontWeight:700,color:'#F97316',background:'#F9731615',border:'1px solid #F9731640',borderRadius:5,padding:'2px 7px',display:'inline-flex',alignItems:'center',gap:4}}>
+              <I n="send" s={10}/> Partagé avec {other?.name || 'un collègue'}
+            </span>
+            <Btn small onClick={()=>{
+              if(!confirm(`Se désynchroniser ? ${other?.name || 'Le destinataire'} deviendra le propriétaire unique de ce contact, qui disparaîtra de votre pipeline.`)) return;
+              api(`/api/contact-share/desync/${encodeURIComponent(ct.id)}`,{method:'POST'}).then(r=>{
+                if(r?.error){ showNotif('Erreur : '+r.error,'danger'); return; }
+                showNotif('Contact désynchronisé','success');
+                setContacts(p=>p.filter(c=>c.id!==ct.id));
+                if(typeof setPipelineRightContact==='function') setPipelineRightContact(null);
+              }).catch(e=>showNotif('Erreur : '+e.message,'danger'));
+            }} style={{fontSize:9,background:T.bg,color:T.text2,border:`1px solid ${T.border}`,padding:'2px 6px'}} title="Désynchronisation : le destinataire devient owner unique, le contact disparaît de votre pipeline">
+              <I n="x" s={9}/> Désync
+            </Btn>
+          </>;
+        }
+        if (isReceiver) {
+          return <span style={{fontSize:10,fontWeight:700,color:'#F97316',background:'#F9731615',border:'1px solid #F9731640',borderRadius:5,padding:'2px 7px',display:'inline-flex',alignItems:'center',gap:4}}>
+            <I n="inbox" s={10}/> Envoyé par {other?.name || 'un collègue'}
+            {ct.shareNote ? <span style={{marginLeft:4,fontStyle:'italic',fontWeight:500,color:T.text3}} title={ct.shareNote}>— {ct.shareNote.slice(0,40)}{ct.shareNote.length>40?'…':''}</span> : null}
+          </span>;
+        }
+        return <Btn small onClick={()=>{ if(typeof setContactShareTarget==='function') setContactShareTarget(ct); }} style={{fontSize:9,background:'#F9731610',color:'#F97316',border:'1px solid #F9731640'}} title="Envoyer ce contact à un collègue avec un RDV">
+          <I n="send" s={10}/> Envoyer à un collègue
+        </Btn>;
+      })()}
+    </div>
 
     {/* ── Note étoiles + Tags — tout en bas ── */}
     <div style={{display:'flex',alignItems:'center',gap:4,marginTop:10,paddingTop:6,borderTop:`1px solid ${T.border}30`,flexWrap:'wrap'}}>
@@ -5284,6 +5325,8 @@ return(
       const isAutoDialing=(typeof pdStatus!=='undefined'?pdStatus:null)!=='idle'&&(typeof pdContactList!=='undefined'?pdContactList:null)[pdCurrentIdx]?.id===ct.id;
       const pdResult=(typeof pdResults!=='undefined'?pdResults:null)[ct.id];
       const _ccHas=!!ct.card_color;
+      // Contact Share V1 — borderLeft orange si contact partagé avec ou par ce collab
+      const _isShared = !!(ct.sharedWithId && collab?.id && (ct.sharedWithId === collab.id || ct.sharedById === collab.id));
       const _ccBorder=_ccHas?`2.5px solid ${ct.card_color}`:isAutoDialing?'2px solid #7C3AED':pdResult?`2px solid ${pdResult==='contacted'?'#22C55E':'#EF4444'}`:`1px solid ${T.border}`;
       const _ccBg=_ccHas?`linear-gradient(135deg, ${ct.card_color}30 0%, ${ct.card_color}08 60%, transparent 100%)`:isAutoDialing?'#7C3AED12':T.surface;
       const _ccShadow=_ccHas?`0 3px 12px ${ct.card_color}30`:isAutoDialing?'0 0 16px #7C3AED30':'none';
@@ -5306,7 +5349,7 @@ return(
           }
           setPipelineRightContact(ct);setPhoneRightTab('fiche');if(phoneRightCollapsed){(typeof setPhoneRightCollapsed==='function'?setPhoneRightCollapsed:function(){})(false);try{localStorage.setItem('c360-phone-right-collapsed-'+collab.id,'0');}catch{}}api('/api/data/pipeline-history?contactId='+ct.id).then(h=>setPipelinePopupHistory(h||[])).catch(()=>setPipelinePopupHistory([]));
         }}
-        style={{padding:'8px 10px',borderRadius:10,background:_isRdvPasse2?'linear-gradient(135deg, #F9731612 0%, #F9731604 60%, transparent 100%)':_isSelected?T.accent+'08':_isPipeSel?T.accentBg:_ccBg,border:_isRdvPasse2?'2px solid #F97316':_isSelected?`2.5px solid ${T.accent}`:_isPipeSel?`2px solid ${T.accent}`:_ccBorder,borderLeft:_isRdvPasse2?'5px solid #F97316':_isSelected?`5px solid ${T.accent}`:_ccHas?`6px solid ${ct.card_color}`:undefined,cursor:'pointer',transition:'all .3s',boxShadow:_isRdvPasse2?'0 3px 12px #F9731625':_isSelected?`0 4px 16px ${T.accent}25`:_ccShadow,position:'relative'}}
+        style={{padding:'8px 10px',borderRadius:10,background:_isRdvPasse2?'linear-gradient(135deg, #F9731612 0%, #F9731604 60%, transparent 100%)':_isSelected?T.accent+'08':_isPipeSel?T.accentBg:_ccBg,border:_isRdvPasse2?'2px solid #F97316':_isSelected?`2.5px solid ${T.accent}`:_isPipeSel?`2px solid ${T.accent}`:_ccBorder,borderLeft:_isRdvPasse2?'5px solid #F97316':_isSelected?`5px solid ${T.accent}`:_ccHas?`6px solid ${ct.card_color}`:_isShared?'5px solid #F97316':undefined,cursor:'pointer',transition:'all .3s',boxShadow:_isRdvPasse2?'0 3px 12px #F9731625':_isSelected?`0 4px 16px ${T.accent}25`:_ccShadow,position:'relative'}}
         onMouseEnter={e=>{if(!isAutoDialing&&!_ccHas)e.currentTarget.style.boxShadow='0 4px 12px rgba(0,0,0,0.08)';}}
         onMouseLeave={e=>{e.currentTarget.style.boxShadow=_ccShadow;}}>
         {/* Auto-dialer badge */}
