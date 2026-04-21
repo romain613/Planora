@@ -6,6 +6,7 @@ import React, { useState } from "react";
 import { T } from "../../../theme";
 import { I, Btn, Card, Badge, Spinner, EmptyState } from "../../../shared/ui";
 import { TEMPLATE_PRESETS } from "./constants";
+import { api } from "../../../shared/services/api";
 
 function statusBadge(tpl) {
   if (tpl.isArchived) return { label: "Archivé", color: T.text3 };
@@ -13,8 +14,45 @@ function statusBadge(tpl) {
   return { label: "Brouillon", color: T.warning };
 }
 
-export default function TemplatesList({ templates, loading, onNew, onEdit, onPreview }) {
+export default function TemplatesList({ templates, loading, onNew, onEdit, onPreview, onArchived, showNotif }) {
   const [showPresetPicker, setShowPresetPicker] = useState(false);
+  const [archivingId, setArchivingId] = useState(null);
+
+  const handleArchive = async (t) => {
+    if (archivingId) return;
+    const hasSnapshots = t.latestVersion > 0;
+    const confirmMsg = t.collabsCount > 0
+      ? null // bloqué côté backend mais sanity-check UI
+      : hasSnapshots
+        ? `Archiver "${t.name}" ? Le template ne sera plus assignable mais les snapshots existants sont préservés.`
+        : `Supprimer "${t.name}" ? Aucune version n'a été publiée, aucun collaborateur n'y est lié.`;
+    if (t.collabsCount > 0) {
+      if (showNotif) showNotif(
+        `Impossible d'archiver "${t.name}" : ${t.collabsCount} collaborateur${t.collabsCount > 1 ? 's' : ''} encore assigné${t.collabsCount > 1 ? 's' : ''}. Retirez ou changez le template pour ces collaborateurs d'abord.`,
+        "danger"
+      );
+      return;
+    }
+    if (!confirm(confirmMsg)) return;
+    setArchivingId(t.id);
+    try {
+      const r = await api(`/api/admin/pipeline-templates/${encodeURIComponent(t.id)}/archive`, { method: "POST" });
+      if (r?.error) {
+        if (r.error === 'TEMPLATE_IN_USE') {
+          if (showNotif) showNotif(r.detail || "Template encore utilisé", "danger");
+        } else {
+          if (showNotif) showNotif("Erreur : " + r.error, "danger");
+        }
+        return;
+      }
+      if (showNotif) showNotif(`"${t.name}" archivé`, "success");
+      if (onArchived) onArchived();
+    } catch (e) {
+      if (showNotif) showNotif("Erreur : " + e.message, "danger");
+    } finally {
+      setArchivingId(null);
+    }
+  };
 
   const active = templates.filter((t) => !t.isArchived);
   const archived = templates.filter((t) => t.isArchived);
@@ -178,6 +216,26 @@ export default function TemplatesList({ templates, loading, onNew, onEdit, onPre
                       title="Éditer"
                     >
                       <I n="edit-2" s={11} />
+                    </Btn>
+                    <Btn
+                      small
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleArchive(t);
+                      }}
+                      disabled={archivingId === t.id}
+                      style={{
+                        fontSize: 10,
+                        background: t.collabsCount > 0 ? T.bg : T.danger + "14",
+                        color: t.collabsCount > 0 ? T.text3 : T.danger,
+                        border: `1px solid ${t.collabsCount > 0 ? T.border : T.danger + "40"}`,
+                        cursor: t.collabsCount > 0 ? "not-allowed" : "pointer",
+                      }}
+                      title={t.collabsCount > 0
+                        ? `Template encore utilisé par ${t.collabsCount} collab${t.collabsCount > 1 ? 's' : ''} — impossible d'archiver`
+                        : (t.latestVersion > 0 ? "Archiver" : "Supprimer (brouillon non publié)")}
+                    >
+                      <I n={t.latestVersion > 0 ? "archive" : "trash-2"} s={11} />
                     </Btn>
                   </div>
                 </div>

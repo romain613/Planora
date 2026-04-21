@@ -2888,6 +2888,37 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                         <h3 style={{ fontSize:15, fontWeight:700, margin:0 }}>Modifier le collaborateur</h3>
                         <span onClick={() => { setEditingCollabId(null); setEditCollabForm({}); }} style={{ marginLeft:"auto", cursor:"pointer", color:T.text3 }}><I n="x" s={16}/></span>
                       </div>
+                      {/* ── Phase finitions — Pipeline Équipe (accès explicite dans l'édition) ── */}
+                      <div style={{
+                        display:"flex", alignItems:"center", gap:12,
+                        padding:"10px 14px", borderRadius:10, marginBottom:16,
+                        background: c.pipelineMode === 'template' ? "#7C3AED10" : T.bg,
+                        border: `1px solid ${c.pipelineMode === 'template' ? '#7C3AED35' : T.border}`,
+                      }}>
+                        <div style={{
+                          width:32, height:32, borderRadius:8,
+                          background: c.pipelineMode === 'template' ? "#7C3AED20" : T.surface,
+                          color: c.pipelineMode === 'template' ? "#7C3AED" : T.text3,
+                          display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
+                        }}>
+                          <I n={c.pipelineMode === 'template' ? "lock" : "layout"} s={16}/>
+                        </div>
+                        <div style={{ flex:1, minWidth:0 }}>
+                          <div style={{ fontSize:12, fontWeight:700, color:T.text }}>Pipeline Équipe</div>
+                          <div style={{ fontSize:11, color:T.text2 }}>
+                            {c.pipelineMode === 'template'
+                              ? <>Mode actuel : <strong>Template imposé</strong>. Le collaborateur ne peut pas modifier la structure de son pipeline.</>
+                              : <>Mode actuel : <strong>Mode libre</strong>. Le collaborateur configure lui-même son pipeline.</>}
+                          </div>
+                        </div>
+                        <Btn
+                          small
+                          onClick={() => setAssignTemplateTarget(c)}
+                          style={{ fontSize:11, flexShrink:0 }}
+                        >
+                          <I n="edit-2" s={11}/> Changer
+                        </Btn>
+                      </div>
                       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
                         <Input label="Nom complet" value={(typeof editCollabForm!=='undefined'?editCollabForm:{}).name||''} onChange={e => (typeof setEditCollabForm==='function'?setEditCollabForm:function(){})(p=>({...p,name:e.target.value}))} icon="user"/>
                         <Input label="Email" value={(typeof editCollabForm!=='undefined'?editCollabForm:{}).email||''} onChange={e => (typeof setEditCollabForm==='function'?setEditCollabForm:function(){})(p=>({...p,email:e.target.value}))} icon="mail"/>
@@ -3317,10 +3348,13 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                             background: c.pipelineMode === 'template' ? "#7C3AED18" : T.bg,
                             color: c.pipelineMode === 'template' ? "#7C3AED" : T.text2,
                             border: `1px solid ${c.pipelineMode === 'template' ? '#7C3AED40' : T.border}`,
+                            fontWeight: 600,
                           }}
-                          title={c.pipelineMode === 'template' ? 'Template imposé — clic pour modifier' : 'Mode libre — clic pour imposer un template'}
+                          title={c.pipelineMode === 'template'
+                            ? 'Pipeline imposé par un template — clic pour changer ou revenir en mode libre'
+                            : 'Pipeline en mode libre — clic pour imposer un template'}
                         >
-                          <I n={c.pipelineMode === 'template' ? 'lock' : 'layout'} s={12}/> Pipeline
+                          <I n={c.pipelineMode === 'template' ? 'lock' : 'layout'} s={12}/> {c.pipelineMode === 'template' ? 'Template imposé' : 'Mode libre'}
                         </Btn>
                         <Btn small onClick={() => setConfirmDeleteCollab(c)} style={{ background:"#FEE2E2", color:"#DC2626", border:"1px solid #FECACA" }}>
                           <I n="trash-2" s={12}/>

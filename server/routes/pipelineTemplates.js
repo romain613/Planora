@@ -233,12 +233,33 @@ router.post('/:id/publish', requireAuth, requireAdmin, enforceCompany, (req, res
 // ─── ARCHIVE — POST /api/admin/pipeline-templates/:id/archive ─────────────
 // Soft delete. Le template ne peut plus être assigné mais les snapshots
 // existants restent (pour ne pas casser les collabs déjà assignés).
+//
+// Garde de sécurité (Phase finitions) : rejet si ≥1 collab pointe sur un
+// snapshot de ce template. L'admin doit d'abord retirer/changer le template
+// des collabs concernés via AssignTemplateModal.
 router.post('/:id/archive', requireAuth, requireAdmin, enforceCompany, (req, res) => {
   try {
     const row = db.prepare('SELECT companyId FROM pipeline_templates WHERE id = ?').get(req.params.id);
     if (!row) return res.status(404).json({ error: 'not found' });
     if (!req.auth.isSupra && row.companyId !== req.auth.companyId)
       return res.status(403).json({ error: 'forbidden' });
+
+    // Compte les collabs assignés à un snapshot de ce template
+    const usage = db.prepare(
+      `SELECT COUNT(*) AS c
+       FROM collaborators
+       WHERE companyId = ?
+         AND pipelineMode = 'template'
+         AND pipelineSnapshotId IN (SELECT id FROM pipeline_template_snapshots WHERE templateId = ?)`
+    ).get(row.companyId, req.params.id);
+    if ((usage?.c || 0) > 0) {
+      return res.status(400).json({
+        error: 'TEMPLATE_IN_USE',
+        detail: `Template encore assigné à ${usage.c} collaborateur${usage.c > 1 ? 's' : ''}. Retirez-le ou changez-le pour ces collaborateurs avant d'archiver.`,
+        collabsCount: usage.c,
+      });
+    }
+
     db.prepare('UPDATE pipeline_templates SET isArchived = 1, isPublished = 0, updatedAt = ? WHERE id = ?').run(
       nowIso(),
       req.params.id

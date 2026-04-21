@@ -123,6 +123,8 @@ export default function TemplatesSection({ company, showNotif }) {
           onNew={handleNew}
           onEdit={handleEdit}
           onPreview={setPreviewTemplate}
+          onArchived={refresh}
+          showNotif={showNotif}
         />
       )}
 
