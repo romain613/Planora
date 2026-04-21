@@ -1,35 +1,30 @@
-// Phase L2 — Options d'identité visuelle des enveloppes de leads.
-// Source de vérité : liste fixe, dropdown admin, pas de texte libre.
+// Phase L2/L3 — Options d'identité visuelle des enveloppes de leads.
+// Liste business-first, focalisée sur la SOURCE du lead (aucune confusion
+// avec les features d'appel/power dialer — `zap`/`phone` écartés d'office).
 //
 // Règle : les clés d'icône DOIVENT exister dans app/src/shared/ui/I.jsx.
-// Si une icône stockée en DB n'est pas dans cette liste (legacy), le rendu
-// fallback sur DEFAULT_ENVELOPE_ICON.
+// Si une icône stockée en DB n'est pas dans cette liste (legacy ou déprécié
+// comme `zap`/`inbox`/`mail`), le rendu fallback sur DEFAULT_ENVELOPE_ICON.
 
 import { I } from '../../../shared/ui';
 
 export const DEFAULT_ENVELOPE_COLOR = '#6366F1';
-export const DEFAULT_ENVELOPE_ICON = 'mail';
+export const DEFAULT_ENVELOPE_ICON = 'star';
 export const DEFAULT_ENVELOPE_PRIORITY = 'medium';
 
+// Liste curated — 10 icônes, orientées source de lead.
+// Ordre = ordre d'affichage dans le dropdown (star en premier = défaut).
 export const ENVELOPE_ICONS = [
-  { key: 'mail', label: 'Email' },
-  { key: 'phone', label: 'Téléphone' },
-  { key: 'globe', label: 'Web' },
-  { key: 'building', label: 'Entreprise' },
-  { key: 'tag', label: 'Campagne' },
-  { key: 'target', label: 'Cible' },
   { key: 'star', label: 'Premium' },
-  { key: 'zap', label: 'Urgent' },
-  { key: 'flag', label: 'Priorité' },
-  { key: 'users', label: 'Groupe' },
-  { key: 'award', label: 'Récompense' },
-  { key: 'bell', label: 'Alerte' },
-  { key: 'layers', label: 'Lot' },
-  { key: 'send', label: 'Envoi' },
-  { key: 'shield', label: 'Qualifié' },
-  { key: 'dollar', label: 'Chaud' },
-  { key: 'list', label: 'Liste' },
-  { key: 'trending', label: 'Tendance' },
+  { key: 'mail', label: 'Email' },
+  { key: 'tag', label: 'Campagne / Ads' },
+  { key: 'globe', label: 'Web' },
+  { key: 'map', label: 'Local' },
+  { key: 'target', label: 'Inbound / Lead' },
+  { key: 'user', label: 'Contact direct' },
+  { key: 'building', label: 'Partenaire' },
+  { key: 'users', label: 'Groupe / Référal' },
+  { key: 'phone', label: 'Téléphone' },
 ];
 
 const ICON_KEYS = new Set(ENVELOPE_ICONS.map((i) => i.key));
