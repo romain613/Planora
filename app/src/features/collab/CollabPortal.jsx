@@ -161,6 +161,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const [collabEditingCellValue, setCollabEditingCellValue] = useState("");
   const [collabSelectedRowId, setCollabSelectedRowId] = useState(null);
 
+  // S2 P0 Patch D — feedback UI par contact : saving | saved | error (auto-clear)
+  const [contactSaveStatus, setContactSaveStatus] = useState({});
+
   // Objectifs tab state
   const [myGoals, setMyGoals] = useState([]);
   const [myTeamGoals, setMyTeamGoals] = useState([]);
@@ -2710,6 +2713,12 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       if (typeof setSelectedContact === 'function') { try { setSelectedContact(p => p?.id === id ? {...p, ...prevFields} : p); } catch {} }
       if (typeof setAllContacts === 'function') { try { setAllContacts(p => Array.isArray(p) ? p.map(c => c.id === id ? {...c, ...prevFields} : c) : p); } catch {} }
     };
+    // S2 P0 Patch D — badge état du save par contact
+    const markStatus = (st, autoclearMs = 0) => {
+      setContactSaveStatus(p => ({ ...p, [id]: st }));
+      if (autoclearMs > 0) setTimeout(() => setContactSaveStatus(p => { if (p[id] !== st) return p; const n = {...p}; delete n[id]; return n; }), autoclearMs);
+    };
+    markStatus('saving');
     // Optimistic update local state + mark as recently edited (protect from auto-refresh)
     // V5: Injecter updatedAt local pour que le badge inactivite disparaisse immediatement
     contactsLocalEditRef.current = Date.now();
@@ -2732,6 +2741,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
             if ((typeof selectedCrmContact!=='undefined'?selectedCrmContact:null)?.id === id) (typeof setSelectedCrmContact==='function'?setSelectedCrmContact:function(){})(fresh);
             if ((typeof pipelineRightContact!=='undefined'?pipelineRightContact:null)?.id === id) (typeof setPipelineRightContact==='function'?setPipelineRightContact:function(){})(fresh);
             showNotif('Contact mis à jour par une autre source — données rechargées', 'warning');
+            markStatus('error', 5000);
             // S2 P0 Patch B: callback final (save n'a pas persisté la modif locale)
             if (typeof onDone === 'function') onDone(false);
           } else if (!r || r.error) {
@@ -2741,6 +2751,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
               // S2 P0 Patch A: rollback UI sur échec définitif serveur
               rollbackFields();
               showNotif('Modification annulée (erreur serveur persistante)', 'danger');
+              markStatus('error', 5000);
               if (typeof onDone === 'function') onDone(false);
             }
           } else {
@@ -2753,6 +2764,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
             }
             // V3: délai de protection 5s post-succès
             setTimeout(() => { if (Date.now() - contactsLocalEditRef.current > 4000) contactsLocalEditRef.current = 0; }, 5000);
+            markStatus('saved', 2000);
             // S2 P0 Patch B: callback final succès
             if (typeof onDone === 'function') onDone(true);
           }
@@ -2772,8 +2784,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
               } else {
                 rollbackFields();
               }
+              markStatus('error', 5000);
               if (typeof onDone === 'function') onDone(false);
-            }).catch(() => { rollbackFields(); if (typeof onDone === 'function') onDone(false); });
+            }).catch(() => { rollbackFields(); markStatus('error', 5000); if (typeof onDone === 'function') onDone(false); });
           }
         });
     };
@@ -3496,6 +3509,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       portalTabKey, setPortalTabKey,
       phoneDialNumber, setPhoneDialNumber,
       phoneRightTab, setPhoneRightTab,
+      contactSaveStatus,
       phoneRightCollapsed, setPhoneRightCollapsed,
       phoneRightAccordion, setPhoneRightAccordion,
       phoneLeftCollapsed, setPhoneLeftCollapsed,
