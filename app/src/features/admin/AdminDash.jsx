@@ -40,7 +40,8 @@ import { NewCollabForm, NewCompanyForm, PlacesAutocomplete, TemplateEditorPopup,
 import { useBrand } from "../../shared/brand/useBrand";
 
 // Pipeline Templates (Phase 2 Admin UI) — nouvel onglet dans Équipe
-import { TemplatesSection } from "./templates";
+// Phase 3 — AssignTemplateModal pour bascule collab + migration
+import { TemplatesSection, AssignTemplateModal } from "./templates";
 
 const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, setBookings, avails, setAvails, collabs, setCollabs, cals, setCals, darkMode, setDarkMode, blackouts, setBlackouts, vacations, setVacations, isSupraAdmin, allCompanies, setAllCompanies, allUsers, setAllUsers, allCalendars, setAllCalendars, allBookings, setAllBookings, allContacts, setAllContacts, activityLog, setActivityLog, smsCredits, setSmsCredits, smsHistory, setSmsHistory, voipCredits, setVoipCredits, voipCallLogs, setVoipCallLogs, voipConfigured, setVoipConfigured, appPhonePlans, setAppPhonePlans, appMyPhoneNumbers, setAppMyPhoneNumbers, appAvailableNumbers, setAppAvailableNumbers, contacts, setContacts, onSwitchCompany, pipelineStages, setPipelineStages, contactFieldDefs, setContactFieldDefs }) => {
   const [tab, _setTab] = useState(() => { try { return localStorage.getItem("c360-tab") || "home"; } catch { return "home"; } });
@@ -63,6 +64,8 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
   const [showNewCollab, setShowNewCollab] = useState(false);
   // Phase 2 Templates Pipeline : sous-onglet dans Équipe (members | templates)
   const [teamSubTab, setTeamSubTab] = useState("members");
+  // Phase 3 Templates Pipeline : état modale assignation (collab cible ou null)
+  const [assignTemplateTarget, setAssignTemplateTarget] = useState(null);
   const [showNewCal, setShowNewCal] = useState(false);
   const [calSettingsId, setCalSettingsId] = useState(null);
   const [editCalId, setEditCalId] = useState(null);
@@ -3276,6 +3279,18 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                         <Btn small onClick={() => handleStartEditCollab(c)} style={{ background:T.accentBg, color:T.accent, border:`1px solid ${T.accentBorder}` }}>
                           <I n="edit-2" s={12}/> Modifier
                         </Btn>
+                        <Btn
+                          small
+                          onClick={() => setAssignTemplateTarget(c)}
+                          style={{
+                            background: c.pipelineMode === 'template' ? "#7C3AED18" : T.bg,
+                            color: c.pipelineMode === 'template' ? "#7C3AED" : T.text2,
+                            border: `1px solid ${c.pipelineMode === 'template' ? '#7C3AED40' : T.border}`,
+                          }}
+                          title={c.pipelineMode === 'template' ? 'Template imposé — clic pour modifier' : 'Mode libre — clic pour imposer un template'}
+                        >
+                          <I n={c.pipelineMode === 'template' ? 'lock' : 'layout'} s={12}/> Pipeline
+                        </Btn>
                         <Btn small onClick={() => setConfirmDeleteCollab(c)} style={{ background:"#FEE2E2", color:"#DC2626", border:"1px solid #FECACA" }}>
                           <I n="trash-2" s={12}/>
                         </Btn>
@@ -3431,6 +3446,28 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
               </div>
             )}
             </Fragment>)}
+
+            {/* Phase 3 — Modal assignation template (pré-flight + migration) */}
+            {assignTemplateTarget && (
+              <AssignTemplateModal
+                isOpen={true}
+                onClose={() => setAssignTemplateTarget(null)}
+                collaborator={assignTemplateTarget}
+                companyId={company?.id}
+                showNotif={(msg, type) => pushNotification(
+                  type === 'danger' ? 'Erreur' : 'Pipeline',
+                  msg,
+                  type === 'danger' ? 'danger' : 'success'
+                )}
+                onSuccess={(result) => {
+                  // Mettre à jour le state local des collabs pour refléter le nouveau mode
+                  setCollabs(prev => prev.map(c => c.id === assignTemplateTarget.id
+                    ? { ...c, pipelineMode: result.newMode, pipelineSnapshotId: result.snapshotId }
+                    : c
+                  ));
+                }}
+              />
+            )}
 
           </div>
         )}

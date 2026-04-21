@@ -40,22 +40,31 @@ export function requirePipelineFreeMode(req, res, next) {
   if (!collab) return next();
 
   if (collab.pipelineMode === 'template') {
-    // Log la tentative de bypass pour monitoring
+    // Log la tentative de bypass pour monitoring (schéma audit_logs réel)
     try {
+      const collabName = db.prepare('SELECT name FROM collaborators WHERE id = ?').get(collabId)?.name || '';
       db.prepare(
-        'INSERT INTO audit_logs (id, companyId, collaboratorId, action, entityType, entityId, details, createdAt) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        `INSERT INTO audit_logs
+          (id, companyId, userId, userName, userRole, action, category, entityType, entityId, detail, metadata_json, ipAddress, userAgent, createdAt)
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
       ).run(
         'aud_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8),
         req.auth.companyId || '',
         collabId,
+        collabName,
+        req.auth.role || 'member',
         'pipeline_lock_bypass_attempt',
+        'pipeline_templates',
         'pipeline_stage',
         req.params?.id || '',
+        `Tentative ${req.method} ${req.path} bloquée (mode template)`,
         JSON.stringify({
           method: req.method,
           path: req.path,
           body: req.body,
         }).slice(0, 500),
+        req.ip || '',
+        (req.headers && req.headers['user-agent']) || '',
         new Date().toISOString()
       );
     } catch (e) {

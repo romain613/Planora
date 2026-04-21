@@ -41,6 +41,8 @@ import {
   getLatestSnapshot,
   assignTemplateSnapshotToCollab,
 } from '../services/pipelineTemplates/snapshots.js';
+import { computePreflight } from '../services/pipelineTemplates/preflight.js';
+import { migrateAndAssign } from '../services/pipelineTemplates/migration.js';
 
 const router = Router();
 
@@ -279,6 +281,85 @@ router.put('/collaborators/:collabId/pipeline', requireAuth, requireAdmin, enfor
   } catch (err) {
     console.error('[PIPELINE_TEMPLATES ASSIGN]', err);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── PRE-FLIGHT CHECK (Phase 3) ──────────────────────────────────────────
+// GET /api/admin/pipeline-templates/preflight?collaboratorId=X&templateId=Y
+// Analyse l'impact d'un changement de mode/template AVANT exécution.
+// templateId peut être vide/null pour simuler un retour en mode libre.
+router.get('/preflight', requireAuth, requireAdmin, enforceCompany, (req, res) => {
+  try {
+    const { collaboratorId } = req.query;
+    const templateId = req.query.templateId && req.query.templateId !== 'null' ? req.query.templateId : null;
+    if (!collaboratorId) return res.status(400).json({ error: 'collaboratorId required' });
+
+    // Vérif appartenance company
+    const collab = db.prepare('SELECT companyId FROM collaborators WHERE id = ?').get(collaboratorId);
+    if (!collab) return res.status(404).json({ error: 'collaborator not found' });
+    if (!req.auth.isSupra && collab.companyId !== req.auth.companyId)
+      return res.status(403).json({ error: 'forbidden' });
+
+    const pf = computePreflight(db, { collaboratorId, templateId });
+    res.json(pf);
+  } catch (err) {
+    console.error('[PIPELINE_TEMPLATES PREFLIGHT]', err);
+    const map = {
+      COLLABORATOR_NOT_FOUND: 404,
+      TEMPLATE_NOT_FOUND: 404,
+      TEMPLATE_WRONG_COMPANY: 403,
+      TEMPLATE_ARCHIVED: 400,
+      TEMPLATE_NOT_PUBLISHED: 400,
+      TEMPLATE_NO_SNAPSHOT: 400,
+      SNAPSHOT_INVALID_JSON: 500,
+    };
+    res.status(map[err.message] || 500).json({ error: err.message });
+  }
+});
+
+// ─── MIGRATE & ASSIGN (Phase 3) ──────────────────────────────────────────
+// POST /api/admin/pipeline-templates/collaborators/:collabId/migrate
+// Body: { templateId: string|null, fallbackStage: string|null }
+// Transaction atomique : migration contacts + switch mode + audit_logs.
+// Requiert fallbackStage si incompatibleCount > 0 (invariant #7).
+router.post('/collaborators/:collabId/migrate', requireAuth, requireAdmin, enforceCompany, (req, res) => {
+  try {
+    const { templateId, fallbackStage } = req.body || {};
+    const collabId = req.params.collabId;
+
+    const collab = db.prepare('SELECT companyId, name FROM collaborators WHERE id = ?').get(collabId);
+    if (!collab) return res.status(404).json({ error: 'collaborator not found' });
+    if (!req.auth.isSupra && collab.companyId !== req.auth.companyId)
+      return res.status(403).json({ error: 'forbidden' });
+
+    const actorId = req.auth.collaboratorId || (req.auth.isSupra ? 'supra' : '');
+    const actorName = req.auth.isSupra ? 'supra admin' : (
+      db.prepare('SELECT name FROM collaborators WHERE id = ?').get(actorId)?.name || 'admin'
+    );
+
+    const result = migrateAndAssign(db, {
+      collaboratorId: collabId,
+      templateId: templateId || null,
+      fallbackStage: fallbackStage || null,
+      actorId,
+      actorName,
+    });
+    res.json(result);
+  } catch (err) {
+    console.error('[PIPELINE_TEMPLATES MIGRATE]', err);
+    const msg = err.message || 'unknown';
+    const map = {
+      COLLABORATOR_NOT_FOUND: 404,
+      TEMPLATE_NOT_FOUND: 404,
+      TEMPLATE_WRONG_COMPANY: 403,
+      TEMPLATE_ARCHIVED: 400,
+      TEMPLATE_NOT_PUBLISHED: 400,
+      TEMPLATE_NO_SNAPSHOT: 400,
+      FALLBACK_STAGE_REQUIRED: 400,
+      FALLBACK_STAGE_INVALID: 400,
+    };
+    const statusKey = msg.split(':')[0];
+    res.status(map[statusKey] || 500).json({ error: msg });
   }
 });
 
