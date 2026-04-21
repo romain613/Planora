@@ -582,12 +582,12 @@ const CrmTab = () => {
             onDragLeave={e => { e.currentTarget.style.borderLeft='none'; handleDragLeave(e, stage.id); }}
             onDrop={e => { if(e.dataTransfer.getData('columnId')){handleColumnDrop(e,stage.id);e.currentTarget.style.borderLeft='none';} else handleDrop(e, stage.id); }}
           >
-            <div draggable onDragStart={e=>handleColumnDragStart(e,stage.id)} onDragEnd={handleColumnDragEnd} style={{display:"flex",alignItems:"center",gap:6,marginBottom:10,padding:"10px 12px",borderRadius:10,background:stage.color+"12",border:`2px solid ${isDragOver?stage.color:stage.color+"20"}`,transition:"all .2s",cursor:'grab'}}>
-              <div style={{display:'flex',flexDirection:'column',gap:1,opacity:0.4,cursor:'grab',flexShrink:0}} title="Glisser pour réorganiser">
+            <div draggable={!pipelineReadOnly} onDragStart={pipelineReadOnly ? undefined : e=>handleColumnDragStart(e,stage.id)} onDragEnd={pipelineReadOnly ? undefined : handleColumnDragEnd} style={{display:"flex",alignItems:"center",gap:6,marginBottom:10,padding:"10px 12px",borderRadius:10,background:stage.color+"12",border:`2px solid ${isDragOver?stage.color:stage.color+"20"}`,transition:"all .2s",cursor:pipelineReadOnly?'default':'grab'}}>
+              {!pipelineReadOnly && (<div style={{display:'flex',flexDirection:'column',gap:1,opacity:0.4,cursor:'grab',flexShrink:0}} title="Glisser pour réorganiser">
                 <div style={{display:'flex',gap:1}}><div style={{width:3,height:3,borderRadius:'50%',background:stage.color}}/><div style={{width:3,height:3,borderRadius:'50%',background:stage.color}}/></div>
                 <div style={{display:'flex',gap:1}}><div style={{width:3,height:3,borderRadius:'50%',background:stage.color}}/><div style={{width:3,height:3,borderRadius:'50%',background:stage.color}}/></div>
                 <div style={{display:'flex',gap:1}}><div style={{width:3,height:3,borderRadius:'50%',background:stage.color}}/><div style={{width:3,height:3,borderRadius:'50%',background:stage.color}}/></div>
-              </div>
+              </div>)}
               <div style={{width:8,height:8,borderRadius:"50%",background:stage.color,flexShrink:0}}/>
               <span title={stage.label} style={{fontSize:13,fontWeight:700,color:stage.color,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{stage.label}</span>
               {stage.id==='nouveau'&&<div onClick={(e)=>{e.stopPropagation();setShowNewContact(true);}} style={{width:22,height:22,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",background:"#22C55E",color:"#fff",flexShrink:0,boxShadow:"0 1px 3px #22C55E40",transition:"transform .15s"}} onMouseEnter={e=>e.currentTarget.style.transform='scale(1.15)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'} title="Ajouter un nouveau contact"><I n="user-plus" s={12}/></div>}

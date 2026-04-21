@@ -5244,13 +5244,13 @@ return(
       <span style={{fontSize:9,fontWeight:700,color:stage.color,writingMode:'vertical-rl'}}>{stage.label.substring(0,4)}</span>
     </div>
   ) : (
-    <div draggable onDragStart={e=>handleColumnDragStart(e,stage.id)} onDragEnd={handleColumnDragEnd} style={{padding:'8px 10px',borderRadius:'12px 12px 0 0',background:isDialingThis?stage.color+'25':stage.color+'14',borderBottom:`2.5px solid ${stage.color}`,transition:'background .3s',cursor:'grab'}}>
+    <div draggable={!pipelineReadOnly} onDragStart={pipelineReadOnly ? undefined : e=>handleColumnDragStart(e,stage.id)} onDragEnd={pipelineReadOnly ? undefined : handleColumnDragEnd} style={{padding:'8px 10px',borderRadius:'12px 12px 0 0',background:isDialingThis?stage.color+'25':stage.color+'14',borderBottom:`2.5px solid ${stage.color}`,transition:'background .3s',cursor:pipelineReadOnly?'default':'grab'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
         <div style={{display:'flex',alignItems:'center',gap:5}}>
-          <div style={{display:'flex',flexDirection:'column',gap:1,opacity:0.3,flexShrink:0}} title="Réorganiser">
+          {!pipelineReadOnly && (<div style={{display:'flex',flexDirection:'column',gap:1,opacity:0.3,flexShrink:0}} title="Réorganiser">
             <div style={{display:'flex',gap:1}}><div style={{width:2,height:2,borderRadius:'50%',background:stage.color}}/><div style={{width:2,height:2,borderRadius:'50%',background:stage.color}}/></div>
             <div style={{display:'flex',gap:1}}><div style={{width:2,height:2,borderRadius:'50%',background:stage.color}}/><div style={{width:2,height:2,borderRadius:'50%',background:stage.color}}/></div>
-          </div>
+          </div>)}
           <span onClick={e=>{e.stopPropagation();const h={...(_T.pipeCollapsedCols||{})};h[stage.id]=true;_T.pipeCollapsedCols=h;try{localStorage.setItem('c360-pipe-cols',JSON.stringify(h));}catch{}setPhoneRightAccordion(p=>({...p,_cc:Date.now()}));}} style={{fontSize:11,fontWeight:700,color:stage.color,cursor:'pointer'}} title="Clic = réduire la colonne">{stage.label}</span>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:4}}>

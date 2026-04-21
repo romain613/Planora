@@ -2317,6 +2317,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   }, [columnOrder, PIPELINE_STAGES.length, pipelineStages]);
   const [dragColumnId, setDragColumnId] = useState(null);
   const handleColumnDragStart = (e, stageId) => {
+    // Phase 4 correctif : verrou defensive — aucun drag de colonne si mode template
+    if (pipelineReadOnly) { e.preventDefault(); return; }
     e.dataTransfer.setData('columnId', stageId);
     e.dataTransfer.effectAllowed = 'move';
     setDragColumnId(stageId);
@@ -2325,6 +2327,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const handleColumnDragEnd = (e) => { e.target.style.opacity = '1'; setDragColumnId(null); };
   const handleColumnDrop = (e, targetStageId) => {
     e.preventDefault();
+    // Phase 4 correctif : verrou defensive — aucun drop de réordonnancement si readOnly
+    if (pipelineReadOnly) { setDragColumnId(null); return; }
     const srcId = e.dataTransfer.getData('columnId');
     if (!srcId || srcId === targetStageId) { setDragColumnId(null); return; }
     const ids = orderedStages.map(s => s.id);
