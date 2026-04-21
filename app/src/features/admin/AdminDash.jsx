@@ -39,6 +39,9 @@ import { NewCollabForm, NewCompanyForm, PlacesAutocomplete, TemplateEditorPopup,
 
 import { useBrand } from "../../shared/brand/useBrand";
 
+// Pipeline Templates (Phase 2 Admin UI) — nouvel onglet dans Équipe
+import { TemplatesSection } from "./templates";
+
 const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, setBookings, avails, setAvails, collabs, setCollabs, cals, setCals, darkMode, setDarkMode, blackouts, setBlackouts, vacations, setVacations, isSupraAdmin, allCompanies, setAllCompanies, allUsers, setAllUsers, allCalendars, setAllCalendars, allBookings, setAllBookings, allContacts, setAllContacts, activityLog, setActivityLog, smsCredits, setSmsCredits, smsHistory, setSmsHistory, voipCredits, setVoipCredits, voipCallLogs, setVoipCallLogs, voipConfigured, setVoipConfigured, appPhonePlans, setAppPhonePlans, appMyPhoneNumbers, setAppMyPhoneNumbers, appAvailableNumbers, setAppAvailableNumbers, contacts, setContacts, onSwitchCompany, pipelineStages, setPipelineStages, contactFieldDefs, setContactFieldDefs }) => {
   const [tab, _setTab] = useState(() => { try { return localStorage.getItem("c360-tab") || "home"; } catch { return "home"; } });
   const [tabKey, setTabKey] = useState(0); // for re-triggering animation on tab change
@@ -58,6 +61,8 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
   // Keyboard shortcuts state
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [showNewCollab, setShowNewCollab] = useState(false);
+  // Phase 2 Templates Pipeline : sous-onglet dans Équipe (members | templates)
+  const [teamSubTab, setTeamSubTab] = useState("members");
   const [showNewCal, setShowNewCal] = useState(false);
   const [calSettingsId, setCalSettingsId] = useState(null);
   const [editCalId, setEditCalId] = useState(null);
@@ -2760,10 +2765,43 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
         {/* ── TEAM ── */}
         {tab === "team" && (
           <div>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
               <h1 style={{ fontSize:22, fontWeight:700 }}>Équipe</h1>
-              <Btn primary onClick={() => { (typeof setShowNewCollab==='function'?setShowNewCollab:function(){})(!showNewCollab); setCreatedCollab(null); }}><I n="plus" s={14}/> Nouveau collaborateur</Btn>
+              {teamSubTab === "members" && (
+                <Btn primary onClick={() => { (typeof setShowNewCollab==='function'?setShowNewCollab:function(){})(!showNewCollab); setCreatedCollab(null); }}><I n="plus" s={14}/> Nouveau collaborateur</Btn>
+              )}
             </div>
+            {/* Sub-tabs Équipe (Phase 2 Templates Pipeline) */}
+            <div style={{ display:"flex", gap:0, borderBottom:`1.5px solid ${T.border}`, marginBottom:20 }}>
+              {[
+                { key: "members", label: "Membres", icon: "users" },
+                { key: "templates", label: "Templates Pipeline Live", icon: "layout" }
+              ].map(st => (
+                <div
+                  key={st.key}
+                  onClick={() => setTeamSubTab(st.key)}
+                  style={{
+                    padding: "10px 18px",
+                    cursor: "pointer",
+                    fontSize: 13,
+                    fontWeight: teamSubTab === st.key ? 700 : 500,
+                    color: teamSubTab === st.key ? T.accent : T.text2,
+                    borderBottom: `2.5px solid ${teamSubTab === st.key ? T.accent : "transparent"}`,
+                    marginBottom: -1.5,
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    transition: "all .15s"
+                  }}
+                >
+                  <I n={st.icon} s={14} /> {st.label}
+                </div>
+              ))}
+            </div>
+            {teamSubTab === "templates" && (
+              <TemplatesSection company={company} showNotif={showNotif} />
+            )}
+            {teamSubTab === "members" && (<Fragment>
 
             {(typeof showNewCollab!=='undefined'?showNewCollab:null) && (
               <Card style={{ marginBottom:20, border:`1px solid ${T.accentBorder}` }}>
@@ -3392,6 +3430,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                 </div>
               </div>
             )}
+            </Fragment>)}
 
           </div>
         )}
