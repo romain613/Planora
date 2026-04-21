@@ -22,6 +22,7 @@ import { COMPANIES, INIT_COLLABS, defAvail, INIT_AVAILS, INIT_CALS, INIT_BOOKING
 // Phase 3 — API service
 import { API_BASE, recUrl, collectEnv, api, getAutoTicketCompanyId, setAutoTicketCompanyId } from "../../shared/services/api";
 import { TAB_ID } from "../../shared/state/tabId";
+import { initBroadcast, publishBroadcast, subscribeBroadcast, closeBroadcast } from "../../shared/state/broadcast";
 
 // Phase 4 — extracted screens (relative path from features/collab/)
 import {
@@ -161,8 +162,43 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const [collabEditingCellValue, setCollabEditingCellValue] = useState("");
   const [collabSelectedRowId, setCollabSelectedRowId] = useState(null);
 
-  // S2 P0 Patch D — feedback UI par contact : saving | saved | error (auto-clear)
+  // S2 P0 Patch D — feedback UI par contact : saving | saved | error | external_update (auto-clear)
   const [contactSaveStatus, setContactSaveStatus] = useState({});
+  // S3.1 — ref miroir de contactSaveStatus, lue dans le handler subscribe (closure-safe)
+  const contactSaveStatusRef = useRef({});
+  useEffect(() => { contactSaveStatusRef.current = contactSaveStatus; }, [contactSaveStatus]);
+
+  // S3.1 — BroadcastChannel cross-tab : init + subscribe au mount, close au unmount
+  useEffect(() => {
+    if (!company?.id || !collab?.id) return;
+    const ok = initBroadcast(company.id, collab.id);
+    if (!ok) return; // fallback silencieux si API absente
+    const cleanup = subscribeBroadcast((msg) => {
+      if (!msg || msg.type !== 'contact_updated') return;
+      const { contactId, fields, updatedAt, tabId } = msg.payload || {};
+      if (!contactId || !fields) return;
+      // Guard 1 : ignore self-broadcast
+      if (tabId && tabId === TAB_ID) return;
+      // Guard 2 : ignore si save local en cours sur ce contact (laisser 409 faire son job)
+      if (contactSaveStatusRef.current[contactId] === 'saving') return;
+      // Applique les fields reçus dans le state local + sync vues ouvertes
+      const merge = (c) => c && c.id === contactId ? { ...c, ...fields, updatedAt: updatedAt || c.updatedAt } : c;
+      setContacts(p => Array.isArray(p) ? p.map(merge) : p);
+      if ((typeof selectedCrmContact !== 'undefined' ? selectedCrmContact : null)?.id === contactId) {
+        (typeof setSelectedCrmContact === 'function' ? setSelectedCrmContact : function(){})(p => p ? { ...p, ...fields, updatedAt: updatedAt || p.updatedAt } : p);
+      }
+      if ((typeof pipelineRightContact !== 'undefined' ? pipelineRightContact : null)?.id === contactId) {
+        (typeof setPipelineRightContact === 'function' ? setPipelineRightContact : function(){})(p => p ? { ...p, ...fields, updatedAt: updatedAt || p.updatedAt } : p);
+      }
+      // Badge external_update (1.5s auto-clear) — visuel violet discret
+      setContactSaveStatus(p => ({ ...p, [contactId]: 'external_update' }));
+      setTimeout(() => setContactSaveStatus(p => {
+        if (p[contactId] !== 'external_update') return p;
+        const n = { ...p }; delete n[contactId]; return n;
+      }), 1500);
+    });
+    return () => { try { cleanup(); } catch (_) {} closeBroadcast(); };
+  }, [company?.id, collab?.id]);
 
   // Objectifs tab state
   const [myGoals, setMyGoals] = useState([]);
@@ -2765,6 +2801,14 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
             // V3: délai de protection 5s post-succès
             setTimeout(() => { if (Date.now() - contactsLocalEditRef.current > 4000) contactsLocalEditRef.current = 0; }, 5000);
             markStatus('saved', 2000);
+            // S3.1 — broadcast cross-tab : notifier les autres onglets du même user
+            // Payload minimal (champs user uniquement, pas les _* internes)
+            try {
+              const publishFields = {};
+              for (const k of Object.keys(updates)) { if (!k.startsWith('_')) publishFields[k] = updates[k]; }
+              const freshUpdatedAt = (r && r.contact && r.contact.updatedAt) || _now;
+              publishBroadcast('contact_updated', { contactId: id, fields: publishFields, updatedAt: freshUpdatedAt, tabId: TAB_ID });
+            } catch (_) {}
             // S2 P0 Patch B: callback final succès
             if (typeof onDone === 'function') onDone(true);
           }
