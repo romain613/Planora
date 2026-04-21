@@ -5,7 +5,7 @@
 import React, { useState } from "react";
 import { T } from "../../../../theme";
 import { I, Btn, Input } from "../../../../shared/ui";
-import { COLOR_PRESETS, CURATED_ICONS } from "../constants";
+import { COLOR_PRESETS, CURATED_ICONS, isSystemStage } from "../constants";
 
 export default function StageConfigPanel({ stage, stagesCount, onUpdate, onDelete, onClose }) {
   const [iconSearch, setIconSearch] = useState("");
@@ -40,6 +40,8 @@ export default function StageConfigPanel({ stage, stagesCount, onUpdate, onDelet
     ? CURATED_ICONS.filter((ic) => ic.toLowerCase().includes(iconSearch.trim().toLowerCase()))
     : CURATED_ICONS;
 
+  const _isSystem = isSystemStage(stage);
+
   return (
     <div
       style={{
@@ -60,13 +62,32 @@ export default function StageConfigPanel({ stage, stagesCount, onUpdate, onDelet
       </div>
 
       <div style={{ flex: 1, overflow: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
+        {_isSystem && (
+          <div
+            style={{
+              padding: "8px 10px", borderRadius: 6,
+              background: (stage.color || T.accent) + "14",
+              border: `1px solid ${(stage.color || T.accent)}40`,
+              fontSize: 11, color: T.text2,
+              display: "flex", alignItems: "center", gap: 6,
+            }}
+          >
+            <I n="lock" s={12} style={{ color: stage.color || T.accent }} />
+            <span>
+              <strong style={{ color: T.text }}>Colonne système</strong> — libellé et suppression verrouillés. Couleur, icône et position restent modifiables.
+            </span>
+          </div>
+        )}
+
         {/* Libellé */}
-        <label style={{ fontSize: 11, fontWeight: 600, color: T.text2 }}>Libellé</label>
+        <label style={{ fontSize: 11, fontWeight: 600, color: T.text2 }}>Libellé {_isSystem && <span style={{ fontWeight: 400, color: T.text3 }}>(verrouillé)</span>}</label>
         <Input
           value={stage.label || ""}
-          onChange={(e) => onUpdate({ label: e.target.value.slice(0, 30) })}
+          onChange={(e) => { if (!_isSystem) onUpdate({ label: e.target.value.slice(0, 30) }); }}
           placeholder="Nom de la colonne"
-          style={{ fontSize: 12 }}
+          style={{ fontSize: 12, opacity: _isSystem ? 0.6 : 1, cursor: _isSystem ? "not-allowed" : "text" }}
+          readOnly={_isSystem}
+          title={_isSystem ? "Colonne système — libellé non modifiable" : ""}
         />
 
         {/* Couleur */}
@@ -175,24 +196,39 @@ export default function StageConfigPanel({ stage, stagesCount, onUpdate, onDelet
         </div>
       </div>
 
-      {/* Supprimer */}
-      <Btn
-        onClick={() => {
-          if (confirm(`Supprimer la colonne "${stage.label || '(sans nom)'}" ?`)) onDelete();
-        }}
-        style={{
-          background: T.danger + "18",
-          color: T.danger,
-          border: `1px solid ${T.danger}40`,
-          fontSize: 11,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          gap: 6,
-        }}
-      >
-        <I n="trash-2" s={12} /> Supprimer cette colonne
-      </Btn>
+      {/* Supprimer — caché pour les colonnes système (non supprimables) */}
+      {!_isSystem ? (
+        <Btn
+          onClick={() => {
+            if (confirm(`Supprimer la colonne "${stage.label || '(sans nom)'}" ?`)) onDelete();
+          }}
+          style={{
+            background: T.danger + "18",
+            color: T.danger,
+            border: `1px solid ${T.danger}40`,
+            fontSize: 11,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: 6,
+          }}
+        >
+          <I n="trash-2" s={12} /> Supprimer cette colonne
+        </Btn>
+      ) : (
+        <div
+          style={{
+            padding: "8px 10px",
+            borderRadius: 6,
+            background: T.bg,
+            border: `1px dashed ${T.border}`,
+            fontSize: 10, color: T.text3,
+            textAlign: "center", fontStyle: "italic",
+          }}
+        >
+          <I n="lock" s={10} /> Colonne système — suppression impossible
+        </div>
+      )}
     </div>
   );
 }

@@ -12,6 +12,7 @@ import { useTemplates } from "./hooks/useTemplates";
 import TemplatesList from "./TemplatesList";
 import TemplateBuilder from "./TemplateBuilder";
 import TemplatePreview from "./components/TemplatePreview";
+import { buildInitialStages } from "./constants";
 
 export default function TemplatesSection({ company, showNotif }) {
   const companyId = company?.id;
@@ -25,30 +26,37 @@ export default function TemplatesSection({ company, showNotif }) {
   const [previewTemplate, setPreviewTemplate] = useState(null);
   const [busy, setBusy] = useState(false);
 
-  // ── Start new : preset = null => template vide, sinon preset clone
+  // ── Start new : preset = null => template "vide" (socle système seul), sinon preset + socle
+  //
+  // Règle socle système : les 5 colonnes obligatoires (nouveau, contacté, rdv_programme,
+  // nrp, perdu) sont toujours présentes dans la grille à la création, même pour les
+  // presets custom (dé-dupliquées par ID). Ces colonnes deviennent verrouillées dans le
+  // builder (cf. StageCard / StageConfigPanel / StageCanvas).
   const handleNew = (preset) => {
     if (preset) {
-      // Crée un brouillon en DB immédiatement avec les stages du preset
+      // Socle système + stages preset (dé-dupliqués)
       setBusy(true);
+      const stages = buildInitialStages(preset.stages);
       create({
         name: preset.name + " (copie)",
         description: preset.description,
         icon: preset.icon,
         color: preset.color,
-        stagesJson: JSON.stringify(preset.stages),
+        stagesJson: JSON.stringify(stages),
       }).then((r) => {
         setBusy(false);
         if (r?.id) handleEdit(r.id);
       });
     } else {
-      // Crée un brouillon vide
+      // Template "vide" = socle système seul (5 colonnes)
       setBusy(true);
+      const stages = buildInitialStages([]);
       create({
         name: "Nouveau template",
         description: "",
         icon: "star",
         color: "#7C3AED",
-        stagesJson: "[]",
+        stagesJson: JSON.stringify(stages),
       }).then((r) => {
         setBusy(false);
         if (r?.id) handleEdit(r.id);

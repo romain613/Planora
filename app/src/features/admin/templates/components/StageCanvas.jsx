@@ -6,6 +6,7 @@ import React, { useState } from "react";
 import { T } from "../../../../theme";
 import { I } from "../../../../shared/ui";
 import StageCard from "./StageCard";
+import { isSystemStage } from "../constants";
 
 // Fictifs pour rendu visuel réaliste (preview inline)
 const FAKE_CONTACTS = ["Dupont M.", "Martin S.", "Leroux J."];
@@ -60,7 +61,15 @@ export default function StageCanvas({
     e.preventDefault();
     setTrashHover(false);
     const internalId = e.dataTransfer.getData("internalStageId");
-    if (internalId) onDeleteStage(internalId);
+    if (!internalId) return;
+    // Bloque la suppression d'une colonne système (défense UI, double verrou avec
+    // StageConfigPanel qui masque le bouton supprimer).
+    const dropped = stages.find(s => s.id === internalId);
+    if (isSystemStage(dropped)) {
+      // Feedback sobre : la suppression est simplement ignorée. Pas d'alert() intrusif.
+      return;
+    }
+    onDeleteStage(internalId);
   };
 
   return (

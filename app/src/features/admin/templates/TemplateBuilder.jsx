@@ -13,6 +13,9 @@ import {
   TEMPLATE_NAME_MIN,
   TEMPLATE_NAME_MAX,
   STAGES_MIN_TO_PUBLISH,
+  SYSTEM_STAGE_IDS,
+  isSystemStage,
+  missingSystemStagesMessage,
 } from "./constants";
 
 // Génère un id unique pour une nouvelle colonne dans le builder
@@ -64,7 +67,9 @@ export default function TemplateBuilder({
   // ── Validation (pour publication) ──
   const nameValid = typeof name === "string" && name.trim().length >= TEMPLATE_NAME_MIN && name.trim().length <= TEMPLATE_NAME_MAX;
   const stagesValid = Array.isArray(stages) && stages.length >= STAGES_MIN_TO_PUBLISH && stages.every((s) => s.id && typeof s.label === "string" && s.label.trim().length > 0);
-  const canPublish = nameValid && stagesValid;
+  const stageIdSet = new Set((stages || []).map(s => s.id));
+  const hasAllSystemStages = SYSTEM_STAGE_IDS.every(id => stageIdSet.has(id));
+  const canPublish = nameValid && stagesValid && hasAllSystemStages;
 
   // ── Helpers ──
   const rebuildPositions = (list) => list.map((s, i) => ({ ...s, position: (i + 1) * 10 }));
@@ -92,11 +97,23 @@ export default function TemplateBuilder({
   };
 
   const deleteStage = (stageId) => {
+    // Verrou : les colonnes système ne peuvent pas être supprimées depuis le builder
+    const target = stages.find((s) => s.id === stageId);
+    if (isSystemStage(target)) return;
     setStages((prev) => rebuildPositions(prev.filter((s) => s.id !== stageId)));
     if (selectedId === stageId) setSelectedId(null);
   };
 
   const updateStage = (stageId, patch) => {
+    // Verrou : le libellé d'une colonne système n'est pas modifiable (Option A — safe)
+    const target = stages.find((s) => s.id === stageId);
+    if (isSystemStage(target) && patch && Object.prototype.hasOwnProperty.call(patch, 'label')) {
+      // ignore silencieusement le patch label pour colonne système
+      const { label, ...rest } = patch;
+      if (Object.keys(rest).length === 0) return;
+      setStages((prev) => prev.map((s) => (s.id === stageId ? { ...s, ...rest } : s)));
+      return;
+    }
     setStages((prev) => prev.map((s) => (s.id === stageId ? { ...s, ...patch } : s)));
   };
 
@@ -130,6 +147,9 @@ export default function TemplateBuilder({
       else alert(`Minimum ${STAGES_MIN_TO_PUBLISH} colonnes avec libellé requises pour publier.`);
       return;
     }
+    // Validation socle système : les 5 colonnes obligatoires doivent être présentes
+    const missingMsg = missingSystemStagesMessage(stages.map(s => s.id));
+    if (missingMsg) { alert(missingMsg); return; }
     const confirmMsg = template?.isPublished
       ? "Publier une nouvelle version ? Les collaborateurs déjà assignés resteront sur l'ancienne version (pas d'auto-propagation)."
       : "Publier ce template ? Il deviendra assignable aux collaborateurs.";
@@ -214,7 +234,11 @@ export default function TemplateBuilder({
             onClick={handlePublish}
             disabled={saving || !canPublish}
             style={{ fontSize: 11 }}
-            title={!canPublish ? "Minimum 2 colonnes avec libellé + nom valide" : ""}
+            title={!canPublish
+              ? (!hasAllSystemStages
+                  ? (missingSystemStagesMessage(stages.map(s => s.id)) || "Colonnes système manquantes")
+                  : "Minimum 2 colonnes avec libellé + nom valide")
+              : ""}
           >
             <I n="check-circle" s={12} /> {template?.isPublished ? "Publier v2" : "Publier"}
           </Btn>

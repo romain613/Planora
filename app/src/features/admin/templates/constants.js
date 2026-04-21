@@ -119,3 +119,77 @@ export const TEMPLATE_NAME_MIN = 2;
 export const TEMPLATE_NAME_MAX = 40;
 export const STAGES_MIN_TO_PUBLISH = 2;
 export const STAGES_WARN_COUNT = 12;
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Socle de colonnes système obligatoires
+// ═══════════════════════════════════════════════════════════════════════════
+// Garanties métier nécessaires pour les futures "Règles métier" (bientôt) :
+//   - appels       → nouveau / contacté / NRP
+//   - prise de RDV → rdv_programme
+//   - sortie       → perdu
+// Ces 5 colonnes sont :
+//   - injectées par défaut à la création d'un template (vide ou preset)
+//   - non supprimables depuis l'UI builder
+//   - non renommables (Option A — safe)
+//   - déplaçables librement (reorder autorisé)
+//   - vérifiées à la publication (block si une manque)
+export const SYSTEM_STAGE_IDS = [
+  'nouveau',
+  'contacte',
+  'rdv_programme',
+  'nrp',
+  'perdu',
+];
+
+export const SYSTEM_STAGES_META = {
+  nouveau:       { label: 'Nouveau',        color: '#2563EB', icon: 'plus' },
+  contacte:      { label: 'Contacté',       color: '#F59E0B', icon: 'message-circle' },
+  rdv_programme: { label: 'RDV programmé',  color: '#0EA5E9', icon: 'calendar' },
+  nrp:           { label: 'NRP',            color: '#EF4444', icon: 'phone-off' },
+  perdu:         { label: 'Perdu',          color: '#64748B', icon: 'x-circle' },
+};
+
+// Helper : un stage est-il système ? Dérivé de l'ID, pas d'un flag stocké
+// (robustesse : un template créé avant cette règle reste cohérent).
+export function isSystemStage(stage) {
+  return !!(stage && typeof stage.id === 'string' && SYSTEM_STAGE_IDS.includes(stage.id));
+}
+
+// Construit la liste initiale de stages pour un nouveau template :
+//   - Les 5 stages système en tête (dans l'ordre SYSTEM_STAGE_IDS)
+//   - Puis les stages additionnels du preset (dé-dupliqués par ID)
+// Chaque stage retourné porte son ID, label, couleur, icône, position.
+export function buildInitialStages(presetStages = []) {
+  const result = SYSTEM_STAGE_IDS.map((id, i) => ({
+    id,
+    label: SYSTEM_STAGES_META[id].label,
+    color: SYSTEM_STAGES_META[id].color,
+    icon: SYSTEM_STAGES_META[id].icon,
+    position: (i + 1) * 10,
+  }));
+  const existingIds = new Set(SYSTEM_STAGE_IDS);
+  let pos = (SYSTEM_STAGE_IDS.length + 1) * 10;
+  for (const s of (presetStages || [])) {
+    if (!s || !s.id || existingIds.has(s.id)) continue;
+    result.push({
+      id: s.id,
+      label: s.label || s.id,
+      color: s.color || '#7C3AED',
+      icon: s.icon || 'tag',
+      position: pos,
+    });
+    existingIds.add(s.id);
+    pos += 10;
+  }
+  return result;
+}
+
+// Message explicite affiché si une colonne système manque à la publication
+export function missingSystemStagesMessage(stageIds = []) {
+  const present = new Set(stageIds);
+  const missing = SYSTEM_STAGE_IDS
+    .filter(id => !present.has(id))
+    .map(id => SYSTEM_STAGES_META[id].label);
+  if (missing.length === 0) return null;
+  return `Le pipeline doit contenir les colonnes système obligatoires : ${SYSTEM_STAGE_IDS.map(id => SYSTEM_STAGES_META[id].label).join(', ')}. Manquante(s) : ${missing.join(', ')}.`;
+}

@@ -5,6 +5,7 @@
 import React from "react";
 import { T } from "../../../../theme";
 import { I } from "../../../../shared/ui";
+import { isSystemStage } from "../constants";
 
 export default function StageCard({
   stage,
@@ -23,6 +24,7 @@ export default function StageCard({
   showPositionBadge = true,
   previewContacts = null, // si !null, affiche N cartes fictives
 }) {
+  const _isSystem = isSystemStage(stage);
   const bg = (stage?.color || T.accent) + "18";
   const border = isSelected
     ? `2.5px solid ${stage?.color || T.accent}`
@@ -51,7 +53,7 @@ export default function StageCard({
         boxShadow: isSelected ? `0 4px 16px ${(stage?.color || T.accent)}35` : "none",
       }}
     >
-      {/* header : icon + position */}
+      {/* header : icon + position + cadenas système */}
       <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 8 }}>
         <div
           style={{
@@ -73,6 +75,18 @@ export default function StageCard({
         >
           {stage?.label || "—"}
         </div>
+        {_isSystem && (
+          <span
+            title="Colonne système — non supprimable, non renommable"
+            style={{
+              display: "flex", alignItems: "center",
+              color: (stage?.color || T.accent),
+              flexShrink: 0,
+            }}
+          >
+            <I n="lock" s={10} />
+          </span>
+        )}
         {showPositionBadge && typeof index === "number" && (
           <span
             style={{
@@ -85,6 +99,20 @@ export default function StageCard({
           </span>
         )}
       </div>
+      {/* Badge "Système" discret sous le header */}
+      {_isSystem && (
+        <div
+          style={{
+            fontSize: 8, fontWeight: 700, color: (stage?.color || T.accent),
+            background: (stage?.color || T.accent) + "18",
+            borderRadius: 4, padding: "1px 5px",
+            display: "inline-block", marginBottom: 6,
+            textTransform: "uppercase", letterSpacing: 0.4,
+          }}
+        >
+          Système
+        </div>
+      )}
       {/* preview contacts fictifs si demandé */}
       {Array.isArray(previewContacts) && previewContacts.length > 0 && (
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
