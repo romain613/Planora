@@ -2910,12 +2910,13 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     // ── REGLE: "Perdu" necessite un motif obligatoire (liste ou texte libre) ──
     if (newStage === 'perdu' && !note) {
       setPerduMotifModal({ contactId, fromNote: '' });
+      delete pipelineActionLockRef.current[contactId];
       return;
     }
     // ── REGLE: "Qualifié" necessite une note explicative ──
     if (newStage === 'qualifie' && !note) {
       const reason = prompt('Pourquoi ce contact est intéressé ?\n(Besoin identifié, budget confirmé, demande active, etc.)');
-      if (!reason || !reason.trim()) { showNotif('Note obligatoire pour qualifier','danger'); return; }
+      if (!reason || !reason.trim()) { showNotif('Note obligatoire pour qualifier','danger'); delete pipelineActionLockRef.current[contactId]; return; }
       note = reason.trim();
     }
     // ── REGLE: "RDV Programmé" → date + heure obligatoire → crée le booking ──
@@ -2932,6 +2933,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
           notes: note||'', _bookingMode: true
         });
         setPhoneShowScheduleModal(true);
+        delete pipelineActionLockRef.current[contactId];
         return; // La modale RDV gère le changement de statut après création
       }
     }
