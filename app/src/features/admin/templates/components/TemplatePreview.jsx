@@ -23,7 +23,7 @@ export default function TemplatePreview({ template, onClose }) {
   if (!Array.isArray(stages)) stages = [];
 
   return (
-    <Modal isOpen={true} onClose={onClose} size="xlarge" title={null}>
+    <Modal open={true} onClose={onClose} width={980} title="Aperçu du template">
       <div style={{ display: "flex", flexDirection: "column", gap: 16, minHeight: 480 }}>
         {/* Header */}
         <div

@@ -148,7 +148,7 @@ export default function AssignTemplateModal({
     collaborator?.pipelineMode === "template" ? "Template imposé" : "Mode libre";
 
   return (
-    <Modal isOpen={true} onClose={onClose} title={`Pipeline de ${collaborator?.name || ""}`} size="large">
+    <Modal open={true} onClose={onClose} title={`Pipeline de ${collaborator?.name || ""}`} width={640}>
       <div style={{ display: "flex", flexDirection: "column", gap: 14, minHeight: 320 }}>
         {/* État actuel */}
         <div style={{ padding: 10, borderRadius: 8, background: T.surface, border: `1px solid ${T.border}`, fontSize: 12 }}>
