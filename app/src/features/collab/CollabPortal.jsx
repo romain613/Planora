@@ -2989,6 +2989,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
           const passPerdu = confirm('Ce contact a été relancé ' + doneCount + ' fois sans réponse.\n\nVoulez-vous le passer en "Perdu" ?');
           if (passPerdu) {
             const reason = prompt('Motif :') || 'NRP x' + doneCount + ' sans réponse';
+            delete pipelineActionLockRef.current[contactId];
             handlePipelineStageChange(contactId, 'perdu', reason);
             return;
           }
