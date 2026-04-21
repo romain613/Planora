@@ -137,6 +137,8 @@ const PhoneTab = () => {
     phoneQuickAddMobile, setPhoneQuickAddMobile,
     phoneQuickAddWebsite, setPhoneQuickAddWebsite,
     pipelineStages, PIPELINE_STAGES, orderedStages,
+    // Phase 4 Templates — badge + readOnly
+    pipelineReadOnly, pipelineTemplateMeta,
     // ═══ REWIRE 2026-04-20 — destructure complémentaire (64 symboles) ═══
     CALL_TAGS,
     PHONE_MODULES,
@@ -5185,6 +5187,35 @@ api('/api/data/contacts/bulk-delete',{method:'POST',body:{contactIds:(typeof pip
 }}><I n="trash-2" s={11}/></Btn>
 <span onClick={() => setPipeSelectedIds([])} style={{marginLeft:"auto",cursor:"pointer",fontSize:11,color:T.text3,fontWeight:600}}>✕ Tout désélectionner</span>
       </Card>
+    )}
+    {/* Phase 4 — Badge "Pipeline Équipe" si collab en mode template imposé */}
+    {pipelineTemplateMeta && (
+      <div style={{
+        display:'flex',alignItems:'center',gap:10,
+        padding:'8px 12px',margin:'6px 8px',
+        borderRadius:10,
+        background:(pipelineTemplateMeta.color||'#7C3AED')+'12',
+        border:`1.5px solid ${(pipelineTemplateMeta.color||'#7C3AED')}40`,
+        fontSize:11,color:T.text2
+      }} title="Structure définie par votre administrateur. Contactez-le pour toute modification.">
+        <div style={{
+          width:26,height:26,borderRadius:8,
+          background:(pipelineTemplateMeta.color||'#7C3AED')+'25',
+          color:pipelineTemplateMeta.color||'#7C3AED',
+          display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0
+        }}>
+          <I n="lock" s={13}/>
+        </div>
+        <div style={{flex:1,minWidth:0}}>
+          <div style={{fontSize:12,fontWeight:700,color:T.text}}>
+            Pipeline Équipe : {pipelineTemplateMeta.name}
+            {pipelineTemplateMeta.version ? <span style={{fontSize:10,color:T.text3,marginLeft:6,fontWeight:500}}>v{pipelineTemplateMeta.version}</span> : null}
+          </div>
+          <div style={{fontSize:10,color:T.text3,marginTop:2}}>
+            Structure imposée — édition réservée à votre administrateur
+          </div>
+        </div>
+      </div>
     )}
     {/* Kanban Columns */}
     <div style={{flex:1,overflow:'auto',padding:'8px 6px',transform:'scale('+((_T.pipeZoom||100)/100)+')',transformOrigin:'top left',width:(10000/(_T.pipeZoom||100))+'%',height:(10000/(_T.pipeZoom||100))+'%'}}>

@@ -111,6 +111,8 @@ const CrmTab = () => {
     handleDrop,
     handlePipelineStageChange,
     handleUpdateCustomStage,
+    // Phase 4 Templates — verrou runtime pipeline
+    pipelineReadOnly, pipelineTemplateMeta,
     linkVisitorToContacts,
     myCrmContacts,
     phoneCallAnalyses,
@@ -182,7 +184,9 @@ const CrmTab = () => {
       </div>
       <Btn small onClick={()=>setCsvImportModal({step:"upload"})}><I n="upload" s={13}/> Import CSV</Btn>
       <Btn small onClick={()=>setScanImageModal({step:'upload',image:null,contacts:[],loading:false})} style={{background:'#0EA5E912',color:'#0EA5E9',border:'1px solid #0EA5E930'}}><I n="camera" s={13}/> Import Photo</Btn>
-      <Btn small onClick={() => setShowAddStage(true)} style={{background:'#7C3AED12',color:'#7C3AED',border:'1px solid #7C3AED30'}}><I n="tag" s={13}/> + Statut</Btn>
+      {!pipelineReadOnly && (
+        <Btn small onClick={() => setShowAddStage(true)} style={{background:'#7C3AED12',color:'#7C3AED',border:'1px solid #7C3AED30'}}><I n="tag" s={13}/> + Statut</Btn>
+      )}
       <Btn primary onClick={()=>setShowNewContact(true)}><I n="plus" s={14}/> Nouveau contact</Btn>
     </div>
   </div>
@@ -590,7 +594,9 @@ const CrmTab = () => {
               {stage.id==='nrp'&&(()=>{const totalNrp=stageContacts.reduce((sum,c)=>{try{return sum+JSON.parse(c.nrp_followups_json||'[]').filter(f=>f.done).length;}catch{return sum;}},0);return totalNrp>0?<span style={{fontSize:9,fontWeight:800,color:'#fff',background:'#EF4444',borderRadius:10,padding:'1px 6px',minWidth:18,textAlign:'center',lineHeight:'16px'}} title={'Total tentatives NRP: '+totalNrp}>{totalNrp} tent.</span>:null;})()}
               <Badge color={stage.color}>{stageContacts.length}</Badge>
               {stageContacts.length>0&&<input type="checkbox" checked={stageContacts.every(c=>(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).includes(c.id))} onChange={e=>{e.stopPropagation();if(e.target.checked){(typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})(p=>[...new Set([...p,...stageContacts.map(c=>c.id)])]);}else{const stIds=new Set(stageContacts.map(c=>c.id));(typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})(p=>p.filter(id=>!stIds.has(id)));}}} onClick={e=>e.stopPropagation()} title={`Sélectionner tout ${stage.label}`} style={{cursor:'pointer',accentColor:stage.color,width:14,height:14,flexShrink:0}}/>}
-              {stage.isCore ? (
+              {pipelineReadOnly ? (
+                <div style={{width:22,height:22,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:T.text3,fontSize:10}} title="Pipeline imposé par template — non modifiable"><I n="lock" s={10}/></div>
+              ) : stage.isCore ? (
                 <div style={{width:22,height:22,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:T.text3,fontSize:10}} title="Colonne système (non modifiable)"><I n="lock" s={10}/></div>
               ) : stage.isDefault && !stage.isCore ? (
                 <div style={{display:"flex",gap:2}}>
@@ -713,12 +719,12 @@ const CrmTab = () => {
           </div>
         );
       })}
-      <div style={{flex:"0 0 200px",minWidth:200,display:"flex",flexDirection:"column"}}>
+      {!pipelineReadOnly && (<div style={{flex:"0 0 200px",minWidth:200,display:"flex",flexDirection:"column"}}>
         <div onClick={()=>setShowAddStage(true)} style={{padding:16,borderRadius:12,border:`2px dashed ${T.border}`,background:T.surface,textAlign:"center",cursor:"pointer",color:T.text3,minHeight:80,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:8}}>
           <div style={{width:36,height:36,borderRadius:18,background:T.accentBg,display:"flex",alignItems:"center",justifyContent:"center",color:T.accent}}><I n="plus" s={18}/></div>
           <span style={{fontSize:12,fontWeight:600}}>Nouvelle colonne</span>
         </div>
-      </div>
+      </div>)}
     </div>
     </>
   ) : (

@@ -36,6 +36,8 @@ import {
 
 // Phase 10+11 — context + extracted tabs
 import { CollabProvider } from "./context/CollabContext";
+// Phase 4 Templates Pipeline — résolution runtime des stages + flag readOnly
+import { usePipelineResolved } from "./hooks/usePipelineResolved";
 import AiProfileTab from "./tabs/AiProfileTab";
 import TablesTab from "./tabs/TablesTab";
 import MessagesTab from "./tabs/MessagesTab";
@@ -2288,7 +2290,19 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     { id:"client_valide", label:"Client Validé", color:"#22C55E", isDefault:1, isCore:true },
     { id:"perdu", label:"Perdu", color:"#64748B", isDefault:1, isCore:true },
   ];
-  const PIPELINE_STAGES = [...DEFAULT_STAGES, ...((typeof pipelineStages!=='undefined'?pipelineStages:null)||[]).map(s => ({...s, isDefault:0}))];
+  // Phase 4 — résolution runtime via API /api/data/pipeline-stages-resolved.
+  // En mode 'free' (défaut tous les collabs), la liste résolue ≈ legacy (pas de flash).
+  // En mode 'template', les stages viennent du snapshot figé (readOnly=true).
+  const { resolved: pipelineResolved } = usePipelineResolved({
+    companyId: company?.id,
+    collaboratorId: collab?.id,
+  });
+  const _legacyStages = [...DEFAULT_STAGES, ...((typeof pipelineStages!=='undefined'?pipelineStages:null)||[]).map(s => ({...s, isDefault:0}))];
+  const PIPELINE_STAGES = (pipelineResolved?.mode === 'template' && Array.isArray(pipelineResolved?.stages) && pipelineResolved.stages.length > 0)
+    ? pipelineResolved.stages.map(s => ({ ...s, isDefault: s.isDefault ?? 0, isCore: s.isCore ?? false }))
+    : _legacyStages;
+  const pipelineReadOnly = pipelineResolved?.readOnly === true;
+  const pipelineTemplateMeta = pipelineResolved?.templateMeta || null;
 
   // ── Column order: drag & drop reordering with localStorage persistence ──
   const [columnOrder, setColumnOrder] = useState(() => {
@@ -3115,6 +3129,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     showNotif('Lead classe en Perdu — motif: ' + reason.trim());
   };
   const handleAddCustomStage = () => {
+    if (pipelineReadOnly) { showNotif('Pipeline imposé par un template — modification impossible. Contactez votre administrateur.', 'danger'); return; }
     if (!(typeof newStageName!=='undefined'?newStageName:{}).trim()) return;
     api('/api/data/pipeline-stages', { method:'POST', body:{ companyId:company.id, label:(typeof newStageName!=='undefined'?newStageName:{}).trim(), color:(typeof newStageColor!=='undefined'?newStageColor:null) } }).then(data => {
       if (data?.id) {
@@ -3127,6 +3142,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     });
   };
   const handleDeleteCustomStage = (stageId) => {
+    if (pipelineReadOnly) { showNotif('Pipeline imposé par un template — suppression impossible. Contactez votre administrateur.', 'danger'); return; }
     api('/api/data/pipeline-stages/'+stageId, { method:'DELETE' }).then(() => {
       setPipelineStages(p => p.filter(s => s.id !== stageId));
       // Reset contacts in this stage to nouveau
@@ -3135,6 +3151,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     });
   };
   const handleUpdateCustomStage = (stageId, updates) => {
+    if (pipelineReadOnly) { showNotif('Pipeline imposé par un template — modification impossible. Contactez votre administrateur.', 'danger'); return; }
     setPipelineStages(p => p.map(s => s.id === stageId ? {...s, ...updates} : s));
     api('/api/data/pipeline-stages/'+stageId, { method:'PUT', body:updates });
     showNotif('Statut modifié');
@@ -3517,6 +3534,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       dragOverStage, setDragOverStage,
       dragColumnId, setDragColumnId,
       pipelineStages, setPipelineStages,
+      // Phase 4 — résolution runtime + flag readOnly + metadata template
+      pipelineReadOnly, pipelineTemplateMeta,
       contactFieldDefs, setContactFieldDefs,
       pipelinePopupContact, setPipelinePopupContact,
       pipelinePopupHistory, setPipelinePopupHistory,
