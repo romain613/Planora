@@ -6,7 +6,7 @@
 
 import React, { useState, useMemo, useEffect, useRef, Fragment } from "react";
 import { T } from "../../../theme";
-import { I, Btn, Card, Avatar, Badge, Modal, Input, ValidatedInput, Stars, Spinner, Stat, EmptyState, HelpTip, HookIsolator } from "../../../shared/ui";
+import { I, Btn, Card, Avatar, Badge, Modal, Input, ValidatedInput, Stars, Spinner, Stat, EmptyState, HelpTip, HookIsolator, EnvelopeBadge } from "../../../shared/ui";
 import { displayPhone, formatPhoneFR } from "../../../shared/utils/phone";
 import { isValidEmail, isValidPhone } from "../../../shared/utils/validators";
 import { fmtDate, DAYS_FR, DAYS_SHORT, MONTHS_FR, getDow } from "../../../shared/utils/dates";
@@ -23,6 +23,7 @@ const PhoneTab = () => {
   const brand = useBrand();
   const {
     collab, company, contacts, bookings, collabs, showNotif,
+    envelopeMap,
     googleEventsProp,
     fmtDur,
     togglePhoneLeftPanel,
@@ -5280,6 +5281,8 @@ return(
         {/* Auto-dialer badge */}
         {isAutoDialing&&<div style={{position:'absolute',top:-6,right:-6,width:20,height:20,borderRadius:10,background:'#7C3AED',display:'flex',alignItems:'center',justifyContent:'center',animation:'pulse 1.5s infinite',zIndex:2}}><I n="phone" s={10} style={{color:'#fff'}}/></div>}
         {pdResult&&!isAutoDialing&&<div style={{position:'absolute',top:-4,right:20,fontSize:7,fontWeight:800,color:'#fff',background:pdResult==='contacted'?'#22C55E':'#EF4444',borderRadius:8,padding:'1px 5px',zIndex:2}}>{pdResult==='contacted'?'OK':'NRP'}</div>}
+        {/* L3 — badge enveloppe identité (visuel uniquement, aucun impact fonctionnel) */}
+        {ct.envelopeId && (typeof envelopeMap!=='undefined'?envelopeMap:{})[ct.envelopeId] && <div style={{position:'absolute',top:3,right:3,zIndex:1}}><EnvelopeBadge envelope={envelopeMap[ct.envelopeId]} size={14}/></div>}
         {/* S2 P0 Patch D + S3.1 — indicateur save status discret top-left
             saving=bleu, saved=vert, external_update=violet (update cross-tab), error=rouge */}
         {contactSaveStatus?.[ct.id] && <div style={{position:'absolute',top:3,left:3,width:7,height:7,borderRadius:'50%',background:contactSaveStatus[ct.id]==='saving'?'#3B82F6':contactSaveStatus[ct.id]==='saved'?'#22C55E':contactSaveStatus[ct.id]==='external_update'?'#A855F7':'#EF4444',boxShadow:contactSaveStatus[ct.id]==='saving'?'0 0 6px #3B82F680':contactSaveStatus[ct.id]==='external_update'?'0 0 5px #A855F780':'none',zIndex:3,transition:'all .2s'}} title={contactSaveStatus[ct.id]==='saving'?'Sauvegarde en cours':contactSaveStatus[ct.id]==='saved'?'Sauvegardé':contactSaveStatus[ct.id]==='external_update'?'Mis à jour par un autre onglet':'Erreur de sauvegarde'}/>}

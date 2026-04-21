@@ -61,6 +61,18 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const [settingsSubTab, setSettingsSubTab] = useState("profil");
   const [showIaWidget, setShowIaWidget] = useState(false);
   const [csvImportModal, setCsvImportModal] = useState(null); // V2 unified CSV import modal — global scope
+  // L3 — identité visuelle enveloppes : fetch on mount, fallback silencieux
+  const [envelopeMap, setEnvelopeMap] = useState({});
+  useEffect(() => {
+    if (!company?.id) return;
+    api(`/api/leads/envelopes/public?companyId=${company.id}`).then(r => {
+      if (Array.isArray(r)) {
+        const map = {};
+        for (const env of r) map[env.id] = env;
+        setEnvelopeMap(map);
+      }
+    }).catch(() => {}); // échec silencieux, aucun badge affiché
+  }, [company?.id]);
   const PORTAL_TAB_TITLES = { home:"Aujourd'hui", agenda:"Agenda", crm:"CRM", phone:"Pipeline Live", settings:"Paramètres" };
   const brand = useBrand();
   const setPortalTab = (v) => { const val = typeof v === "function" ? v(portalTab) : v; _setPortalTab(val); localStorage.setItem("c360-portalTab", val); setPortalTabKey(k=>k+1); document.title = brand.name + " — " + (PORTAL_TAB_TITLES[val]||val); };
@@ -3280,6 +3292,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   return (
     <CollabProvider value={{
       collab, showNotif,
+      envelopeMap,
       // AI Profile tab
       aiProfileTab, setAiProfileTab,
       aiProfileForm, setAiProfileForm,
