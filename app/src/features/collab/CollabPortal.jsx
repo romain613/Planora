@@ -44,6 +44,7 @@ import CockpitFloatingButton from "./modals/CockpitFloatingButton";
 import CockpitMinimizedButton from "./modals/CockpitMinimizedButton";
 import NotificationsDropdown from "./modals/NotificationsDropdown";
 import V7TransferModal from "./modals/V7TransferModal";
+import ContractModal from "./modals/ContractModal";
 import AiProfileTab from "./tabs/AiProfileTab";
 import TablesTab from "./tabs/TablesTab";
 import MessagesTab from "./tabs/MessagesTab";
@@ -5789,46 +5790,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       })()}
 
       {/* ═══ CONTRACT MODAL — Client Validé ═══ */}
-      {(typeof contractModal!=='undefined'?contractModal:null) && (
-        <Modal open={true} onClose={()=>{
-          // Cancel → still change stage but without contract info
-          handlePipelineStageChange((typeof contractModal!=='undefined'?contractModal:{}).contactId, 'client_valide', (typeof contractModal!=='undefined'?contractModal:{}).note||'', {amount:0,number:'',date:''});
-          setContractModal(null);
-        }}>
-          <h2 style={{fontSize:18,fontWeight:800,marginBottom:20,display:'flex',alignItems:'center',gap:8}}><I n="file-check" s={20} style={{color:'#22C55E'}}/> Contrat — Client Validé</h2>
-          <div style={{display:'flex',flexDirection:'column',gap:14}}>
-            <div>
-              <label style={{fontSize:12,fontWeight:600,color:T.text3,marginBottom:4,display:'block'}}>Montant du contrat (€)</label>
-              <input type="number" min="0" step="0.01" value={(typeof contractForm!=='undefined'?contractForm:{}).amount} onChange={e=>(typeof setContractForm==='function'?setContractForm:function(){})(p=>({...p,amount:e.target.value}))} placeholder="Ex: 5000" style={{width:'100%',padding:'10px 14px',borderRadius:10,border:`1.5px solid ${T.border}`,background:T.bg,fontSize:14,fontWeight:600,fontFamily:'inherit',color:T.text,outline:'none'}}/>
-            </div>
-            <div>
-              <label style={{fontSize:12,fontWeight:600,color:T.text3,marginBottom:4,display:'block'}}>Numéro de dossier</label>
-              <input type="text" value={(typeof contractForm!=='undefined'?contractForm:{}).number} onChange={e=>(typeof setContractForm==='function'?setContractForm:function(){})(p=>({...p,number:e.target.value}))} placeholder="Ex: GD-2026-088" style={{width:'100%',padding:'10px 14px',borderRadius:10,border:`1.5px solid ${T.border}`,background:T.bg,fontSize:14,fontFamily:'inherit',color:T.text,outline:'none'}}/>
-            </div>
-            <div>
-              <label style={{fontSize:12,fontWeight:600,color:T.text3,marginBottom:4,display:'block'}}>Date de signature</label>
-              <input type="date" value={(typeof contractForm!=='undefined'?contractForm:{}).date} onChange={e=>(typeof setContractForm==='function'?setContractForm:function(){})(p=>({...p,date:e.target.value}))} style={{width:'100%',padding:'10px 14px',borderRadius:10,border:`1.5px solid ${T.border}`,background:T.bg,fontSize:14,fontFamily:'inherit',color:T.text,outline:'none'}}/>
-            </div>
-            <div>
-              <label style={{fontSize:12,fontWeight:600,color:T.text3,marginBottom:4,display:'block'}}>Commentaire sur la vente</label>
-              <textarea value={(typeof contractForm!=='undefined'?contractForm:{}).comment||''} onChange={e=>(typeof setContractForm==='function'?setContractForm:function(){})(p=>({...p,comment:e.target.value}))} placeholder="Décrivez la vente, le contexte, les besoins du client..." rows={3} style={{width:'100%',padding:'10px 14px',borderRadius:10,border:`1.5px solid ${T.border}`,background:T.bg,fontSize:13,fontFamily:'inherit',color:T.text,outline:'none',resize:'vertical'}}/>
-            </div>
-          </div>
-          <div style={{display:'flex',gap:8,marginTop:20,justifyContent:'flex-end'}}>
-            <Btn onClick={()=>{
-              handlePipelineStageChange((typeof contractModal!=='undefined'?contractModal:{}).contactId, 'client_valide', (typeof contractModal!=='undefined'?contractModal:{}).note||'', {amount:0,number:'',date:''});
-              setContractModal(null);
-            }}>Passer sans contrat</Btn>
-            <Btn primary onClick={()=>{
-              const amt = parseFloat((typeof contractForm!=='undefined'?contractForm:{}).amount) || 0;
-              if(!amt || amt <= 0) { showNotif('Le montant du contrat est obligatoire','danger'); return; }
-              handlePipelineStageChange((typeof contractModal!=='undefined'?contractModal:{}).contactId, 'client_valide', (typeof contractModal!=='undefined'?contractModal:{}).note||'', {amount:amt, number:(typeof contractForm!=='undefined'?contractForm:{}).number.trim(), date:(typeof contractForm!=='undefined'?contractForm:{}).date});
-              setContractModal(null);
-              showNotif(`Contrat validé — ${amt.toLocaleString('fr-FR')} €`);
-            }}><I n="check" s={14}/> Valider le contrat</Btn>
-          </div>
-        </Modal>
-      )}
+      <ContractModal />
 
       {/* ═══ STICKY ACTION BAR ═══ */}
       <div style={{position:'fixed',bottom:0,left:(typeof callFormAccordion!=='undefined'?callFormAccordion:null)?._navCollapsed?56:240,right:0,zIndex:9989,padding:'8px 16px',background:T.surface+'EE',backdropFilter:'blur(12px)',borderTop:'1px solid '+T.border,display:'flex',justifyContent:'center',gap:6,transition:'left .2s ease'}}>
