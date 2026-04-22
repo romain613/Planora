@@ -47,6 +47,7 @@ import V7TransferModal from "./modals/V7TransferModal";
 import ContractModal from "./modals/ContractModal";
 import IncomingCallBanner from "./modals/IncomingCallBanner";
 import NewContactModal from "./modals/NewContactModal";
+import IaProactiveWidget from "./modals/IaProactiveWidget";
 import AiProfileTab from "./tabs/AiProfileTab";
 import TablesTab from "./tabs/TablesTab";
 import MessagesTab from "./tabs/MessagesTab";
@@ -3574,6 +3575,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       pipeBulkSmsText, setPipeBulkSmsText,
       pipeSelectedIds, setPipeSelectedIds,
       iaHubCollapse, setIaHubCollapse,
+      showIaWidget, setShowIaWidget,
       notifList, setNotifList,
       notifUnread, setNotifUnread,
       notifOpen, setNotifOpen,
@@ -5730,26 +5732,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       </div>
 
       {/* ═══ IA PROACTIVE WIDGET ═══ */}
-      {(typeof showIaWidget!=='undefined'?showIaWidget:null) && collab.ai_copilot_enabled && (()=>{
-        const todayISO2=new Date().toISOString().split('T')[0];
-        const rdvP=(contacts||[]).find(c=>c.assignedTo===collab.id&&c.pipeline_stage==='rdv_programme'&&c.next_rdv_date&&c.next_rdv_date<todayISO2);
-        const nrpR=(contacts||[]).find(c=>c.assignedTo===collab.id&&c.pipeline_stage==='nrp'&&c.nrp_next_relance&&c.nrp_next_relance<=todayISO2);
-        const inact=(contacts||[]).find(c=>c.assignedTo===collab.id&&!['perdu','client_valide'].includes(c.pipeline_stage)&&c.lastVisit&&Math.floor((Date.now()-new Date(c.lastVisit).getTime())/86400000)>=14);
-        const first=rdvP||nrpR||inact;
-        const msg=rdvP?`Qualifiez ${rdvP.name} — RDV passé`:nrpR?`Relancez ${nrpR.name} — NRP`:inact?`${inact.name} inactif depuis 14+ jours`:'Tout est à jour !';
-        const color=rdvP?'#F97316':nrpR?'#EF4444':inact?'#F59E0B':'#22C55E';
-        return <div style={{position:'fixed',bottom:72,right:20,width:320,zIndex:9991,borderRadius:14,background:T.card,border:'1.5px solid #7C3AED30',boxShadow:'0 12px 40px rgba(124,58,237,0.15)',padding:16,animation:'fadeInScale .2s ease'}}>
-          <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:10}}>
-            <div style={{width:28,height:28,borderRadius:8,background:'#7C3AED15',display:'flex',alignItems:'center',justifyContent:'center'}}><I n="cpu" s={14} style={{color:'#7C3AED'}}/></div>
-            <span style={{fontSize:12,fontWeight:700,color:'#7C3AED',flex:1}}>Copilot IA</span>
-            <div onClick={()=>setShowIaWidget(false)} style={{cursor:'pointer',padding:2}}><I n="x" s={14} style={{color:T.text3}}/></div>
-          </div>
-          <div style={{padding:'8px 10px',borderRadius:8,background:color+'08',border:'1px solid '+color+'25',marginBottom:10}}>
-            <div style={{fontSize:12,fontWeight:600,color:T.text}}>{msg}</div>
-          </div>
-          {first && <div onClick={()=>{setShowIaWidget(false);if(rdvP){const liveRdv2=(bookings||[]).find(b=>b.contactId===first.id&&b.status==='confirmed');setRdvPasseModal({contact:first,rdvDate:liveRdv2?.date||first.next_rdv_date,bookingId:liveRdv2?.id});}else if(first.phone){if(typeof startVoipCall==='function')startVoipCall(first.phone,first);else window.open('tel:'+first.phone);}}} style={{width:'100%',padding:'8px 0',borderRadius:8,background:'#7C3AED',color:'#fff',fontSize:11,fontWeight:700,textAlign:'center',cursor:'pointer'}}>Exécuter l'action</div>}
-        </div>;
-      })()}
+      <IaProactiveWidget />
 
       {upcomingRdvs.length>0 && (
         <div style={{position:'fixed',bottom:56,left:0,right:0,zIndex:9990,background:T.card,borderTop:'2px solid #0EA5E9',boxShadow:'0 -4px 20px rgba(0,0,0,0.1)',padding:'8px 20px',display:'flex',gap:12,alignItems:'center',overflowX:'auto'}}>
