@@ -61,11 +61,13 @@ export function sendContactToCollab(db, params) {
   if (!contact) throw new Error('CONTACT_NOT_FOUND');
   if (contact.companyId !== companyId) throw new Error('CONTACT_WRONG_COMPANY');
 
-  const targetCollab = db.prepare('SELECT id, companyId, name FROM collaborators WHERE id = ?').get(targetCollaboratorId);
+  const targetCollab = db.prepare('SELECT id, companyId, name, archivedAt FROM collaborators WHERE id = ?').get(targetCollaboratorId);
   if (!targetCollab || targetCollab.companyId !== companyId) throw new Error('TARGET_COLLAB_INVALID');
+  if (targetCollab.archivedAt && targetCollab.archivedAt !== '') throw new Error('TARGET_COLLAB_ARCHIVED');
 
-  const actorCollab = db.prepare('SELECT id, companyId, name FROM collaborators WHERE id = ?').get(actorCollaboratorId);
+  const actorCollab = db.prepare('SELECT id, companyId, name, archivedAt FROM collaborators WHERE id = ?').get(actorCollaboratorId);
   if (!actorCollab || actorCollab.companyId !== companyId) throw new Error('ACTOR_COLLAB_INVALID');
+  if (actorCollab.archivedAt && actorCollab.archivedAt !== '') throw new Error('ACTOR_COLLAB_ARCHIVED');
 
   // Autorisation : l'émetteur doit être owner OU déjà sharedWithId
   const isOwner = contact.assignedTo === actorCollaboratorId;

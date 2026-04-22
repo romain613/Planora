@@ -31,6 +31,8 @@ const ERR_MAP = {
   CONTACT_NOT_SHARED: 400,
   CONTACT_ALREADY_SHARED: 409,
   SLOT_CONFLICT: 409,
+  TARGET_COLLAB_ARCHIVED: 409,
+  ACTOR_COLLAB_ARCHIVED: 409,
 };
 
 // ─── POST /api/contact-share/send ──────────────────────────────────────────
