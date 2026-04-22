@@ -20,7 +20,7 @@ const FicheHeader = ({ ct, stg, sc }) => {
   return (
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:20}}>
       {/* Helper synchro CRM → Pipeline */}
-      {(()=>{_T.crmSync=(updates)=>{if((typeof pipelineRightContact!=='undefined'?pipelineRightContact:null)?.id===ct.id)(typeof setPipelineRightContact==='function'?setPipelineRightContact:function(){})(p=>p?{...p,...updates}:p);};return null;})()}
+      {(()=>{_T.crmSync=(updates)=>{if(pipelineRightContact?.id===ct.id)(typeof setPipelineRightContact==='function'?setPipelineRightContact:function(){})(p=>p?{...p,...updates}:p);};return null;})()}
       <div style={{display:"flex",gap:16,alignItems:"center",flex:1}}>
         <Avatar name={ct.name} color={stg.color} size={56}/>
         <div style={{flex:1}}>

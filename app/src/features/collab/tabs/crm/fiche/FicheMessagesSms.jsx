@@ -37,7 +37,7 @@ const FicheMessagesSms = ({ ct }) => {
               return <>
                 {/* Compose SMS */}
                 {(()=>{
-                  const myTwilioNums = ((typeof appMyPhoneNumbers!=='undefined'?appMyPhoneNumbers:null)||[]).filter(pn => pn.collaboratorId === collab.id && pn.status === 'assigned' && pn.smsCapable);
+                  const myTwilioNums = (appMyPhoneNumbers||[]).filter(pn => pn.collaboratorId === collab.id && pn.status === 'assigned' && pn.smsCapable);
                   const smsFromKey = '_smsFrom_' + ct.id;
                   const selectedFrom = window[smsFromKey] || (myTwilioNums.length > 0 ? myTwilioNums[0].phoneNumber : 'brevo');
                   return <div style={{display:'flex',flexDirection:'column',height:'100%',maxHeight:500}}>

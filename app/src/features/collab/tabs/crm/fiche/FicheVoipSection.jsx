@@ -24,12 +24,12 @@ const FicheVoipSection = ({ ct }) => {
 
   return (()=>{
           // Filtrer par contactId d'abord, fallback par numéro
-          const myCallsById = ((typeof voipCallLogs!=='undefined'?voipCallLogs:null)||[]).filter(cl=>cl.contactId===ct.id);
+          const myCallsById = (voipCallLogs||[]).filter(cl=>cl.contactId===ct.id);
           const myCallsByPhone = (()=>{
             if(myCallsById.length>0) return myCallsById;
             const ph=(ct.phone||ct.mobile||'').replace(/[^\d]/g,'').slice(-9);
             if(ph.length<9) return [];
-            return ((typeof voipCallLogs!=='undefined'?voipCallLogs:null)||[]).filter(cl=>{const n=(cl.direction==='outbound'?cl.toNumber:cl.fromNumber||'').replace(/[^\d]/g,'').slice(-9);return n===ph;});
+            return (voipCallLogs||[]).filter(cl=>{const n=(cl.direction==='outbound'?cl.toNumber:cl.fromNumber||'').replace(/[^\d]/g,'').slice(-9);return n===ph;});
           })().sort((a,b)=>(b.createdAt||'').localeCompare(a.createdAt||''));
           return (
           <div>
@@ -37,8 +37,8 @@ const FicheVoipSection = ({ ct }) => {
             <div style={{fontSize:12,color:T.text3,marginBottom:8}}>{myCallsByPhone.length} appel{myCallsByPhone.length>1?'s':''} pour ce contact</div>
             {myCallsByPhone.length===0&&<div style={{textAlign:'center',padding:32,color:T.text3,fontSize:13}}>Aucun appel enregistré pour ce contact</div>}
             {myCallsByPhone.map(cl=>{
-              const isExp = (typeof iaHubCollapse!=='undefined'?iaHubCollapse:null)['ficheCall_'+cl.id];
-              const hasRec = (typeof phoneCallRecordings!=='undefined'?phoneCallRecordings:null)[cl.id] || cl.recordingUrl;
+              const isExp = (iaHubCollapse||{})['ficheCall_'+cl.id];
+              const hasRec = (phoneCallRecordings||{})[cl.id] || cl.recordingUrl;
               return (
               <div key={cl.id} style={{borderBottom:`1px solid ${T.border}`}}>
                 <div onClick={()=>setIaHubCollapse(p=>({...p,['ficheCall_'+cl.id]:!p['ficheCall_'+cl.id]}))} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 4px',cursor:'pointer',background:isExp?T.bg:'transparent',borderLeft:isExp?'3px solid '+T.accent:'3px solid transparent',transition:'background .15s'}} onMouseEnter={e=>{if(!isExp)e.currentTarget.style.background=T.bg;}} onMouseLeave={e=>{if(!isExp)e.currentTarget.style.background='transparent';}}>
@@ -72,7 +72,7 @@ const FicheVoipSection = ({ ct }) => {
                     }} style={{fontSize:12,color:'#3B82F6',fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:4}}>
                       <I n="file-text" s={12}/> {_T.iaCallTranscripts?.[cl.id]?'Masquer transcriptions':'📝 Voir les transcriptions'}
                     </div>
-                    {(typeof iaHubCollapse!=='undefined'?iaHubCollapse:null)['ficheTr_'+cl.id] && _T.iaCallTranscripts?.[cl.id] && (()=>{
+                    {(iaHubCollapse||{})['ficheTr_'+cl.id] && _T.iaCallTranscripts?.[cl.id] && (()=>{
                       const tr=_T.iaCallTranscripts[cl.id];
                       if(tr._noRec && !tr._hasLive && !tr.live) return <div style={{padding:'10px 12px',borderRadius:8,background:'#F59E0B08',border:'1px solid #F59E0B20',fontSize:12,color:'#F59E0B',lineHeight:1.5}}>Aucune transcription disponible pour cet appel.<br/><span style={{fontSize:11,color:'#92400E'}}>Activez REC avant d'appeler pour l'enregistrement audio.</span></div>;
                       if(tr._empty && !tr.live) return <div style={{padding:'10px 12px',borderRadius:8,background:T.bg,border:'1px solid '+T.border,fontSize:12,color:T.text3,textAlign:'center'}}>Aucune transcription trouvée</div>;

@@ -19,7 +19,7 @@ const FicheAiAnalyses = ({ ct }) => {
   if (!ct.last_ai_analysis_id) return null;
 
   return (()=>{
-                  const _a = Object.values((typeof phoneCallAnalyses!=='undefined'?phoneCallAnalyses:null)||{}).find(a=>a.id===ct.last_ai_analysis_id) || ((typeof contactAnalysesHistory!=='undefined'?contactAnalysesHistory:null)[ct.id]||[])[0] || null;
+                  const _a = Object.values(phoneCallAnalyses||{}).find(a=>a.id===ct.last_ai_analysis_id) || ((contactAnalysesHistory||{})[ct.id]||[])[0] || null;
                   if(!_a) return <div onClick={()=>{api('/api/ai-copilot/contact/'+ct.id+'/analyses').then(d=>{if(d?.analyses?.length)setContactAnalysesHistory(p=>({...p,[ct.id]:d.analyses}));}).catch(()=>{});}} style={{marginTop:10,padding:'8px 12px',borderRadius:8,border:'1px dashed #7C3AED30',background:'#7C3AED04',cursor:'pointer',display:'flex',alignItems:'center',gap:6}}>
                     <I n="cpu" s={12} style={{color:'#7C3AED'}}/>
                     <span style={{fontSize:11,fontWeight:600,color:'#7C3AED'}}>Charger le résumé IA</span>
@@ -31,9 +31,9 @@ const FicheAiAnalyses = ({ ct }) => {
                       <span style={{fontSize:12,fontWeight:700,color:'#7C3AED',flex:1}}>Résumé IA</span>
                       <span style={{fontSize:9,color:T.text3}}>{_a.createdAt?new Date(_a.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short'}):''}</span>
                       <span style={{fontSize:9,fontWeight:700,padding:'2px 8px',borderRadius:6,background:(_a.sentimentScore||50)>60?'#22C55E15':(_a.sentimentScore||50)>30?'#F59E0B15':'#EF444415',color:(_a.sentimentScore||50)>60?'#22C55E':(_a.sentimentScore||50)>30?'#F59E0B':'#EF4444'}}>{_a.sentiment||'Neutre'}</span>
-                      <I n={(typeof iaHubCollapse!=='undefined'?iaHubCollapse:{}).crmResume?'chevron-down':'chevron-up'} s={12} style={{color:T.text3}}/>
+                      <I n={(iaHubCollapse||{}).crmResume?'chevron-down':'chevron-up'} s={12} style={{color:T.text3}}/>
                     </div>
-                    {!(typeof iaHubCollapse!=='undefined'?iaHubCollapse:{}).crmResume && <div style={{padding:'10px 12px',display:'flex',flexDirection:'column',gap:6}}>
+                    {!(iaHubCollapse||{}).crmResume && <div style={{padding:'10px 12px',display:'flex',flexDirection:'column',gap:6}}>
                       <div style={{fontSize:12,color:T.text2,lineHeight:1.5}}>{_a.summary}</div>
                       {_ext3.besoinExprime && <div><span style={{fontSize:10,fontWeight:700,color:'#7C3AED'}}>Besoin :</span> <span style={{fontSize:12,color:T.text}}> {_ext3.besoinExprime}</span></div>}
                       {(_a.actionItems||[]).length>0 && <div><span style={{fontSize:10,fontWeight:700,color:'#7C3AED'}}>Actions :</span> <span style={{fontSize:12,color:T.text}}> {_a.actionItems.join(' · ')}</span></div>}

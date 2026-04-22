@@ -34,7 +34,7 @@ const CrmHeader = () => {
         <div style={{display:"flex",gap:8}}>
           <div style={{position:'relative'}}>
           <Btn small onClick={()=>(typeof setCrmExportModal==='function'?setCrmExportModal:function(){})(!crmExportModal)}><I n="layers" s={13}/> Export</Btn>
-          {(typeof crmExportModal!=='undefined'?crmExportModal:null)&&<div style={{position:'absolute',top:'100%',left:0,zIndex:99,background:T.card,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,0.12)',padding:16,minWidth:280,marginTop:4}} onClick={e=>e.stopPropagation()}>
+          {crmExportModal&&<div style={{position:'absolute',top:'100%',left:0,zIndex:99,background:T.card,border:`1px solid ${T.border}`,borderRadius:10,boxShadow:'0 8px 24px rgba(0,0,0,0.12)',padding:16,minWidth:280,marginTop:4}} onClick={e=>e.stopPropagation()}>
             <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>📥 Export CSV</div>
             {[
               {id:'view',label:'Vue actuelle',desc:`${crmVisibleCols.filter(c=>c.k!=='actions').length} colonnes — ce que tu vois`,icon:'eye'},

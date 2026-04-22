@@ -52,21 +52,21 @@ const CrmKanbanView = () => {
   return (
     <>
     {/* ── Bulk action bar ── */}
-    {(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length > 0 && (
+    {(pipeSelectedIds||[]).length > 0 && (
       <Card style={{padding:"10px 16px",marginBottom:12,display:"flex",alignItems:"center",gap:12,background:T.accentBg,border:`1.5px solid ${T.accent}44`,flexWrap:"wrap",position:'sticky',top:0,zIndex:10}}>
-        <span style={{fontWeight:700,fontSize:13,color:T.accent}}>{(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length} sélectionné{(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length>1?'s':''}</span>
+        <span style={{fontWeight:700,fontSize:13,color:T.accent}}>{(pipeSelectedIds||[]).length} sélectionné{(pipeSelectedIds||[]).length>1?'s':''}</span>
         <select value={pipeBulkStage} onChange={e => (typeof setPipeBulkStage==='function'?setPipeBulkStage:function(){})(e.target.value)} style={{padding:"4px 8px",borderRadius:8,border:`1px solid ${T.border}`,fontSize:12,background:T.surface,color:T.text}}>
           <option value="">Déplacer vers…</option>
           {PIPELINE_STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
         </select>
-        {(typeof pipeBulkStage!=='undefined'?pipeBulkStage:null) && <Btn small primary onClick={() => {
+        {pipeBulkStage && <Btn small primary onClick={() => {
           const MODAL_STAGES = ['rdv_programme','client_valide'];
-          const ids = (typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).filter(id => { const c=(contacts||[]).find(x=>x.id===id); return c && c.pipeline_stage !== (typeof pipeBulkStage!=='undefined'?pipeBulkStage:null); });
+          const ids = (pipeSelectedIds||[]).filter(id => { const c=(contacts||[]).find(x=>x.id===id); return c && c.pipeline_stage !== pipeBulkStage; });
           if(ids.length===0){showNotif('Aucun contact à déplacer','info');return;}
-          if(MODAL_STAGES.includes((typeof pipeBulkStage!=='undefined'?pipeBulkStage:null))){showNotif('Ce stage nécessite une action individuelle (RDV ou contrat)','info');return;}
+          if(MODAL_STAGES.includes(pipeBulkStage)){showNotif('Ce stage nécessite une action individuelle (RDV ou contrat)','info');return;}
           let note = '';
-          if((typeof pipeBulkStage!=='undefined'?pipeBulkStage:null)==='perdu'){note=prompt('Raison de la perte (tous les contacts) :')||'Classé perdu en masse';}
-          if((typeof pipeBulkStage!=='undefined'?pipeBulkStage:null)==='qualifie'){note=prompt('Note de qualification :')||'Qualifié en masse';}
+          if(pipeBulkStage==='perdu'){note=prompt('Raison de la perte (tous les contacts) :')||'Classé perdu en masse';}
+          if(pipeBulkStage==='qualifie'){note=prompt('Note de qualification :')||'Qualifié en masse';}
           ids.forEach(id => handlePipelineStageChange(id, pipeBulkStage, note));
           showNotif(`${ids.length} contact${ids.length>1?'s':''} déplacé${ids.length>1?'s':''} → ${PIPELINE_STAGES.find(s=>s.id===pipeBulkStage)?.label||pipeBulkStage}`,'success');
           setPipeSelectedIds([]); setPipeBulkStage('');
@@ -74,17 +74,17 @@ const CrmKanbanView = () => {
         <Btn small onClick={() => {
           const tag = prompt('Tag à ajouter :');
           if(!tag||!tag.trim()) return;
-          (typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).forEach(id => { const c=(contacts||[]).find(x=>x.id===id); if(c) handleCollabUpdateContact(id, {tags:[...(c.tags||[]),tag.trim()]}); });
-          showNotif(`Tag "${tag.trim()}" ajouté à ${(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length} contact${(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length>1?'s':''}`,'success');
+          (pipeSelectedIds||[]).forEach(id => { const c=(contacts||[]).find(x=>x.id===id); if(c) handleCollabUpdateContact(id, {tags:[...(c.tags||[]),tag.trim()]}); });
+          showNotif(`Tag "${tag.trim()}" ajouté à ${(pipeSelectedIds||[]).length} contact${(pipeSelectedIds||[]).length>1?'s':''}`,'success');
           setPipeSelectedIds([]);
         }}><I n="tag" s={12}/> Tag</Btn>
         {/* Couleur en masse */}
-        <select onChange={e=>{const v=e.target.value;if(!v)return;const allColors=[...PIPELINE_CARD_COLORS_DEFAULT,...JSON.parse(localStorage.getItem('pipeline_custom_colors')||'[]')];const pc=allColors.find(c=>(c.color||'')===(v==='none'?'':v));if(!pc)return;(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).forEach(id=>handleCollabUpdateContact(id,{card_color:pc.color||'',card_label:pc.color?pc.label:''}));showNotif(`Couleur "${pc.label}" appliquée à ${(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length} contact${(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length>1?'s':''}`,'success');e.target.value='';}} style={{padding:"4px 8px",borderRadius:8,border:`1px solid ${T.border}`,fontSize:12,background:T.surface,color:T.text}}>
+        <select onChange={e=>{const v=e.target.value;if(!v)return;const allColors=[...PIPELINE_CARD_COLORS_DEFAULT,...JSON.parse(localStorage.getItem('pipeline_custom_colors')||'[]')];const pc=allColors.find(c=>(c.color||'')===(v==='none'?'':v));if(!pc)return;(pipeSelectedIds||[]).forEach(id=>handleCollabUpdateContact(id,{card_color:pc.color||'',card_label:pc.color?pc.label:''}));showNotif(`Couleur "${pc.label}" appliquée à ${(pipeSelectedIds||[]).length} contact${(pipeSelectedIds||[]).length>1?'s':''}`,'success');e.target.value='';}} style={{padding:"4px 8px",borderRadius:8,border:`1px solid ${T.border}`,fontSize:12,background:T.surface,color:T.text}}>
           <option value="">Couleur…</option>
           {[...PIPELINE_CARD_COLORS_DEFAULT,...JSON.parse(localStorage.getItem('pipeline_custom_colors')||'[]')].map(pc=><option key={pc.color+pc.label} value={pc.color||'none'}>● {pc.label}</option>)}
         </select>
         <Btn small ghost danger onClick={() => {
-          if(!confirm(`Supprimer ${(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length} contact${(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length>1?'s':''} ? Cette action est irréversible.`)) return;
+          if(!confirm(`Supprimer ${(pipeSelectedIds||[]).length} contact${(pipeSelectedIds||[]).length>1?'s':''} ? Cette action est irréversible.`)) return;
           const _delIds = [...pipeSelectedIds];
           api('/api/data/contacts/bulk-delete',{method:'POST',body:{contactIds:_delIds,companyId:company?.id,origin:'pipeline'}}).then(()=>{
             const deletedSet = new Set(_delIds);
@@ -104,8 +104,8 @@ const CrmKanbanView = () => {
       {orderedStages.map(stage => {
         // V5: Tri — rdv par date ASC, nrp par relance ASC, toutes les autres par updatedAt DESC (dernier modifie en haut)
         const stageContacts = filteredCollabCrm.filter(c => (c.pipeline_stage||"nouveau") === stage.id).sort((a,b)=>{if(stage.id==='rdv_programme')return(a.next_rdv_date||'9999').localeCompare(b.next_rdv_date||'9999');if(stage.id==='nrp')return(a.nrp_next_relance||'9999').localeCompare(b.nrp_next_relance||'9999');return(b.updatedAt||b.createdAt||'').localeCompare(a.updatedAt||a.createdAt||'');});
-        const isDragOver = (typeof dragOverStage!=='undefined'?dragOverStage:null) === stage.id && dragContact && ((typeof dragContact!=='undefined'?dragContact:{}).pipeline_stage||"nouveau") !== stage.id;
-        const isColumnDragOver = (typeof dragColumnId!=='undefined'?dragColumnId:null) && (typeof dragColumnId!=='undefined'?dragColumnId:null) !== stage.id;
+        const isDragOver = dragOverStage === stage.id && dragContact && ((dragContact||{}).pipeline_stage||"nouveau") !== stage.id;
+        const isColumnDragOver = dragColumnId && dragColumnId !== stage.id;
         return (
           <div key={stage.id} style={{flex:"1 0 220px",minWidth:220,maxWidth:300,display:"flex",flexDirection:"column"}}
             onDragOver={e => { if(e.dataTransfer.types.includes('columnid')){e.preventDefault();e.currentTarget.style.borderLeft='3px solid '+stage.color;} else handleDragOver(e, stage.id); }}
@@ -123,7 +123,7 @@ const CrmKanbanView = () => {
               {stage.id==='nouveau'&&<div onClick={(e)=>{e.stopPropagation();setShowNewContact(true);}} style={{width:22,height:22,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",background:"#22C55E",color:"#fff",flexShrink:0,boxShadow:"0 1px 3px #22C55E40",transition:"transform .15s"}} onMouseEnter={e=>e.currentTarget.style.transform='scale(1.15)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'} title="Ajouter un nouveau contact"><I n="user-plus" s={12}/></div>}
               {stage.id==='nrp'&&(()=>{const totalNrp=stageContacts.reduce((sum,c)=>{try{return sum+JSON.parse(c.nrp_followups_json||'[]').filter(f=>f.done).length;}catch{return sum;}},0);return totalNrp>0?<span style={{fontSize:9,fontWeight:800,color:'#fff',background:'#EF4444',borderRadius:10,padding:'1px 6px',minWidth:18,textAlign:'center',lineHeight:'16px'}} title={'Total tentatives NRP: '+totalNrp}>{totalNrp} tent.</span>:null;})()}
               <Badge color={stage.color}>{stageContacts.length}</Badge>
-              {stageContacts.length>0&&<input type="checkbox" checked={stageContacts.every(c=>(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).includes(c.id))} onChange={e=>{e.stopPropagation();if(e.target.checked){(typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})(p=>[...new Set([...p,...stageContacts.map(c=>c.id)])]);}else{const stIds=new Set(stageContacts.map(c=>c.id));(typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})(p=>p.filter(id=>!stIds.has(id)));}}} onClick={e=>e.stopPropagation()} title={`Sélectionner tout ${stage.label}`} style={{cursor:'pointer',accentColor:stage.color,width:14,height:14,flexShrink:0}}/>}
+              {stageContacts.length>0&&<input type="checkbox" checked={stageContacts.every(c=>(pipeSelectedIds||[]).includes(c.id))} onChange={e=>{e.stopPropagation();if(e.target.checked){(typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})(p=>[...new Set([...p,...stageContacts.map(c=>c.id)])]);}else{const stIds=new Set(stageContacts.map(c=>c.id));(typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})(p=>p.filter(id=>!stIds.has(id)));}}} onClick={e=>e.stopPropagation()} title={`Sélectionner tout ${stage.label}`} style={{cursor:'pointer',accentColor:stage.color,width:14,height:14,flexShrink:0}}/>}
               {pipelineReadOnly ? (
                 <div style={{width:22,height:22,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:T.text3,fontSize:10}} title="Pipeline imposé par template — non modifiable"><I n="lock" s={10}/></div>
               ) : stage.isCore ? (
@@ -154,8 +154,8 @@ const CrmKanbanView = () => {
                 const _hasCColor=!!ct.card_color;
                 // Contact Share V1 — bordure orange si partagé avec/par ce collab
                 const _isSharedCrm = !!(ct.sharedWithId && collab?.id && (ct.sharedWithId === collab.id || ct.sharedById === collab.id));
-                const _isPipeSelected = (typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).includes(ct.id);
-                const _isCrmSelected = (typeof selectedCrmContact!=='undefined'?selectedCrmContact:null)?.id === ct.id || (typeof pipelineRightContact!=='undefined'?pipelineRightContact:null)?.id === ct.id;
+                const _isPipeSelected = (pipeSelectedIds||[]).includes(ct.id);
+                const _isCrmSelected = selectedCrmContact?.id === ct.id || pipelineRightContact?.id === ct.id;
                 // V5: Détection contact fraichement arrive dans cette colonne (< 30 min)
                 const _newLeadTs = ct.updatedAt || ct.createdAt || '';
                 const _isNewLead = _newLeadTs && (Date.now() - new Date(_newLeadTs).getTime()) < 30 * 60000;
@@ -172,8 +172,8 @@ const CrmKanbanView = () => {
                   draggable={ct._linked}
                   onDragStart={e => handleDragStart(e, ct)}
                   onDragEnd={handleDragEnd}
-                  style={{padding:12,cursor:ct._linked?"grab":"pointer",border:_isRdvPasse?'2px solid #F97316':_isCrmSelected?`2.5px solid ${T.accent}`:_hasCColor?`2.5px solid ${ct.card_color}`:_isPipeSelected?`2px solid ${T.accent}`:`1px solid ${T.border}`,borderLeft:_isRdvPasse?'5px solid #F97316':_isCrmSelected?`5px solid ${T.accent}`:_hasCColor?`6px solid ${ct.card_color}`:_isSharedCrm?'5px solid #F97316':`4px solid ${stage.color}`,background:_isRdvPasse?'linear-gradient(135deg, #F9731612 0%, #F9731604 60%, transparent 100%)':_isCrmSelected?T.accent+'08':_isPipeSelected?T.accentBg:_hasCColor?`linear-gradient(135deg, ${ct.card_color}30 0%, ${ct.card_color}08 60%, transparent 100%)`:undefined,transition:"all .2s",transform:(typeof dragContact!=='undefined'?dragContact:null)?.id===ct.id?"scale(0.95) rotate(1deg)":"none",opacity:(typeof dragContact!=='undefined'?dragContact:null)?.id===ct.id?0.6:1,userSelect:"none",boxShadow:_isRdvPasse?'0 3px 12px #F9731625':_isCrmSelected?`0 4px 16px ${T.accent}25`:_hasCColor?`0 3px 12px ${ct.card_color}30`:'none',borderRadius:14,position:'relative'}}
-                  onClick={() => {if(!(typeof dragContact!=='undefined'?dragContact:null)){
+                  style={{padding:12,cursor:ct._linked?"grab":"pointer",border:_isRdvPasse?'2px solid #F97316':_isCrmSelected?`2.5px solid ${T.accent}`:_hasCColor?`2.5px solid ${ct.card_color}`:_isPipeSelected?`2px solid ${T.accent}`:`1px solid ${T.border}`,borderLeft:_isRdvPasse?'5px solid #F97316':_isCrmSelected?`5px solid ${T.accent}`:_hasCColor?`6px solid ${ct.card_color}`:_isSharedCrm?'5px solid #F97316':`4px solid ${stage.color}`,background:_isRdvPasse?'linear-gradient(135deg, #F9731612 0%, #F9731604 60%, transparent 100%)':_isCrmSelected?T.accent+'08':_isPipeSelected?T.accentBg:_hasCColor?`linear-gradient(135deg, ${ct.card_color}30 0%, ${ct.card_color}08 60%, transparent 100%)`:undefined,transition:"all .2s",transform:dragContact?.id===ct.id?"scale(0.95) rotate(1deg)":"none",opacity:dragContact?.id===ct.id?0.6:1,userSelect:"none",boxShadow:_isRdvPasse?'0 3px 12px #F9731625':_isCrmSelected?`0 4px 16px ${T.accent}25`:_hasCColor?`0 3px 12px ${ct.card_color}30`:'none',borderRadius:14,position:'relative'}}
+                  onClick={() => {if(!dragContact){
                     // Si RDV passé → popup obligatoire avant fiche
                     if(_isRdvPasse){
                       const liveRdv2=(bookings||[]).filter(b=>b.contactId===ct.id&&b.status==='confirmed').sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))[0];
@@ -207,7 +207,7 @@ const CrmKanbanView = () => {
                             <I n={isSender?"send":"inbox"} s={8}/> {isSender?'→':'←'} {(other?.name||'').split(' ')[0]||'Partagé'}
                           </span>;
                         })()}
-                        {(typeof v7FollowersMap!=='undefined'?v7FollowersMap:null)[ct.id]?.executor && (typeof v7FollowersMap!=='undefined'?v7FollowersMap:null)[ct.id].executor.collaboratorId !== collab.id && <span style={{padding:'1px 5px',borderRadius:8,fontSize:8,fontWeight:700,background:'#8B5CF618',color:'#8B5CF6',flexShrink:0}} title={'Chez '+(typeof v7FollowersMap!=='undefined'?v7FollowersMap:null)[ct.id].executor.collaboratorName}>Chez {((typeof v7FollowersMap!=='undefined'?v7FollowersMap:null)[ct.id].executor.collaboratorName||'').split(' ')[0]}</span>}
+                        {(v7FollowersMap||{})[ct.id]?.executor && (v7FollowersMap||{})[ct.id].executor.collaboratorId !== collab.id && <span style={{padding:'1px 5px',borderRadius:8,fontSize:8,fontWeight:700,background:'#8B5CF618',color:'#8B5CF6',flexShrink:0}} title={'Chez '+(v7FollowersMap||{})[ct.id].executor.collaboratorName}>Chez {((v7FollowersMap||{})[ct.id].executor.collaboratorName||'').split(' ')[0]}</span>}
                         {ct.card_label&&<span style={{padding:"1px 5px",borderRadius:8,fontSize:8,fontWeight:700,background:ct.card_color+'18',color:ct.card_color,flexShrink:0}}>{ct.card_label}</span>}
                         {ct.lead_score>0&&<span style={{padding:"1px 5px",borderRadius:8,fontSize:8,fontWeight:700,background:ct.lead_score>60?'#22C55E15':ct.lead_score>30?'#F59E0B15':'#EF444415',color:ct.lead_score>60?'#22C55E':ct.lead_score>30?'#F59E0B':'#EF4444',flexShrink:0}} title="Score lead">{ct.lead_score}</span>}
                       </div>

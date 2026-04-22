@@ -40,32 +40,32 @@ const CrmTableView = () => {
   return (
     <>
       {/* Z5 — Bulk Actions Bar */}
-      {(typeof collabCrmSelectedIds!=='undefined'?collabCrmSelectedIds:{}).length > 0 && (
+      {(collabCrmSelectedIds||[]).length > 0 && (
         <Card style={{padding:"10px 16px",marginBottom:12,display:"flex",alignItems:"center",gap:12,background:T.accentBg,border:`1.5px solid ${T.accent}44`,flexWrap:"wrap"}}>
-          <span style={{fontSize:14,fontWeight:700,color:T.accent}}>{(typeof collabCrmSelectedIds!=='undefined'?collabCrmSelectedIds:{}).length} sélectionné{(typeof collabCrmSelectedIds!=='undefined'?collabCrmSelectedIds:{}).length>1?"s":""} sur {filteredCollabCrm.length}</span>
+          <span style={{fontSize:14,fontWeight:700,color:T.accent}}>{(collabCrmSelectedIds||[]).length} sélectionné{(collabCrmSelectedIds||[]).length>1?"s":""} sur {filteredCollabCrm.length}</span>
           <select value={collabCrmBulkStage} onChange={e=>(typeof setCollabCrmBulkStage==='function'?setCollabCrmBulkStage:function(){})(e.target.value)} style={{padding:"5px 10px",borderRadius:8,border:`1px solid ${T.border}`,background:T.surface,color:T.text,fontSize:12,fontFamily:"inherit"}}>
             <option value="">Changer étape…</option>
             {PIPELINE_STAGES.map(st=><option key={st.id} value={st.id}>{st.label}</option>)}
           </select>
-          {(typeof collabCrmBulkStage!=='undefined'?collabCrmBulkStage:null) && <Btn small primary onClick={()=>{
-            (typeof collabCrmSelectedIds!=='undefined'?collabCrmSelectedIds:{}).forEach(id=>{
-              handleCollabUpdateContact(id, { pipeline_stage:(typeof collabCrmBulkStage!=='undefined'?collabCrmBulkStage:null) });
+          {collabCrmBulkStage && <Btn small primary onClick={()=>{
+            (collabCrmSelectedIds||[]).forEach(id=>{
+              handleCollabUpdateContact(id, { pipeline_stage:collabCrmBulkStage });
             });
-            showNotif(`${(typeof collabCrmSelectedIds!=='undefined'?collabCrmSelectedIds:{}).length} contacts → ${PIPELINE_STAGES.find(s=>s.id===collabCrmBulkStage)?.label}`);
+            showNotif(`${(collabCrmSelectedIds||[]).length} contacts → ${PIPELINE_STAGES.find(s=>s.id===collabCrmBulkStage)?.label}`);
             setCollabCrmSelectedIds([]);setCollabCrmBulkStage("");setCollabCrmAdvFilters(p=>({...p,_selectAll:false}));
           }}>Appliquer</Btn>}
           <Btn small style={{color:"#EF4444",borderColor:"#EF444430"}} onClick={()=>{
-            const reason = prompt('Motif pour classer '+(typeof collabCrmSelectedIds!=='undefined'?collabCrmSelectedIds:{}).length+' lead(s) en Perdu :');
+            const reason = prompt('Motif pour classer '+(collabCrmSelectedIds||[]).length+' lead(s) en Perdu :');
             if(!reason||!reason.trim()){showNotif('Motif obligatoire','danger');return;}
-            (typeof collabCrmSelectedIds!=='undefined'?collabCrmSelectedIds:{}).forEach(id=>handlePipelineStageChange(id,'perdu',reason.trim()));
-            showNotif((typeof collabCrmSelectedIds!=='undefined'?collabCrmSelectedIds:{}).length+' leads classes en Perdu');
+            (collabCrmSelectedIds||[]).forEach(id=>handlePipelineStageChange(id,'perdu',reason.trim()));
+            showNotif((collabCrmSelectedIds||[]).length+' leads classes en Perdu');
             setCollabCrmSelectedIds([]);setCollabCrmAdvFilters(p=>({...p,_selectAll:false}));
           }}><I n="archive" s={12}/> Classer Perdu</Btn>
           {collab?.can_delete_contacts ? (()=>{
             // V5-Fix: collab non-admin ne peut supprimer que SES contacts
             const isAdm = collab?.role === 'admin' || collab?.role === 'supra';
-            const deletableIds = isAdm ? collabCrmSelectedIds : (typeof collabCrmSelectedIds!=='undefined'?collabCrmSelectedIds:{}).filter(id => { const ct = (contacts||[]).find(c=>c.id===id); return ct && ct.assignedTo === collab?.id; });
-            const skippedCount = (typeof collabCrmSelectedIds!=='undefined'?collabCrmSelectedIds:{}).length - deletableIds.length;
+            const deletableIds = isAdm ? collabCrmSelectedIds : (collabCrmSelectedIds||[]).filter(id => { const ct = (contacts||[]).find(c=>c.id===id); return ct && ct.assignedTo === collab?.id; });
+            const skippedCount = (collabCrmSelectedIds||[]).length - deletableIds.length;
             return deletableIds.length>0?<Btn small style={{color:"#EF4444",borderColor:"#EF444430",background:"#EF444410"}} onClick={async()=>{
               if(deletableIds.length === 0) { showNotif('Ces contacts ne vous sont pas assignes — suppression impossible','danger'); return; }
               if(skippedCount > 0) showNotif(skippedCount + ' contact(s) ignore(s) — non assignes a vous','warning');
@@ -88,7 +88,7 @@ const CrmTableView = () => {
             }}><I n="trash-2" s={12}/> Supprimer ({deletableIds.length})</Btn>:null;
           })() : null}
           {/* Supprimer tout — admin only bulk delete via API */}
-          {collab?.can_delete_contacts && (typeof collabCrmAdvFilters!=='undefined'?collabCrmAdvFilters:{})._selectAll && <Btn small style={{color:"#fff",background:"#EF4444",borderColor:"#EF444430"}} onClick={async()=>{
+          {collab?.can_delete_contacts && (collabCrmAdvFilters||{})._selectAll && <Btn small style={{color:"#fff",background:"#EF4444",borderColor:"#EF444430"}} onClick={async()=>{
             if(!confirm('ATTENTION : Supprimer TOUS les '+filteredCollabCrm.length+' contacts ? Cette action est irréversible.'))return;
             if(!confirm('Dernière confirmation : supprimer définitivement '+filteredCollabCrm.length+' contacts ?'))return;
             const r=await api("/api/data/contacts/bulk-delete",{method:"POST",body:{contactIds:filteredCollabCrm.map(c=>c.id),companyId:company.id,origin:'crm_bulk_all'}});
@@ -116,7 +116,7 @@ const CrmTableView = () => {
                   <thead>
                     <tr style={{borderBottom:`1px solid ${T.border}`,background:T.card,position:"sticky",top:0,zIndex:2}}>
                       <th style={{padding:"10px 8px",width:36,background:T.card}}>
-                        <input type="checkbox" checked={(typeof collabCrmSelectedIds!=='undefined'?collabCrmSelectedIds:{}).length>0&&(typeof collabCrmSelectedIds!=='undefined'?collabCrmSelectedIds:{}).length===filteredCollabCrm.length} onChange={e=>{if(e.target.checked){(typeof setCollabCrmSelectedIds==='function'?setCollabCrmSelectedIds:function(){})(filteredCollabCrm.map(c=>c.id));setCollabCrmAdvFilters(p=>({...p,_selectAll:true}));}else{(typeof setCollabCrmSelectedIds==='function'?setCollabCrmSelectedIds:function(){})([]);setCollabCrmAdvFilters(p=>({...p,_selectAll:false}));}}} style={{cursor:"pointer",accentColor:T.accent}} title={(typeof collabCrmSelectedIds!=='undefined'?collabCrmSelectedIds:{}).length>0?"Tout désélectionner":"Tout sélectionner ("+filteredCollabCrm.length+" contacts)"}/>
+                        <input type="checkbox" checked={(collabCrmSelectedIds||[]).length>0&&(collabCrmSelectedIds||[]).length===filteredCollabCrm.length} onChange={e=>{if(e.target.checked){(typeof setCollabCrmSelectedIds==='function'?setCollabCrmSelectedIds:function(){})(filteredCollabCrm.map(c=>c.id));setCollabCrmAdvFilters(p=>({...p,_selectAll:true}));}else{(typeof setCollabCrmSelectedIds==='function'?setCollabCrmSelectedIds:function(){})([]);setCollabCrmAdvFilters(p=>({...p,_selectAll:false}));}}} style={{cursor:"pointer",accentColor:T.accent}} title={(collabCrmSelectedIds||[]).length>0?"Tout désélectionner":"Tout sélectionner ("+filteredCollabCrm.length+" contacts)"}/>
                       </th>
                       {crmVisibleCols.map(col=>(
                         <th key={col.k} onClick={()=>{if(!["actions"].includes(col.k)){(typeof setCollabCrmSortKey==='function'?setCollabCrmSortKey:function(){})(col.k);setCollabCrmSortDir(p=>collabCrmSortKey===col.k?(p==="asc"?"desc":"asc"):"asc");setCollabCrmPage(0);}}} style={{padding:"8px 6px",textAlign:"left",fontWeight:600,fontSize:10,color:T.text3,textTransform:"uppercase",letterSpacing:.3,cursor:col.k!=="actions"?"pointer":"default",userSelect:"none",whiteSpace:"nowrap",background:T.card}}>
@@ -129,7 +129,7 @@ const CrmTableView = () => {
                     {collabPaginatedContacts.map(ct=>(
                       <tr key={ct.id} style={{borderBottom:`1px solid ${T.border}11`,transition:"background .15s"}} onMouseEnter={e=>e.currentTarget.style.background=T.accentBg} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
                         <td style={{padding:"10px 8px",width:36}}>
-                          <input type="checkbox" checked={(typeof collabCrmSelectedIds!=='undefined'?collabCrmSelectedIds:{}).includes(ct.id)} onChange={e=>(typeof setCollabCrmSelectedIds==='function'?setCollabCrmSelectedIds:function(){})(p=>e.target.checked?[...p,ct.id]:p.filter(x=>x!==ct.id))} style={{cursor:"pointer",accentColor:T.accent}}/>
+                          <input type="checkbox" checked={(collabCrmSelectedIds||[]).includes(ct.id)} onChange={e=>(typeof setCollabCrmSelectedIds==='function'?setCollabCrmSelectedIds:function(){})(p=>e.target.checked?[...p,ct.id]:p.filter(x=>x!==ct.id))} style={{cursor:"pointer",accentColor:T.accent}}/>
                         </td>
                         {crmVisibleCols.map(col=><td key={col.k} style={{padding:"6px 6px"}}>{(()=>{
                           const ACT_MAP={call:{l:'Appeler',i:'phone',c:'#22C55E'},relance:{l:'Relancer',i:'phone-outgoing',c:'#EF4444'},rdv:{l:'RDV',i:'calendar-plus',c:'#8B5CF6'},email:{l:'Email',i:'mail',c:'#6366F1'},document:{l:'Document',i:'file-text',c:'#8B5CF6'},sms:{l:'SMS',i:'message-square',c:'#0EA5E9'},attente:{l:'Attente',i:'clock',c:'#F59E0B'},note:{l:'Note',i:'edit-3',c:'#64748B'}};
@@ -179,7 +179,7 @@ const CrmTableView = () => {
                   <Btn small disabled={collabCrmPage===0} onClick={()=>(typeof setCollabCrmPage==='function'?setCollabCrmPage:function(){})(0)} title="Première page"><I n="chevrons-left" s={14}/></Btn>
                   <Btn small disabled={collabCrmPage===0} onClick={()=>(typeof setCollabCrmPage==='function'?setCollabCrmPage:function(){})(p=>p-1)}><I n="chevron-left" s={14}/></Btn>
                   <span style={{fontSize:13,fontWeight:600,color:T.text2,padding:"0 8px"}}>
-                    Page {(typeof collabCrmPage!=='undefined'?collabCrmPage:null)+1} / {collabCrmTotalPages} <span style={{fontWeight:400,color:T.text3}}>({filteredCollabCrm.length} contacts)</span>
+                    Page {collabCrmPage+1} / {collabCrmTotalPages} <span style={{fontWeight:400,color:T.text3}}>({filteredCollabCrm.length} contacts)</span>
                   </span>
                   <Btn small disabled={collabCrmPage>=collabCrmTotalPages-1} onClick={()=>(typeof setCollabCrmPage==='function'?setCollabCrmPage:function(){})(p=>p+1)}><I n="chevron-right" s={14}/></Btn>
                   <Btn small disabled={collabCrmPage>=collabCrmTotalPages-1} onClick={()=>(typeof setCollabCrmPage==='function'?setCollabCrmPage:function(){})(collabCrmTotalPages-1)} title="Dernière page"><I n="chevrons-right" s={14}/></Btn>
