@@ -40,6 +40,7 @@ import { CollabProvider } from "./context/CollabContext";
 import { usePipelineResolved } from "./hooks/usePipelineResolved";
 // Contact Share V1 — partage contact + RDV inter-collab
 import ContactShareModal from "./components/ContactShareModal";
+import CockpitFloatingButton from "./modals/CockpitFloatingButton";
 import AiProfileTab from "./tabs/AiProfileTab";
 import TablesTab from "./tabs/TablesTab";
 import MessagesTab from "./tabs/MessagesTab";
@@ -5965,12 +5966,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       )}
 
 {/* ═══ COCKPIT — Bouton flottant + Fenêtre tour de contrôle appel ═══ */}
-    {voipState === 'in-call' && (typeof phoneActiveCall!=='undefined'?phoneActiveCall:null) && !(typeof cockpitOpen!=='undefined'?cockpitOpen:null) && (
-      <div onClick={()=>setCockpitOpen(true)} style={{position:'fixed',bottom:24,right:24,zIndex:10002,padding:'10px 18px',borderRadius:14,background:'linear-gradient(135deg,#7C3AED,#2563EB)',color:'#fff',fontSize:13,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',gap:8,boxShadow:'0 4px 20px rgba(124,58,237,.4)',animation:'pulse 2s infinite',border:'2px solid rgba(255,255,255,.3)'}}>
-        <I n="monitor" s={18}/> Cockpit
-        <span style={{fontSize:11,opacity:.8}}>{Math.floor((typeof phoneCallTimer!=='undefined'?phoneCallTimer:null)/60).toString().padStart(2,'0')}:{((typeof phoneCallTimer!=='undefined'?phoneCallTimer:null)%60).toString().padStart(2,'0')}</span>
-      </div>
-    )}
+    <CockpitFloatingButton />
 
     {(typeof cockpitOpen!=='undefined'?cockpitOpen:null) && (typeof voipState!=='undefined'?voipState:null) === 'in-call' && (typeof phoneActiveCall!=='undefined'?phoneActiveCall:null) && !(typeof cockpitMinimized!=='undefined'?cockpitMinimized:null) && (()=>{
       const ct = (typeof pipelineRightContact!=='undefined'?pipelineRightContact:null) || contacts.find(c=>c.id===(typeof phoneActiveCall!=='undefined'?phoneActiveCall:{}).contactId) || {};
