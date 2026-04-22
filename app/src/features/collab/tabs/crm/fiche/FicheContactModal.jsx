@@ -33,6 +33,7 @@ import FicheActionsBar from "./FicheActionsBar";
 import FicheBookings from "./FicheBookings";
 import FicheCoordonnees from "./FicheCoordonnees";
 import FicheCustomFields from "./FicheCustomFields";
+import FicheNotes from "./FicheNotes";
 
 const FicheContactModal = () => {
   const ctx = useCollabContext();
@@ -307,15 +308,7 @@ const FicheContactModal = () => {
 
                 {/* Custom Fields (company + collab) */}
                 <FicheCustomFields ct={ct} />
-                <textarea value={ct.notes||""} onChange={e=>{
-                  const v=e.target.value;
-                  setSelectedCrmContact(p=>({...p,notes:v}));
-                  setContacts(p=>p.map(c=>c.id===ct.id?{...c,notes:v}:c));
-                  _T.crmSync?.({notes:v});
-                  clearTimeout(collabNotesTimerRef.current);
-                  collabNotesTimerRef.current=setTimeout(()=>api(`/api/data/contacts/${ct.id}`,{method:"PUT",body:{notes:v,companyId:company?.id}}),800);
-                }} placeholder="Notes, infos commerciales, suivi..." style={{width:"100%",minHeight:70,maxHeight:140,border:`1px solid ${T.border}`,borderRadius:8,padding:10,fontSize:12,fontFamily:"inherit",resize:"vertical",background:T.bg,color:T.text,outline:"none"}}/>
-                <p style={{fontSize:10,color:T.text3,marginTop:4}}>Sauvegarde automatique</p>
+                <FicheNotes ct={ct} />
 
                 {/* V4: Debug mode — Historique des statuts */}
                 <HookIsolator>{()=>{
