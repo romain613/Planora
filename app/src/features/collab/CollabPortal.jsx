@@ -6166,9 +6166,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
         calendars={calendars || []}
         showNotif={showNotif}
         onSuccess={(r) => {
-          // Update local state : marquer le contact comme partagé
+          // Update local state immédiat + refetch du single contact pour fiabilité
           setContacts(prev => prev.map(c => c.id === contactShareTarget.id
-            ? { ...c, sharedWithId: r.sharedWithId, sharedById: r.sharedById, sharedAt: r.sharedAt, shareNote: contactShareTarget._shareNote || c.shareNote }
+            ? { ...c, sharedWithId: r.sharedWithId, sharedById: r.sharedById, sharedAt: r.sharedAt }
             : c
           ));
           if (typeof setPipelineRightContact === 'function') {
@@ -6177,7 +6177,16 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
               : p
             );
           }
-          // Si un booking a été créé, on rafraîchit les bookings depuis le backend
+          // Refetch single contact pour récupérer shareNote + fields backend à jour
+          api(`/api/data/contacts/${encodeURIComponent(contactShareTarget.id)}?companyId=${encodeURIComponent(company?.id || '')}`).then(fresh => {
+            if (fresh && fresh.id) {
+              setContacts(prev => prev.map(c => c.id === fresh.id ? { ...c, ...fresh } : c));
+              if (typeof setPipelineRightContact === 'function') {
+                setPipelineRightContact(p => p && p.id === fresh.id ? { ...p, ...fresh } : p);
+              }
+            }
+          }).catch(() => {});
+          // Si booking créé, rafraîchir la liste des bookings
           if (r.bookingId && typeof setBookings === 'function') {
             api(`/api/bookings?companyId=${encodeURIComponent(company?.id || '')}`).then(rows => {
               if (Array.isArray(rows)) setBookings(rows);

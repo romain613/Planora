@@ -1913,6 +1913,14 @@ if (n === ph) matched.set(c.id, c);
             {ct.shareNote ? <span style={{marginLeft:4,fontStyle:'italic',fontWeight:500,color:T.text3}} title={ct.shareNote}>— {ct.shareNote.slice(0,40)}{ct.shareNote.length>40?'…':''}</span> : null}
           </span>;
         }
+        // Cas edge : contact déjà partagé entre 2 autres collabs (admin qui voit)
+        if (sharedWithId && !isReceiver && !isSender) {
+          const from = (collabs||[]).find(c=>c.id===sharedById);
+          const to = (collabs||[]).find(c=>c.id===sharedWithId);
+          return <span style={{fontSize:10,fontWeight:700,color:T.text3,background:T.bg,border:`1px solid ${T.border}`,borderRadius:5,padding:'2px 7px',display:'inline-flex',alignItems:'center',gap:4}} title="Ce contact est déjà partagé. Désynchronisez d'abord pour pouvoir le repartager.">
+            <I n="lock" s={10}/> Déjà partagé ({from?.name?.split(' ')[0] || '—'} → {to?.name?.split(' ')[0] || '—'})
+          </span>;
+        }
         return <Btn small onClick={()=>{ if(typeof setContactShareTarget==='function') setContactShareTarget(ct); }} style={{fontSize:9,background:'#F9731610',color:'#F97316',border:'1px solid #F9731640'}} title="Envoyer ce contact à un collègue avec un RDV">
           <I n="send" s={10}/> Envoyer à un collègue
         </Btn>;

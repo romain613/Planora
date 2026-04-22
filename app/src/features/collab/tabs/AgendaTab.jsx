@@ -296,8 +296,16 @@ const AgendaTab = () => {
                         opacity:b.status==="cancelled"?0.4:1,
                         boxShadow:`0 1px 3px ${_bColor}40`, color:'#fff',
                       }}>
-                        <div style={{ fontWeight:600, textDecoration:b.status==="cancelled"?"line-through":"none", overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{b.visitorName}</div>
+                        <div style={{ fontWeight:600, textDecoration:b.status==="cancelled"?"line-through":"none", overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
+                          {b.bookingType==='share_transfer' && <span title="Contact partagé par un collègue" style={{ marginRight:4 }}>📤</span>}
+                          {b.visitorName}
+                        </div>
                         <div style={{ fontSize:11, opacity:0.9 }}>{b.time} → {endTime} · {dur}min</div>
+                        {b.bookingType==='share_transfer' && b.notes && (
+                          <div style={{ fontSize:10, opacity:0.85, marginTop:2, fontStyle:'italic', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={b.notes}>
+                            « {b.notes} »
+                          </div>
+                        )}
                       </div>
                     );
                   })}

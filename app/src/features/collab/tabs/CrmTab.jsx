@@ -622,6 +622,8 @@ const CrmTab = () => {
                 const _subObj=_catObj&&_liveRdv.rdv_subcategory&&_catObj.subcategories[_liveRdv.rdv_subcategory]||null;
                 const _borderColor=ct.card_color||stage.color;
                 const _hasCColor=!!ct.card_color;
+                // Contact Share V1 — bordure orange si partagé avec/par ce collab
+                const _isSharedCrm = !!(ct.sharedWithId && collab?.id && (ct.sharedWithId === collab.id || ct.sharedById === collab.id));
                 const _isPipeSelected = (typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).includes(ct.id);
                 const _isCrmSelected = (typeof selectedCrmContact!=='undefined'?selectedCrmContact:null)?.id === ct.id || (typeof pipelineRightContact!=='undefined'?pipelineRightContact:null)?.id === ct.id;
                 // V5: Détection contact fraichement arrive dans cette colonne (< 30 min)
@@ -640,7 +642,7 @@ const CrmTab = () => {
                   draggable={ct._linked}
                   onDragStart={e => handleDragStart(e, ct)}
                   onDragEnd={handleDragEnd}
-                  style={{padding:12,cursor:ct._linked?"grab":"pointer",border:_isRdvPasse?'2px solid #F97316':_isCrmSelected?`2.5px solid ${T.accent}`:_hasCColor?`2.5px solid ${ct.card_color}`:_isPipeSelected?`2px solid ${T.accent}`:`1px solid ${T.border}`,borderLeft:_isRdvPasse?'5px solid #F97316':_isCrmSelected?`5px solid ${T.accent}`:_hasCColor?`6px solid ${ct.card_color}`:`4px solid ${stage.color}`,background:_isRdvPasse?'linear-gradient(135deg, #F9731612 0%, #F9731604 60%, transparent 100%)':_isCrmSelected?T.accent+'08':_isPipeSelected?T.accentBg:_hasCColor?`linear-gradient(135deg, ${ct.card_color}30 0%, ${ct.card_color}08 60%, transparent 100%)`:undefined,transition:"all .2s",transform:(typeof dragContact!=='undefined'?dragContact:null)?.id===ct.id?"scale(0.95) rotate(1deg)":"none",opacity:(typeof dragContact!=='undefined'?dragContact:null)?.id===ct.id?0.6:1,userSelect:"none",boxShadow:_isRdvPasse?'0 3px 12px #F9731625':_isCrmSelected?`0 4px 16px ${T.accent}25`:_hasCColor?`0 3px 12px ${ct.card_color}30`:'none',borderRadius:14,position:'relative'}}
+                  style={{padding:12,cursor:ct._linked?"grab":"pointer",border:_isRdvPasse?'2px solid #F97316':_isCrmSelected?`2.5px solid ${T.accent}`:_hasCColor?`2.5px solid ${ct.card_color}`:_isPipeSelected?`2px solid ${T.accent}`:`1px solid ${T.border}`,borderLeft:_isRdvPasse?'5px solid #F97316':_isCrmSelected?`5px solid ${T.accent}`:_hasCColor?`6px solid ${ct.card_color}`:_isSharedCrm?'5px solid #F97316':`4px solid ${stage.color}`,background:_isRdvPasse?'linear-gradient(135deg, #F9731612 0%, #F9731604 60%, transparent 100%)':_isCrmSelected?T.accent+'08':_isPipeSelected?T.accentBg:_hasCColor?`linear-gradient(135deg, ${ct.card_color}30 0%, ${ct.card_color}08 60%, transparent 100%)`:undefined,transition:"all .2s",transform:(typeof dragContact!=='undefined'?dragContact:null)?.id===ct.id?"scale(0.95) rotate(1deg)":"none",opacity:(typeof dragContact!=='undefined'?dragContact:null)?.id===ct.id?0.6:1,userSelect:"none",boxShadow:_isRdvPasse?'0 3px 12px #F9731625':_isCrmSelected?`0 4px 16px ${T.accent}25`:_hasCColor?`0 3px 12px ${ct.card_color}30`:'none',borderRadius:14,position:'relative'}}
                   onClick={() => {if(!(typeof dragContact!=='undefined'?dragContact:null)){
                     // Si RDV passé → popup obligatoire avant fiche
                     if(_isRdvPasse){
@@ -667,6 +669,14 @@ const CrmTab = () => {
                         <span title={ct.name} style={{fontSize:13,fontWeight:700,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{ct.name}</span>
                         {ct.contact_type==='btb'&&<I n="building-2" s={11} style={{color:'#2563EB',flexShrink:0}} title="Entreprise"/>}
                         {ct._shared&&<span style={{padding:"1px 5px",borderRadius:8,fontSize:8,fontWeight:700,background:"#F9731618",color:"#F97316",flexShrink:0}}>Partagé</span>}
+                        {_isSharedCrm && (() => {
+                          const otherId = ct.sharedById === collab?.id ? ct.sharedWithId : ct.sharedById;
+                          const other = (collabs||[]).find(cc=>cc.id===otherId);
+                          const isSender = ct.sharedById === collab?.id;
+                          return <span title={(isSender?'Partagé avec ':'Envoyé par ')+(other?.name||'un collègue')} style={{padding:"1px 5px",borderRadius:8,fontSize:8,fontWeight:700,background:"#F9731618",color:"#F97316",flexShrink:0,display:'inline-flex',alignItems:'center',gap:3}}>
+                            <I n={isSender?"send":"inbox"} s={8}/> {isSender?'→':'←'} {(other?.name||'').split(' ')[0]||'Partagé'}
+                          </span>;
+                        })()}
                         {(typeof v7FollowersMap!=='undefined'?v7FollowersMap:null)[ct.id]?.executor && (typeof v7FollowersMap!=='undefined'?v7FollowersMap:null)[ct.id].executor.collaboratorId !== collab.id && <span style={{padding:'1px 5px',borderRadius:8,fontSize:8,fontWeight:700,background:'#8B5CF618',color:'#8B5CF6',flexShrink:0}} title={'Chez '+(typeof v7FollowersMap!=='undefined'?v7FollowersMap:null)[ct.id].executor.collaboratorName}>Chez {((typeof v7FollowersMap!=='undefined'?v7FollowersMap:null)[ct.id].executor.collaboratorName||'').split(' ')[0]}</span>}
                         {ct.card_label&&<span style={{padding:"1px 5px",borderRadius:8,fontSize:8,fontWeight:700,background:ct.card_color+'18',color:ct.card_color,flexShrink:0}}>{ct.card_label}</span>}
                         {ct.lead_score>0&&<span style={{padding:"1px 5px",borderRadius:8,fontSize:8,fontWeight:700,background:ct.lead_score>60?'#22C55E15':ct.lead_score>30?'#F59E0B15':'#EF444415',color:ct.lead_score>60?'#22C55E':ct.lead_score>30?'#F59E0B':'#EF4444',flexShrink:0}} title="Score lead">{ct.lead_score}</span>}

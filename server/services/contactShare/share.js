@@ -69,8 +69,16 @@ export function sendContactToCollab(db, params) {
   const isShared = contact.sharedWithId === actorCollaboratorId;
   if (!isOwner && !isShared) throw new Error('NOT_AUTHORIZED_ON_CONTACT');
 
-  // Si déjà un partage en cours : le remplacer (1 seul partage à la fois V1)
+  // Blocage si déjà partagé (ajustement post-V1 — éviter les ré-assignations accidentelles).
+  // Le collab doit d'abord désynchroniser avant de re-partager. Le flag `force` peut être
+  // passé pour bypass explicite (réservé usage interne / admin tools).
   const hasExistingShare = !!contact.sharedWithId;
+  if (hasExistingShare && !params.force) {
+    const err = new Error('CONTACT_ALREADY_SHARED');
+    err.sharedWithId = contact.sharedWithId;
+    err.sharedById = contact.sharedById;
+    throw err;
+  }
 
   const now = nowIso();
   let createdBookingId = null;

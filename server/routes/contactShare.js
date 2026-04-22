@@ -29,6 +29,7 @@ const ERR_MAP = {
   NOT_AUTHORIZED_ON_CONTACT: 403,
   NOT_AUTHORIZED_ON_SHARE: 403,
   CONTACT_NOT_SHARED: 400,
+  CONTACT_ALREADY_SHARED: 409,
 };
 
 // ─── POST /api/contact-share/send ──────────────────────────────────────────
@@ -63,7 +64,13 @@ router.post('/send', requireAuth, enforceCompany, (req, res) => {
   } catch (err) {
     console.error('[CONTACT_SHARE SEND]', err);
     const status = ERR_MAP[err.message] || 500;
-    res.status(status).json({ error: err.message });
+    const body = { error: err.message };
+    // Détails utiles pour CONTACT_ALREADY_SHARED → l'UI peut afficher avec qui
+    if (err.message === 'CONTACT_ALREADY_SHARED') {
+      if (err.sharedWithId) body.sharedWithId = err.sharedWithId;
+      if (err.sharedById) body.sharedById = err.sharedById;
+    }
+    res.status(status).json(body);
   }
 });
 
