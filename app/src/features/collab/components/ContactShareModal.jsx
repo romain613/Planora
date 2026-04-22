@@ -112,6 +112,7 @@ export default function ContactShareModal({
       if (msg === 'CONTACT_ALREADY_SHARED') msg = "Ce contact est déjà partagé. Désynchronisez d'abord avant de le partager à nouveau.";
       else if (msg === 'CANNOT_SHARE_WITH_SELF') msg = "Vous ne pouvez pas vous envoyer un contact à vous-même.";
       else if (msg === 'NOT_AUTHORIZED_ON_CONTACT') msg = "Vous n'avez pas l'autorisation de partager ce contact.";
+      else if (msg === 'SLOT_CONFLICT') msg = "Ce créneau est déjà réservé.";
       if (showNotif) showNotif("Erreur : " + msg, "danger");
     } finally {
       setSubmitting(false);

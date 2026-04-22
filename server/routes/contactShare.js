@@ -30,6 +30,7 @@ const ERR_MAP = {
   NOT_AUTHORIZED_ON_SHARE: 403,
   CONTACT_NOT_SHARED: 400,
   CONTACT_ALREADY_SHARED: 409,
+  SLOT_CONFLICT: 409,
 };
 
 // ─── POST /api/contact-share/send ──────────────────────────────────────────
@@ -69,6 +70,10 @@ router.post('/send', requireAuth, enforceCompany, (req, res) => {
     if (err.message === 'CONTACT_ALREADY_SHARED') {
       if (err.sharedWithId) body.sharedWithId = err.sharedWithId;
       if (err.sharedById) body.sharedById = err.sharedById;
+    }
+    if (err.message === 'SLOT_CONFLICT') {
+      if (err.conflictBookingId) body.conflictBookingId = err.conflictBookingId;
+      if (err.conflictTime) body.conflictTime = err.conflictTime;
     }
     res.status(status).json(body);
   }

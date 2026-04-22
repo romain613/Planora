@@ -10,6 +10,9 @@
 //   - desyncContactShare : le destinataire devient owner, les champs share
 //     sont nettoyés, le contact disparaît du pipeline de l'émetteur
 
+import { checkBookingConflict } from '../bookings/checkBookingConflict.js';
+import { applyBookingCreatedSideEffects } from '../bookings/applyBookingCreatedSideEffects.js';
+
 // Helper : génère un id court style "bk_<ts>_<rand>"
 function newId(prefix) {
   return prefix + '_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
@@ -83,6 +86,23 @@ export function sendContactToCollab(db, params) {
   const now = nowIso();
   let createdBookingId = null;
 
+  // R1 + R5 — check conflit AVANT d'ouvrir la transaction (rejet propre, pas de rollback silencieux)
+  if (bookingDate && bookingTime && calendarId) {
+    const { conflict, existingBooking } = checkBookingConflict(db, {
+      collaboratorId: targetCollaboratorId,
+      date: bookingDate,
+      startTime: bookingTime,
+      duration: bookingDuration || 30,
+    });
+    if (conflict) {
+      console.log(`[CONTACT-SHARE CONFLICT] target=${targetCollaboratorId} date=${bookingDate} time=${bookingTime} vs existing=${existingBooking.id}@${existingBooking.time}`);
+      const err = new Error('SLOT_CONFLICT');
+      err.conflictBookingId = existingBooking.id;
+      err.conflictTime = existingBooking.time;
+      throw err;
+    }
+  }
+
   const run = db.transaction(() => {
     // 1. Update contact — marquer le partage
     // Règle : l'owner reste inchangé (l'émetteur). Le destinataire prend sharedWithId.
@@ -125,16 +145,11 @@ export function sendContactToCollab(db, params) {
         targetCollaboratorId
       );
 
-      // Incrémenter totalBookings du contact
+      // Lien booking ↔ contact (champ spécifique V1 share — pas géré par le helper).
+      // totalBookings, next_rdv_date, rdv_status, pipeline_stage, behavior_score
+      // sont appliqués via applyBookingCreatedSideEffects() après la transaction.
       try {
-        db.prepare('UPDATE contacts SET totalBookings = COALESCE(totalBookings, 0) + 1 WHERE id = ?').run(contactId);
-      } catch {}
-
-      // Marquer le prochain RDV
-      try {
-        db.prepare(
-          "UPDATE contacts SET next_rdv_date = ?, next_rdv_booking_id = ?, rdv_status = 'programme' WHERE id = ?"
-        ).run(bookingDate + (bookingTime ? 'T' + bookingTime : ''), createdBookingId, contactId);
+        db.prepare('UPDATE contacts SET next_rdv_booking_id = ? WHERE id = ?').run(createdBookingId, contactId);
       } catch {}
     }
 
@@ -170,6 +185,16 @@ export function sendContactToCollab(db, params) {
   });
 
   run();
+
+  // Effets de bord booking créé (hors transaction — autoPipelineAdvance + behavior_score + totalBookings + rdv_status)
+  // Uniquement si un vrai RDV a été créé. Si share sans RDV → pas d'effet pipeline.
+  if (createdBookingId) {
+    applyBookingCreatedSideEffects(db, {
+      contactId,
+      bookingDate,
+      source: 'contact_share_booking',
+    });
+  }
 
   return {
     success: true,

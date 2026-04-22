@@ -1678,11 +1678,11 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
 
       const bkId = 'bk'+Date.now();
       const ct = (contacts||[]).find(c=>c.id===f.contactId);
-      const defaultCal = (calendars||[]).find(c=>{try{const collabs=Array.isArray(c.collaborators)?c.collaborators:JSON.parse(c.collaborators_json||'[]');return collabs.includes(collab.id);}catch{return false;}}) || (calendars||[])[0];
-      const calId = f.calendarId||defaultCal?.id||'';
-      // SECURITE: ne pas créer de booking sans calendarId — sinon invisible dans l'agenda
-      console.log('[BOOKING DEBUG] calId:', calId, 'calendars:', calendars?.length, 'collab.id:', collab.id, 'defaultCal:', defaultCal?.id);
-      if(!calId) { setBookErr('Aucun calendrier trouvé pour votre compte — contactez votre admin'); console.error('[BOOKING BLOCK] No calendarId found'); return false; }
+      // R2 — ZÉRO fallback implicite : on ne prend QUE le calendar assigné au collab courant
+      const collabCalendar = (calendars||[]).find(c=>{try{const collabs=Array.isArray(c.collaborators)?c.collaborators:JSON.parse(c.collaborators_json||'[]');return collabs.includes(collab.id);}catch{return false;}});
+      const calId = f.calendarId||collabCalendar?.id||'';
+      console.log('[BOOKING DEBUG] calId:', calId, 'calendars:', calendars?.length, 'collab.id:', collab.id, 'collabCalendar:', collabCalendar?.id);
+      if(!calId) { setBookErr('Aucun agenda assigné à ce collaborateur — contactez votre admin'); console.error('[BOOKING BLOCK] No calendarId found for collab', collab.id); return false; }
       const prevStage = ct?.pipeline_stage||'nouveau';
       const bk = {id:bkId, companyId:company.id, collaboratorId:collab.id, calendarId:calId, contactId:f.contactId, visitorName:ct?.name||f.contactName||'', visitorEmail:ct?.email||'', visitorPhone:f.number||ct?.phone||'', date:f.date, time:f.time, duration:f.duration||30, status:'confirmed', source:'pipeline', notes:f.notes||'RDV depuis pipeline', rdv_category:f.rdv_category||'', rdv_subcategory:f.rdv_subcategory||''};
       // Ajouter immédiatement au state local (optimistic)
@@ -1695,13 +1695,22 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       api('/api/bookings',{method:'POST',body:bk}).then(r => {
         if(r && r.error) throw new Error(r.error);
         console.log('[BOOKING OK]', bk.id, f.date, f.time);
-        // V3: refetch contact individuel — le backend a exécuté autoPipelineAdvance
-        api(`/api/data/contacts/${f.contactId}`).then(fresh => {
-          if (fresh?.id) { setContacts(p => p.map(c => c.id === fresh.id ? fresh : c)); }
-        }).catch(() => {});
+        // R4 — utiliser le contact retourné par le serveur (synchro fiable, pas de refetch aveugle)
+        if (r?.contact?.id) {
+          setContacts(p => {
+            const exists = p.some(c => c.id === r.contact.id);
+            return exists ? p.map(c => c.id === r.contact.id ? r.contact : c) : [...p, r.contact];
+          });
+        }
+        // R4 — utiliser le booking final (incl. id éventuellement réécrit par le backend)
+        if (r?.booking?.id) {
+          setBookings(p => p.map(b => b.id === bkId ? { ...b, ...r.booking } : b));
+        }
       }).catch((err)=>{
         console.error('[BOOKING FAIL]', err);
-        showNotif('Erreur création RDV : '+(err?.message||'échec serveur')+' — annulation en cours','danger');
+        const msg = err?.message || '';
+        const isConflict = /occup|conflit|chevauch/i.test(msg);
+        showNotif(isConflict ? 'Ce créneau est déjà réservé.' : ('Erreur création RDV : '+(msg||'échec serveur')+' — annulation en cours'),'danger');
         // Rollback booking
         setBookings(p=>p.filter(b=>b.id!==bkId));
         // Rollback contact: remettre le stage précédent + vider le booking fantôme
