@@ -21,8 +21,6 @@ import { COMPANIES, INIT_COLLABS, defAvail, INIT_AVAILS, INIT_CALS, INIT_BOOKING
 
 // Phase 3 — API service
 import { API_BASE, recUrl, collectEnv, api, getAutoTicketCompanyId, setAutoTicketCompanyId } from "../../shared/services/api";
-import { TAB_ID } from "../../shared/state/tabId";
-import { initBroadcast, publishBroadcast, subscribeBroadcast, closeBroadcast } from "../../shared/state/broadcast";
 
 // Phase 4 — extracted screens (relative path from features/collab/)
 import {
@@ -161,44 +159,6 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const [collabEditingCell, setCollabEditingCell] = useState(null);
   const [collabEditingCellValue, setCollabEditingCellValue] = useState("");
   const [collabSelectedRowId, setCollabSelectedRowId] = useState(null);
-
-  // S2 P0 Patch D — feedback UI par contact : saving | saved | error | external_update (auto-clear)
-  const [contactSaveStatus, setContactSaveStatus] = useState({});
-  // S3.1 — ref miroir de contactSaveStatus, lue dans le handler subscribe (closure-safe)
-  const contactSaveStatusRef = useRef({});
-  useEffect(() => { contactSaveStatusRef.current = contactSaveStatus; }, [contactSaveStatus]);
-
-  // S3.1 — BroadcastChannel cross-tab : init + subscribe au mount, close au unmount
-  useEffect(() => {
-    if (!company?.id || !collab?.id) return;
-    const ok = initBroadcast(company.id, collab.id);
-    if (!ok) return; // fallback silencieux si API absente
-    const cleanup = subscribeBroadcast((msg) => {
-      if (!msg || msg.type !== 'contact_updated') return;
-      const { contactId, fields, updatedAt, tabId } = msg.payload || {};
-      if (!contactId || !fields) return;
-      // Guard 1 : ignore self-broadcast
-      if (tabId && tabId === TAB_ID) return;
-      // Guard 2 : ignore si save local en cours sur ce contact (laisser 409 faire son job)
-      if (contactSaveStatusRef.current[contactId] === 'saving') return;
-      // Applique les fields reçus dans le state local + sync vues ouvertes
-      const merge = (c) => c && c.id === contactId ? { ...c, ...fields, updatedAt: updatedAt || c.updatedAt } : c;
-      setContacts(p => Array.isArray(p) ? p.map(merge) : p);
-      if ((typeof selectedCrmContact !== 'undefined' ? selectedCrmContact : null)?.id === contactId) {
-        (typeof setSelectedCrmContact === 'function' ? setSelectedCrmContact : function(){})(p => p ? { ...p, ...fields, updatedAt: updatedAt || p.updatedAt } : p);
-      }
-      if ((typeof pipelineRightContact !== 'undefined' ? pipelineRightContact : null)?.id === contactId) {
-        (typeof setPipelineRightContact === 'function' ? setPipelineRightContact : function(){})(p => p ? { ...p, ...fields, updatedAt: updatedAt || p.updatedAt } : p);
-      }
-      // Badge external_update (1.5s auto-clear) — visuel violet discret
-      setContactSaveStatus(p => ({ ...p, [contactId]: 'external_update' }));
-      setTimeout(() => setContactSaveStatus(p => {
-        if (p[contactId] !== 'external_update') return p;
-        const n = { ...p }; delete n[contactId]; return n;
-      }), 1500);
-    });
-    return () => { try { cleanup(); } catch (_) {} closeBroadcast(); };
-  }, [company?.id, collab?.id]);
 
   // Objectifs tab state
   const [myGoals, setMyGoals] = useState([]);
@@ -776,65 +736,48 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   useEffect(() => { voipStateRef.current = (typeof voipState!=='undefined'?voipState:null); }, [voipState]);
   const [voipCurrentCallLogId, setVoipCurrentCallLogId] = useState(null);
   // Initialize Twilio Device for real VoIP calls (SDK now bundled via npm)
-  // Deferred to first user gesture (browser autoplay policy: AudioContext cannot
-  // start until user interacts — otherwise "AudioContext was not allowed to start"
-  // warning spams the console). Token is pre-fetched at mount so the device
-  // instantiation at first click is immediate.
   useEffect(() => {
     if (!(typeof voipConfigured!=='undefined'?voipConfigured:null) || !company?.id) return;
+    // Find this collaborator's assigned number
     const myNumber = ((typeof appMyPhoneNumbers!=='undefined'?appMyPhoneNumbers:null)||[]).find(pn => pn.collaboratorId === collab.id && pn.status === 'assigned');
-    if (!myNumber) return;
-    console.log('[COLLAB VOIP] Pre-fetching token for', collab.id, 'number:', myNumber.phoneNumber);
-    // 1) Fetch token immediately (doesn't require user gesture)
-    const tokenPromise = api('/api/voip/token', { method:'POST', body:{ companyId:company.id, collaboratorId:collab.id } })
-      .catch(err => { console.error('[COLLAB VOIP TOKEN ERR]', err); return null; });
-    // 2) Defer actual Device creation to first user gesture
-    let initialized = false;
-    const initDevice = async () => {
-      if (initialized) return;
-      initialized = true;
-      const data = await tokenPromise;
-      if (!data?.token || data.demo) { console.warn('[COLLAB VOIP] No real token, skipping device init'); return; }
-      console.log('[COLLAB VOIP] User gesture received, creating Device...');
-      const device = new TwilioDevice(data.token, { codecPreferences:['opus','pcmu'], edge:'dublin' });
-      device.on('registered', () => console.log('[COLLAB VOIP] Device registered ✓'));
-      device.on('error', (err) => { console.error('[COLLAB VOIP ERR]', err); showNotif('Erreur VoIP: '+err.message,'danger'); });
-      device.on('incoming', (call) => {
-        setVoipState('incoming');
-        voipCallRef.current = call;
-        setPhoneIncomingInfo({ from: call.parameters?.From || 'Inconnu' });
-        setPhoneDialNumber(call.parameters?.From || '');
-        setPhoneDialerMinimized(false);
-        const incomingNum = call.parameters?.From || '';
-        if (incomingNum) {
-          api(`/api/voip/lookup?phone=${encodeURIComponent(incomingNum)}&companyId=${company.id}`)
-            .then(ct => { if (ct?.name) setPhoneIncomingInfo(prev => ({ ...prev, contactName: ct.name, contactId: ct.id })); })
-            .catch(() => {});
-        }
-        showNotif('Appel entrant...','info');
-        call.on('cancel', () => { setVoipState('idle'); setPhoneIncomingInfo(null); setPhoneDialNumber(''); });
-        call.on('disconnect', () => { setVoipState('idle'); voipCallRef.current = null; setPhoneIncomingInfo(null); setPhoneDialNumber(''); });
-      });
-      device.register();
-      voipDeviceRef.current = device;
-    };
-    const gestureOpts = { once: true, capture: true, passive: true };
-    document.addEventListener('click',       initDevice, gestureOpts);
-    document.addEventListener('keydown',     initDevice, gestureOpts);
-    document.addEventListener('touchstart',  initDevice, gestureOpts);
+    if (!myNumber) return; // No assigned number → no VoIP device
+    console.log('[COLLAB VOIP] Initializing device for', collab.id, 'number:', myNumber.phoneNumber);
+    api('/api/voip/token', { method:'POST', body:{ companyId:company.id, collaboratorId:collab.id } })
+      .then(data => {
+        if (!data?.token || data.demo) { console.warn('[COLLAB VOIP] Demo token, skipping device init'); return; }
+        console.log('[COLLAB VOIP] Got real token, creating Device...');
+        const device = new TwilioDevice(data.token, { codecPreferences:['opus','pcmu'], edge:'dublin' });
+        device.on('registered', () => console.log('[COLLAB VOIP] Device registered ✓'));
+        device.on('error', (err) => { console.error('[COLLAB VOIP ERR]', err); showNotif('Erreur VoIP: '+err.message,'danger'); });
+        device.on('incoming', (call) => {
+          setVoipState('incoming');
+          voipCallRef.current = call;
+          setPhoneIncomingInfo({ from: call.parameters?.From || 'Inconnu' });
+          setPhoneDialNumber(call.parameters?.From || '');
+          setPhoneDialerMinimized(false);
+          // Lookup contact by phone number
+          const incomingNum = call.parameters?.From || '';
+          if (incomingNum) {
+            api(`/api/voip/lookup?phone=${encodeURIComponent(incomingNum)}&companyId=${company.id}`)
+              .then(ct => { if (ct?.name) setPhoneIncomingInfo(prev => ({ ...prev, contactName: ct.name, contactId: ct.id })); })
+              .catch(() => {});
+          }
+          showNotif('Appel entrant...','info');
+          call.on('cancel', () => { setVoipState('idle'); setPhoneIncomingInfo(null); setPhoneDialNumber(''); });
+          call.on('disconnect', () => { setVoipState('idle'); voipCallRef.current = null; setPhoneIncomingInfo(null); setPhoneDialNumber(''); });
+        });
+        device.register();
+        voipDeviceRef.current = device;
+        console.log('[COLLAB VOIP] Device created and registering...');
+      })
+      .catch(err => console.error('[COLLAB VOIP TOKEN ERR]', err));
     // Listen for floating keypad dial messages
     const onPopupMsg = (e) => {
       if(e.data?.type==='c360-dial'&&e.data.number) { setPhoneDialNumber(e.data.number); setTimeout(()=>{ const btn = document.querySelector('[data-dial-call-btn]'); if(btn) btn.click(); }, 100); }
       if(e.data?.type==='c360-hangup') { const btn = document.querySelector('[data-dial-hangup-btn]'); if(btn) btn.click(); }
     };
     window.addEventListener('message', onPopupMsg);
-    return () => {
-      document.removeEventListener('click',      initDevice, { capture: true });
-      document.removeEventListener('keydown',    initDevice, { capture: true });
-      document.removeEventListener('touchstart', initDevice, { capture: true });
-      window.removeEventListener('message', onPopupMsg);
-      if(voipDeviceRef.current) { voipDeviceRef.current.destroy(); voipDeviceRef.current = null; }
-    };
+    return () => { window.removeEventListener('message', onPopupMsg); if(voipDeviceRef.current) { voipDeviceRef.current.destroy(); voipDeviceRef.current = null; } };
   }, [voipConfigured, company?.id, collab.id, ((typeof appMyPhoneNumbers!=='undefined'?appMyPhoneNumbers:null)||[]).length]);
 
   // Load call forms assigned to this collaborator
@@ -2487,7 +2430,6 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     });
     const result = [];
     const usedContactIds = new Set();
-    const isAdminView2 = collab?.role === 'admin' || collab?.role === 'supra' || isAdminView;
     for (const [key, data] of Object.entries(visitorMap)) {
       if (isCollab(data.email, data.name)) continue;
       // V5-ISOLATION: matcher uniquement les contacts de la MEME company et assignes au collab (ou shared)
@@ -2504,6 +2446,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     // Contacts manuels — exclure aussi les collaborateurs
     // V5-ISOLATION: collab ne voit QUE ses contacts (assignedTo ou shared_with)
     // Admin voit tout. Pas de rétrocompatibilité "unassigned visible par tous"
+    const isAdminView2 = collab?.role === 'admin' || collab?.role === 'supra' || isAdminView;
     (contacts||[]).filter(c => c.companyId === company.id && !usedContactIds.has(c.id) && !isCollab(c.email, c.name)).forEach(c => {
       const isOwned = c.assignedTo === collab.id;
       const isShared = Array.isArray(c.shared_with) && c.shared_with.includes(collab.id);
@@ -2725,36 +2668,12 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     api("/api/data/contacts", { method:"POST", body:nc });
     return nc;
   };
-  const handleCollabUpdateContact = (id, updates, onDone = null) => {
+  const handleCollabUpdateContact = (id, updates) => {
     // Securite: valider pipeline_stage si present
     if (updates.pipeline_stage) {
       const VALID = ['nouveau','contacte','qualifie','rdv_programme','nrp','client_valide','perdu', ...((typeof pipelineStages!=='undefined'?pipelineStages:null)||[]).map(s=>s.id)];
       if (!VALID.includes(updates.pipeline_stage)) { console.warn('[CONTACT] Stage invalide:', updates.pipeline_stage); updates.pipeline_stage = 'nouveau'; }
     }
-    // S2 P0 Patch C: capturer updatedAt AVANT l'optimistic update pour l'envoyer au backend
-    // (sinon le check 409 côté backend ne déclenche jamais — on enverrait la valeur déjà écrasée)
-    const prevContact = (contacts || []).find(c => c.id === id);
-    const prevUpdatedAt = prevContact?.updatedAt || '';
-    // S2 P0 Patch A: snapshot des champs modifiés pour rollback sur échec définitif
-    // Rollback CHAMP PAR CHAMP (pas full contact) pour ne pas écraser d'autres
-    // modifications concurrentes sur ce contact. Seuls les champs user (non préfixés _) snappés.
-    const prevFields = {};
-    for (const k of Object.keys(updates)) {
-      if (!k.startsWith('_')) prevFields[k] = prevContact ? prevContact[k] : undefined;
-    }
-    const rollbackFields = () => {
-      setContacts(p => p.map(c => c.id === id ? {...c, ...prevFields} : c));
-      if ((typeof selectedCrmContact!=='undefined'?selectedCrmContact:null)?.id === id) (typeof setSelectedCrmContact==='function'?setSelectedCrmContact:function(){})(p => p ? {...p, ...prevFields} : p);
-      if ((typeof pipelineRightContact!=='undefined'?pipelineRightContact:null)?.id === id) (typeof setPipelineRightContact==='function'?setPipelineRightContact:function(){})(p => p ? {...p, ...prevFields} : p);
-      if (typeof setSelectedContact === 'function') { try { setSelectedContact(p => p?.id === id ? {...p, ...prevFields} : p); } catch {} }
-      if (typeof setAllContacts === 'function') { try { setAllContacts(p => Array.isArray(p) ? p.map(c => c.id === id ? {...c, ...prevFields} : c) : p); } catch {} }
-    };
-    // S2 P0 Patch D — badge état du save par contact
-    const markStatus = (st, autoclearMs = 0) => {
-      setContactSaveStatus(p => ({ ...p, [id]: st }));
-      if (autoclearMs > 0) setTimeout(() => setContactSaveStatus(p => { if (p[id] !== st) return p; const n = {...p}; delete n[id]; return n; }), autoclearMs);
-    };
-    markStatus('saving');
     // Optimistic update local state + mark as recently edited (protect from auto-refresh)
     // V5: Injecter updatedAt local pour que le badge inactivite disparaisse immediatement
     contactsLocalEditRef.current = Date.now();
@@ -2767,7 +2686,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     if (typeof setAllContacts === 'function') { try { setAllContacts(p => Array.isArray(p) ? p.map(c => c.id === id ? {...c, ...updates} : c) : p); } catch {} }
     // V4: Save to backend — source/origin/tabId + gestion 409 Conflict + contact frais
     const saveToBackend = (attempt = 1) => {
-      api(`/api/data/contacts/${id}`, { method:"PUT", body:{ ...updates, companyId: company?.id, _tabId: TAB_ID, _updatedAt: prevUpdatedAt, _source: updates._source || 'manual', _origin: updates._origin || '', _reason: updates._reason || '' } })
+      api(`/api/data/contacts/${id}`, { method:"PUT", body:{ ...updates, companyId: company?.id, _tabId: TAB_ID, _source: updates._source || 'manual', _origin: updates._origin || '', _reason: updates._reason || '' } })
         .then(r => {
           if (r?.error && r?.contact) {
             // V3: 409 Conflict — données modifiées entre-temps, utiliser le contact frais
@@ -2777,19 +2696,10 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
             if ((typeof selectedCrmContact!=='undefined'?selectedCrmContact:null)?.id === id) (typeof setSelectedCrmContact==='function'?setSelectedCrmContact:function(){})(fresh);
             if ((typeof pipelineRightContact!=='undefined'?pipelineRightContact:null)?.id === id) (typeof setPipelineRightContact==='function'?setPipelineRightContact:function(){})(fresh);
             showNotif('Contact mis à jour par une autre source — données rechargées', 'warning');
-            markStatus('error', 5000);
-            // S2 P0 Patch B: callback final (save n'a pas persisté la modif locale)
-            if (typeof onDone === 'function') onDone(false);
           } else if (!r || r.error) {
             console.error('[CONTACT SAVE] Erreur serveur:', r?.error, '→ retry', attempt);
             if (attempt < 3) setTimeout(() => saveToBackend(attempt + 1), 1000 * attempt);
-            else {
-              // S2 P0 Patch A: rollback UI sur échec définitif serveur
-              rollbackFields();
-              showNotif('Modification annulée (erreur serveur persistante)', 'danger');
-              markStatus('error', 5000);
-              if (typeof onDone === 'function') onDone(false);
-            }
+            else showNotif('Erreur: modification non sauvegardée. Réessayez.', 'danger');
           } else {
             console.log('[CONTACT SAVE] OK:', id, Object.keys(updates).join(', '));
             // V3: si le backend retourne le contact frais, synchroniser le state
@@ -2800,37 +2710,21 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
             }
             // V3: délai de protection 5s post-succès
             setTimeout(() => { if (Date.now() - contactsLocalEditRef.current > 4000) contactsLocalEditRef.current = 0; }, 5000);
-            markStatus('saved', 2000);
-            // S3.1 — broadcast cross-tab : notifier les autres onglets du même user
-            // Payload minimal (champs user uniquement, pas les _* internes)
-            try {
-              const publishFields = {};
-              for (const k of Object.keys(updates)) { if (!k.startsWith('_')) publishFields[k] = updates[k]; }
-              const freshUpdatedAt = (r && r.contact && r.contact.updatedAt) || _now;
-              publishBroadcast('contact_updated', { contactId: id, fields: publishFields, updatedAt: freshUpdatedAt, tabId: TAB_ID });
-            } catch (_) {}
-            // S2 P0 Patch B: callback final succès
-            if (typeof onDone === 'function') onDone(true);
           }
         })
         .catch(err => {
           console.error('[CONTACT SAVE] Echec réseau:', err.message, '→ retry', attempt);
           if (attempt < 3) setTimeout(() => saveToBackend(attempt + 1), 1000 * attempt);
           else {
-            showNotif('Modification annulée (erreur réseau)', 'danger');
+            showNotif('Erreur réseau: modification non sauvegardée', 'danger');
             // V3: refetch individuel — ne pas écraser les autres contacts modifiés localement
-            // S2 P0 Patch A: si refetch échoue, rollback champ par champ au lieu de laisser l'optimistic update
             api(`/api/data/contacts/${id}?companyId=${company?.id}`).then(fresh => {
               if (fresh && fresh.id) {
                 setContacts(p => p.map(c => c.id === id ? fresh : c));
                 if ((typeof selectedCrmContact!=='undefined'?selectedCrmContact:null)?.id === id) (typeof setSelectedCrmContact==='function'?setSelectedCrmContact:function(){})(fresh);
                 if ((typeof pipelineRightContact!=='undefined'?pipelineRightContact:null)?.id === id) (typeof setPipelineRightContact==='function'?setPipelineRightContact:function(){})(fresh);
-              } else {
-                rollbackFields();
               }
-              markStatus('error', 5000);
-              if (typeof onDone === 'function') onDone(false);
-            }).catch(() => { rollbackFields(); markStatus('error', 5000); if (typeof onDone === 'function') onDone(false); });
+            }).catch(() => {});
           }
         });
     };
@@ -2883,9 +2777,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     // V3: verrou anti-double-clic — empêche 2 changements simultanés sur le même contact
     if (pipelineActionLockRef.current[contactId]) { console.warn('[PIPELINE] Action en cours pour', contactId, '→ ignoré'); return; }
     pipelineActionLockRef.current[contactId] = true;
-    // S2 P0 Patch B: safety net porté à 10s (couvre 3 retries du save, 1+2+3s backoff).
-    // Le lock est surtout libéré via callback après réponse backend (voir plus bas).
-    setTimeout(() => { delete pipelineActionLockRef.current[contactId]; }, 10000);
+    setTimeout(() => { delete pipelineActionLockRef.current[contactId]; }, 5000); // timeout sécurité 5s
     // ── SECURITE: valider que le stage existe ──
     const VALID_STAGES = ['nouveau','contacte','qualifie','rdv_programme','nrp','client_valide','perdu', ...((typeof pipelineStages!=='undefined'?pipelineStages:null)||[]).map(s=>s.id)];
     if (!VALID_STAGES.includes(newStage)) {
@@ -2991,13 +2883,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     }
     // V3: _forceStageChange = action utilisateur explicite, autorise la descente de stage côté backend
     // V4: source=manual + origin contextualisé pour traçabilité
-    // S2 P0 Patch B: lock libéré via callback onDone après cycle complet du save (succès/échec/409),
-    // pas en synchrone juste après le lancement du save (qui laissait le lock en réalité aveugle).
-    handleCollabUpdateContact(
-      contactId,
-      { ...updates, _forceStageChange: true, _source: 'manual', _origin: 'pipeline_stage_change', _reason: note || '' },
-      () => { delete pipelineActionLockRef.current[contactId]; }
-    );
+    handleCollabUpdateContact(contactId, { ...updates, _forceStageChange: true, _source: 'manual', _origin: 'pipeline_stage_change', _reason: note || '' });
+    // Déverrouiller après save
+    delete pipelineActionLockRef.current[contactId];
     // Log pipeline history
     if (fromStage !== newStage) {
       api('/api/data/pipeline-history', { method:'POST', body:{ contactId, companyId:company?.id, fromStage, toStage:newStage, userId:collab.id, userName:collab.name, note }});
@@ -3333,7 +3221,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       handleCollabSendChat, handleCollabChatFiles, handleCollabChatPaste,
       handleCollabShareContactCard,
       // Objectifs tab
-      goalsLoading, myGoals, setMyGoals, myTeamGoals, myRewards, setMyRewards,
+      goalsLoading, myGoals, myTeamGoals, myRewards,
       // Phone/Pipeline Live tab — VoIP + dialer + conversations + history + AI copilot live
       phoneSubTab, setPhoneSubTab,
       phoneActiveCall, setPhoneActiveCall,
@@ -3377,7 +3265,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       schedSearchQ, setSchedSearchQ,
       phoneCalMonth, setPhoneCalMonth,
       phoneStatsPeriod, setPhoneStatsPeriod,
-      todayCallCount,
+      todayCallCount, // wired to context (hotfix 2026-04-23)
+      // removed phoneStatsOpen/setPhoneStatsOpen — never declared as state (hotfix 2026-04-23)
       phoneShowCampaignModal, setPhoneShowCampaignModal,
       phoneCampaigns, setPhoneCampaigns,
       phoneDailyGoal, setPhoneDailyGoal,
@@ -3416,7 +3305,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       phoneCopilotReactions, setPhoneCopilotReactions,
       phoneCopilotReactionStats, setPhoneCopilotReactionStats,
       phoneCopilotLiveStep, setPhoneCopilotLiveStep,
-      voipCallRef,
+      voipCallRef, // removed voipDevice/voipCall — never declared (only voipDeviceRef/voipCallRef exist) — hotfix 2026-04-23
       voipState, setVoipState,
       voipCurrentCallLogId, setVoipCurrentCallLogId,
       voipCredits, voipConfigured,
@@ -3428,7 +3317,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       pdStatus, setPdStatus,
       pdCurrentIdx, setPdCurrentIdx,
       pdResults, setPdResults,
-      pdStageId, pdContactList,
+      pdStageId, pdContactList, // removed phantom pdResult — hotfix 2026-04-23
       collabCallForms, setCollabCallForms,
       callFormData, setCallFormData,
       callFormResponses, setCallFormResponses,
@@ -3443,6 +3332,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       convFilter, setConvFilter,
       convLoading, setConvLoading,
       selectedLine, setSelectedLine,
+      // removed phantoms zoom/setZoom — never declared (hotfix 2026-04-23)
       cockpitOpen, setCockpitOpen,
       cockpitMinimized, setCockpitMinimized,
       liveConfig, saveLiveConfig,
@@ -3493,6 +3383,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       contractForm, setContractForm,
       contactAnalysesHistory, setContactAnalysesHistory,
       contactAnalysesHistoryModal, setContactAnalysesHistoryModal,
+      // removed phantoms histOpen/setHistOpen — never declared (hotfix 2026-04-23)
+      // removed phantoms statusHist/setStatusHist — never declared (hotfix 2026-04-23)
       dragContact, setDragContact,
       dragOverStage, setDragOverStage,
       dragColumnId, setDragColumnId,
@@ -3534,29 +3426,11 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       myBookings, myCalendars, monthDays, agendaFillRate,
       getBookingAt, getGoogleEventAt, updateBooking,
       // Home tab
-      bookings, voipCallLogs, setVoipCallLogs, smsCredits,
-      googleEventsProp,
-      fmtDur,
-      togglePhoneLeftPanel,
-      togglePhoneDND,
-      // Vague 1b — exposed helpers/handlers declared in CollabPortal
-      fmtPhone,
-      isModuleOn,
-      handleCollabUpdateContact,
-      handlePipelineStageChange,
-      setPostCallResultModal,
-      setPerduMotifModal,
-      generateCallAnalysis,
-      cScoreColor, cScoreLabel,
-      isAvailableSlot,
+      bookings, voipCallLogs, smsCredits,
       portalTab, setPortalTab,
       portalTabKey, setPortalTabKey,
       phoneDialNumber, setPhoneDialNumber,
       phoneRightTab, setPhoneRightTab,
-      contactSaveStatus,
-      phoneRightCollapsed, setPhoneRightCollapsed,
-      phoneRightAccordion, setPhoneRightAccordion,
-      phoneLeftCollapsed, setPhoneLeftCollapsed,
       pipelineRightContact, setPipelineRightContact,
       phoneShowScheduleModal, setPhoneShowScheduleModal,
       phoneScheduleForm, setPhoneScheduleForm,
@@ -3571,85 +3445,54 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       setAvails, setVacations,
       saveAvail, saveAvailBuffer, saveAvailMaxPerDay, saveAvailBreaks,
       toggleDay, updateSlot, addSlot, removeSlot,
-      // ═══ REWIRE 2026-04-20 — exposures complémentaires pour tabs (78 symboles) ═══
-      CALL_TAGS,
+      // ── Hotfix audit 2026-04-23 — wire missing portal-declared symbols to context ──
       CRM_STD_COLS,
-      PHONE_MODULES,
-      ZOOM_LEVELS,
-      _defaultLiveConfig,
       _tempColor,
       _tempEmoji,
       _tempLabel,
-      acceptCollabIncomingCall,
-      addToBlacklist,
       agendaScrolledRef,
-      autoDialerNext,
-      basePreset,
-      collabContactTags,
+      cScoreColor,
+      cScoreLabel,
       collabNotesTimerRef,
-      collabPaginatedContacts,
       collabPipelineAnalytics,
-      collabsProp,
       contactsLocalEditRef,
       contactsRef,
-      dayBookings,
-      dayDate,
-      endPhoneCall,
-      exportICS,
-      fetchCallTranscript,
+      fmtDur,
+      fmtPhone,
       getCollabLeadScore,
       getLeadTemperature,
-      googleConnected,
-      googleLoading,
-      gridTheme,
-      handleAddCustomStage,
-      handleCollabCreateContact,
+      googleEventsProp,
       handleCollabDeleteContact,
-      handleColumnDragEnd,
+      handleCollabUpdateContact,
       handleColumnDragStart,
       handleColumnDrop,
       handleDeleteCustomStage,
-      handleDragEnd,
       handleDragLeave,
       handleDragOver,
       handleDragStart,
       handleDrop,
-      handleQuickAddContact,
+      handlePipelineStageChange,
       handleUpdateCustomStage,
-      hours,
-      isAdminView,
+      isModuleOn,
       linkVisitorToContacts,
-      monthMonth,
-      monthYear,
       myCrmContacts,
-      myGoogleEvents,
       openCallDetail,
-      perduMotifModal,
-      phoneTeamChatRef,
       playDtmf,
-      postCallResultModal,
       prefillKeypad,
-      rejectCollabIncomingCall,
-      removeFromBlacklist,
-      removeScheduledCall,
-      saveCallRecording,
-      savePhoneCallRating,
-      savePhoneCallTag,
-      saveScriptsDual,
       setV7TransferModal,
       setV7TransferTarget,
-      startAutoDialer,
-      stopAutoDialer,
-      syncGoogle,
-      today,
-      toggleModule,
-      togglePhoneAutoRecap,
-      togglePhoneAutoSMS,
-      togglePhoneFav,
-      togglePhoneRecording,
-      togglePhoneRightPanel,
+      togglePhoneLeftPanel,
       v7FollowersMap,
-      weekDates,
+
+      // ── Hotfix audit 2026-04-23 (v2) — JSX attr handler pattern ──
+      handleAddCustomStage, handleCollabCreateContact, handleColumnDragEnd, handleDragEnd, acceptCollabIncomingCall, endPhoneCall, rejectCollabIncomingCall, togglePhoneDND, togglePhoneRecording,
+
+      // ── Hotfix audit 2026-04-23 (v3) — v5 stripper missed JSX scan due to unbalanced template literals ──
+      googleLoading, handleQuickAddContact, phoneTeamChatRef, stopAutoDialer, togglePhoneAutoRecap, togglePhoneAutoSMS, togglePhoneRightPanel,
+
+      // ── AST audit 2026-04-23 (v7) — complete phantom elimination via @babel/parser ──
+      CALL_TAGS, PHONE_MODULES, ZOOM_LEVELS, _defaultLiveConfig, addToBlacklist, autoDialerNext, basePreset, collabContactTags, collabPaginatedContacts, collabsProp, dayBookings, dayDate, exportICS, fetchCallTranscript, generateCallAnalysis, googleConnected, gridTheme, hours, isAdminView, isAvailableSlot, monthMonth, monthYear, myGoogleEvents, perduMotifModal, postCallResultModal, removeFromBlacklist, removeScheduledCall, saveCallRecording, savePhoneCallRating, savePhoneCallTag, saveScriptsDual, setPerduMotifModal, setPostCallResultModal, startAutoDialer, syncGoogle, today, toggleModule, togglePhoneFav, weekDates,
+
     }}>
     <div style={{ display:"flex", minHeight:"100vh", background:T.bg, fontFamily:"'Onest','Outfit',system-ui,sans-serif", color:T.text }}>
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Onest:wght@300;400;500;600;700;800&display=swap'); * {margin:0;padding:0;box-sizing:border-box;} ::-webkit-scrollbar{width:5px;} ::-webkit-scrollbar-thumb{background:${T.border2};border-radius:3px;}
@@ -4012,80 +3855,6 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
             </div>
           </div>
         )}
-
-        {/* ── MODAL NOUVEAU CONTACT (global, accessible depuis tous les tabs) ── */}
-<Modal open={showNewContact} onClose={()=>(typeof setShowNewContact==='function'?setShowNewContact:function(){})(false)} title="Nouveau contact" width={540}>
-<div style={{display:'flex',flexDirection:'column',gap:12}}>
-  {/* Type + Civilité */}
-  <div style={{display:'flex',gap:10,alignItems:'flex-end'}}>
-    <div style={{flex:1}}>
-      <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Type</label>
-      <div style={{display:'flex',gap:6}}>
-        {[{v:'btc',l:'🟢 Particulier'},{v:'btb',l:'🔵 Entreprise'}].map(t=>(
-          <div key={t.v} onClick={()=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,contact_type:t.v}))} style={{padding:'6px 14px',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type===t.v?700:500,background:(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type===t.v?T.accentBg:'transparent',color:(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type===t.v?T.accent:T.text3,border:`1.5px solid ${(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type===t.v?T.accent:T.border}`}}>{t.l}</div>
-        ))}
-      </div>
-    </div>
-    <div>
-      <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Civilité</label>
-      <select value={(typeof newContactForm!=='undefined'?newContactForm:{}).civility||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,civility:e.target.value}))} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${T.border}`,background:T.bg,fontSize:13,fontFamily:'inherit',color:T.text,cursor:'pointer'}}>
-        <option value="">—</option>
-        <option value="M">M.</option>
-        <option value="Mme">Mme</option>
-      </select>
-    </div>
-  </div>
-  {/* Prénom + Nom */}
-  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-    <ValidatedInput label="Prénom *" required placeholder="Prénom" value={(typeof newContactForm!=='undefined'?newContactForm:{}).firstname||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,firstname:e.target.value}))} icon="user"/>
-    <ValidatedInput label="Nom *" required placeholder="Nom de famille" value={(typeof newContactForm!=='undefined'?newContactForm:{}).lastname||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,lastname:e.target.value}))} icon="user"/>
-  </div>
-  {/* Email */}
-  <ValidatedInput label="Email" placeholder="email@exemple.com" value={(typeof newContactForm!=='undefined'?newContactForm:{}).email} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,email:e.target.value}))} icon="mail" validate={v=>!v.trim()||isValidEmail(v)} errorMsg="Format email invalide"/>
-  {/* Téléphone + Mobile */}
-  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-    <ValidatedInput label="Téléphone" placeholder="+33 1 XX XX XX XX" value={(typeof newContactForm!=='undefined'?newContactForm:{}).phone} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,phone:e.target.value}))} icon="phone" validate={v=>!v.trim()||isValidPhone(v)} errorMsg="Format invalide"/>
-    <ValidatedInput label="Mobile" placeholder="+33 6 XX XX XX XX" value={(typeof newContactForm!=='undefined'?newContactForm:{}).mobile||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,mobile:e.target.value}))} icon="smartphone" validate={v=>!v.trim()||isValidPhone(v)} errorMsg="Format invalide"/>
-  </div>
-  {/* Adresse */}
-  <ValidatedInput label="Adresse" placeholder="Rue, Ville, Code postal" value={(typeof newContactForm!=='undefined'?newContactForm:{}).address||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,address:e.target.value}))} icon="map-pin"/>
-  {/* Champs entreprise conditionnels */}
-  {(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type==='btb'&&(
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,padding:10,borderRadius:8,background:'#2563EB08',border:'1px solid #2563EB20'}}>
-      <ValidatedInput label="Société *" placeholder="Nom de l'entreprise" value={(typeof newContactForm!=='undefined'?newContactForm:{}).company||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,company:e.target.value}))} icon="building-2"/>
-      <ValidatedInput label="Site web" placeholder="https://..." value={(typeof newContactForm!=='undefined'?newContactForm:{}).website||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,website:e.target.value}))} icon="globe"/>
-      <ValidatedInput label="SIRET / SIREN" placeholder="XXX XXX XXX XXXXX" value={(typeof newContactForm!=='undefined'?newContactForm:{}).siret||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,siret:e.target.value}))}/>
-    </div>
-  )}
-  {/* Statut pipeline */}
-  <div>
-    <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Statut pipeline</label>
-    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-      {PIPELINE_STAGES.map(s=>(
-        <div key={s.id} onClick={()=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,pipeline_stage:s.id}))} style={{padding:'6px 12px',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:(typeof newContactForm!=='undefined'?newContactForm:{}).pipeline_stage===s.id?700:500,background:(typeof newContactForm!=='undefined'?newContactForm:{}).pipeline_stage===s.id?(s.color||'#2563EB')+'18':'transparent',color:(typeof newContactForm!=='undefined'?newContactForm:{}).pipeline_stage===s.id?(s.color||'#2563EB'):T.text3,border:`1.5px solid ${(typeof newContactForm!=='undefined'?newContactForm:{}).pipeline_stage===s.id?(s.color||'#2563EB'):T.border}`,transition:'all .15s',display:'flex',alignItems:'center',gap:4}}>
-          <div style={{width:8,height:8,borderRadius:4,background:s.color||'#2563EB'}}/>
-          {s.label}
-        </div>
-      ))}
-    </div>
-  </div>
-  {/* Tags */}
-  <div>
-    <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Tags</label>
-    <input value={(typeof newContactForm!=='undefined'?newContactForm:{}).tags||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,tags:e.target.value}))} placeholder="VIP, Prospect, Urgent... (séparés par virgule)" style={{width:'100%',padding:'8px 10px',borderRadius:8,border:`1px solid ${T.border}`,background:T.bg,fontSize:13,fontFamily:'inherit',color:T.text,outline:'none'}}/>
-    {(typeof newContactForm!=='undefined'?newContactForm:{}).tags && <div style={{display:'flex',gap:4,marginTop:4,flexWrap:'wrap'}}>{(typeof newContactForm!=='undefined'?newContactForm:{}).tags.split(',').map(t=>t.trim()).filter(Boolean).map((t,i)=><span key={i} style={{fontSize:10,padding:'2px 8px',borderRadius:6,background:T.accentBg,color:T.accent,fontWeight:600}}>{t}</span>)}</div>}
-  </div>
-  {/* Notes */}
-  <div>
-    <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Notes</label>
-    <textarea value={(typeof newContactForm!=='undefined'?newContactForm:{}).notes} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,notes:e.target.value}))} placeholder="Notes, informations complémentaires..." rows={3} style={{width:'100%',padding:10,borderRadius:8,border:`1px solid ${T.border}`,background:T.bg,fontSize:13,fontFamily:'inherit',resize:'vertical',color:T.text,outline:'none'}}/>
-  </div>
-  <div style={{display:'flex',gap:8,marginTop:8}}>
-    <Btn onClick={()=>setShowNewContact(false)} style={{flex:1}}>Annuler</Btn>
-    <Btn primary onClick={handleCollabCreateContact} style={{flex:1}}><I n="check" s={14}/> Créer le contact</Btn>
-  </div>
-</div>
-</Modal>
 
         {/* ═══ AUJOURD'HUI — Dashboard collaborateur ═══ */}
         {portalTab === "home" && <HomeTab/>}

@@ -1,8 +1,8 @@
 // Phase 13a — extracted Home tab from CollabPortal.jsx (was lines 3605-4439 IIFE).
 
-import React, { useState, useEffect, useMemo, useRef } from "react";
+import React from "react";
 import { T } from "../../../theme";
-import { I, Btn, Card, Avatar, Stat, Stars, HookIsolator } from "../../../shared/ui";
+import { I, Btn, Card, Avatar, Stat, Stars } from "../../../shared/ui";
 import { api } from "../../../shared/services/api";
 import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";
@@ -11,7 +11,6 @@ const HomeTab = () => {
   const {
     collab, showNotif,
     bookings, voipCallLogs, smsCredits, contacts,
-    fmtPhone,
     portalTab, setPortalTab,
     portalTabKey, setPortalTabKey,
     phoneDialNumber, setPhoneDialNumber,
@@ -23,14 +22,10 @@ const HomeTab = () => {
     selectedCrmContact, setSelectedCrmContact,
     collabFicheTab, setCollabFicheTab,
     startPhoneCall, startVoipCall,
-    // ═══ REWIRE 2026-04-20 — destructure complémentaire (7 symboles) ═══
-    PIPELINE_STAGES,
-    _tempColor,
-    _tempEmoji,
-    _tempLabel,
-    calendars,
-    company,
-    getLeadTemperature,
+    // ── Hotfix audit 2026-04-23 — wire missing symbols ──
+  PIPELINE_STAGES, _tempColor, _tempEmoji, _tempLabel, calendars, fmtDur, fmtPhone, getLeadTemperature,
+  // ── AST audit 2026-04-23 (v7) ──
+  company,
   } = useCollabContext();
 
 const todayISO = new Date().toISOString().split('T')[0];

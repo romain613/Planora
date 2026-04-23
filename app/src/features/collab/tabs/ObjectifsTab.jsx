@@ -20,7 +20,7 @@ const GOAL_TYPES = {
 const PERIODS = { daily: 'Jour', weekly: 'Semaine', monthly: 'Mois', quarterly: 'Trimestre' };
 
 const ObjectifsTab = () => {
-  const { goalsLoading, myGoals, myTeamGoals, myRewards, contacts } = useCollabContext();
+  const { goalsLoading, myGoals, myTeamGoals, myRewards } = useCollabContext();
 
   if ((typeof goalsLoading!=='undefined'?goalsLoading:null)) return <div style={{padding:40,textAlign:'center',color:T.text2}}>Chargement...</div>;
 

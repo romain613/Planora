@@ -8,7 +8,7 @@
 
 import React, { useState, useMemo, useEffect, Fragment } from "react";
 import { T } from "../../../theme";
-import { I, Btn, Card, Avatar, Badge, Modal, Input, ValidatedInput, Stars, Spinner, EmptyState, HelpTip, HookIsolator } from "../../../shared/ui";
+import { I, Btn, Card, Avatar, Badge, Modal, Input, ValidatedInput, Stars, Spinner, EmptyState, HelpTip } from "../../../shared/ui";
 import { displayPhone, formatPhoneFR } from "../../../shared/utils/phone";
 import { isValidEmail, isValidPhone } from "../../../shared/utils/validators";
 import { fmtDate, DAYS_FR, MONTHS_FR } from "../../../shared/utils/dates";
@@ -17,16 +17,12 @@ import { sendNotification, buildNotifyPayload } from "../../../shared/utils/noti
 import { api } from "../../../shared/services/api";
 import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";
-import { FicheClientMsgScreen, FicheSuiviScreen, FicheDocsLinkedScreen } from "../screens";
 
 const CrmTab = () => {
   const ctx = useCollabContext();
   // Destructure ALL refs CRM tab needs (~80 refs from context)
   const {
     collab, company, contacts, bookings, collabs, showNotif,
-    fmtDur,
-    cScoreColor, cScoreLabel,
-    handleCollabUpdateContact,
     crmSearch, setCrmSearch,
     collabCrmViewMode, setCollabCrmViewMode,
     collabCrmSortKey, setCollabCrmSortKey,
@@ -60,6 +56,8 @@ const CrmTab = () => {
     contractForm, setContractForm,
     contactAnalysesHistory, setContactAnalysesHistory,
     contactAnalysesHistoryModal, setContactAnalysesHistoryModal,
+    histOpen, setHistOpen,
+    statusHist, setStatusHist,
     dragContact, setDragContact,
     dragOverStage, setDragOverStage,
     dragColumnId, setDragColumnId,
@@ -86,42 +84,12 @@ const CrmTab = () => {
     setRdvPasseModal,
     setPhoneShowScheduleModal, setPhoneScheduleForm,
     portalTab, setPortalTab, setPortalTabKey,
-    // ═══ REWIRE 2026-04-20 — destructure complémentaire (35 symboles) ═══
-    CRM_STD_COLS,
-    appMyPhoneNumbers,
-    calendars,
-    collabContactTags,
-    collabNotesTimerRef,
-    collabPaginatedContacts,
-    collabPipelineAnalytics,
-    contactsLocalEditRef,
-    contactsRef,
-    getCollabLeadScore,
-    handleAddCustomStage,
-    handleCollabCreateContact,
-    handleCollabDeleteContact,
-    handleColumnDragEnd,
-    handleColumnDragStart,
-    handleColumnDrop,
-    handleDeleteCustomStage,
-    handleDragEnd,
-    handleDragLeave,
-    handleDragOver,
-    handleDragStart,
-    handleDrop,
-    handlePipelineStageChange,
-    handleUpdateCustomStage,
-    linkVisitorToContacts,
-    myCrmContacts,
-    phoneCallAnalyses,
-    phoneCallRecordings,
-    prefillKeypad,
-    setV7TransferModal,
-    setV7TransferTarget,
-    startVoipCall,
-    today,
-    v7FollowersMap,
-    voipCallLogs,
+    // ── Hotfix audit 2026-04-23 — wire missing symbols ──
+  CRM_STD_COLS, appMyPhoneNumbers, cScoreColor, cScoreLabel, calendars, collabNotesTimerRef, collabPipelineAnalytics, contactsLocalEditRef, contactsRef, fmtDur, getCollabLeadScore, handleCollabDeleteContact, handleCollabUpdateContact, handleColumnDragStart, handleColumnDrop, handleDeleteCustomStage, handleDragLeave, handleDragOver, handleDragStart, handleDrop, handlePipelineStageChange, handleUpdateCustomStage, linkVisitorToContacts, myCrmContacts, phoneCallAnalyses, phoneCallRecordings, prefillKeypad, setV7TransferModal, setV7TransferTarget, startVoipCall, v7FollowersMap, voipCallLogs,
+    // ── Hotfix audit 2026-04-23 (v2) — JSX attr handler pattern ──
+  handleAddCustomStage, handleCollabCreateContact, handleColumnDragEnd, handleDragEnd,
+  // ── AST audit 2026-04-23 (v7) ──
+  collabContactTags, collabPaginatedContacts,
   } = ctx;
 
   return (
@@ -840,6 +808,80 @@ const CrmTab = () => {
   )}
 </div>
 
+{/* ── MODAL NOUVEAU CONTACT ── */}
+<Modal open={showNewContact} onClose={()=>(typeof setShowNewContact==='function'?setShowNewContact:function(){})(false)} title="Nouveau contact" width={540}>
+<div style={{display:'flex',flexDirection:'column',gap:12}}>
+  {/* Type + Civilité */}
+  <div style={{display:'flex',gap:10,alignItems:'flex-end'}}>
+    <div style={{flex:1}}>
+      <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Type</label>
+      <div style={{display:'flex',gap:6}}>
+        {[{v:'btc',l:'🟢 Particulier'},{v:'btb',l:'🔵 Entreprise'}].map(t=>(
+          <div key={t.v} onClick={()=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,contact_type:t.v}))} style={{padding:'6px 14px',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type===t.v?700:500,background:(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type===t.v?T.accentBg:'transparent',color:(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type===t.v?T.accent:T.text3,border:`1.5px solid ${(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type===t.v?T.accent:T.border}`}}>{t.l}</div>
+        ))}
+      </div>
+    </div>
+    <div>
+      <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Civilité</label>
+      <select value={(typeof newContactForm!=='undefined'?newContactForm:{}).civility||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,civility:e.target.value}))} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${T.border}`,background:T.bg,fontSize:13,fontFamily:'inherit',color:T.text,cursor:'pointer'}}>
+        <option value="">—</option>
+        <option value="M">M.</option>
+        <option value="Mme">Mme</option>
+      </select>
+    </div>
+  </div>
+  {/* Prénom + Nom */}
+  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+    <ValidatedInput label="Prénom *" required placeholder="Prénom" value={(typeof newContactForm!=='undefined'?newContactForm:{}).firstname||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,firstname:e.target.value}))} icon="user"/>
+    <ValidatedInput label="Nom *" required placeholder="Nom de famille" value={(typeof newContactForm!=='undefined'?newContactForm:{}).lastname||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,lastname:e.target.value}))} icon="user"/>
+  </div>
+  {/* Email */}
+  <ValidatedInput label="Email" placeholder="email@exemple.com" value={(typeof newContactForm!=='undefined'?newContactForm:{}).email} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,email:e.target.value}))} icon="mail" validate={v=>!v.trim()||isValidEmail(v)} errorMsg="Format email invalide"/>
+  {/* Téléphone + Mobile */}
+  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+    <ValidatedInput label="Téléphone" placeholder="+33 1 XX XX XX XX" value={(typeof newContactForm!=='undefined'?newContactForm:{}).phone} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,phone:e.target.value}))} icon="phone" validate={v=>!v.trim()||isValidPhone(v)} errorMsg="Format invalide"/>
+    <ValidatedInput label="Mobile" placeholder="+33 6 XX XX XX XX" value={(typeof newContactForm!=='undefined'?newContactForm:{}).mobile||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,mobile:e.target.value}))} icon="smartphone" validate={v=>!v.trim()||isValidPhone(v)} errorMsg="Format invalide"/>
+  </div>
+  {/* Adresse */}
+  <ValidatedInput label="Adresse" placeholder="Rue, Ville, Code postal" value={(typeof newContactForm!=='undefined'?newContactForm:{}).address||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,address:e.target.value}))} icon="map-pin"/>
+  {/* Champs entreprise conditionnels */}
+  {(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type==='btb'&&(
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,padding:10,borderRadius:8,background:'#2563EB08',border:'1px solid #2563EB20'}}>
+      <ValidatedInput label="Société *" placeholder="Nom de l'entreprise" value={(typeof newContactForm!=='undefined'?newContactForm:{}).company||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,company:e.target.value}))} icon="building-2"/>
+      <ValidatedInput label="Site web" placeholder="https://..." value={(typeof newContactForm!=='undefined'?newContactForm:{}).website||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,website:e.target.value}))} icon="globe"/>
+      <ValidatedInput label="SIRET / SIREN" placeholder="XXX XXX XXX XXXXX" value={(typeof newContactForm!=='undefined'?newContactForm:{}).siret||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,siret:e.target.value}))}/>
+    </div>
+  )}
+  {/* Statut pipeline */}
+  <div>
+    <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Statut pipeline</label>
+    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+      {PIPELINE_STAGES.map(s=>(
+        <div key={s.id} onClick={()=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,pipeline_stage:s.id}))} style={{padding:'6px 12px',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:(typeof newContactForm!=='undefined'?newContactForm:{}).pipeline_stage===s.id?700:500,background:(typeof newContactForm!=='undefined'?newContactForm:{}).pipeline_stage===s.id?(s.color||'#2563EB')+'18':'transparent',color:(typeof newContactForm!=='undefined'?newContactForm:{}).pipeline_stage===s.id?(s.color||'#2563EB'):T.text3,border:`1.5px solid ${(typeof newContactForm!=='undefined'?newContactForm:{}).pipeline_stage===s.id?(s.color||'#2563EB'):T.border}`,transition:'all .15s',display:'flex',alignItems:'center',gap:4}}>
+          <div style={{width:8,height:8,borderRadius:4,background:s.color||'#2563EB'}}/>
+          {s.label}
+        </div>
+      ))}
+    </div>
+  </div>
+  {/* Tags */}
+  <div>
+    <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Tags</label>
+    <input value={(typeof newContactForm!=='undefined'?newContactForm:{}).tags||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,tags:e.target.value}))} placeholder="VIP, Prospect, Urgent... (séparés par virgule)" style={{width:'100%',padding:'8px 10px',borderRadius:8,border:`1px solid ${T.border}`,background:T.bg,fontSize:13,fontFamily:'inherit',color:T.text,outline:'none'}}/>
+    {(typeof newContactForm!=='undefined'?newContactForm:{}).tags && <div style={{display:'flex',gap:4,marginTop:4,flexWrap:'wrap'}}>{(typeof newContactForm!=='undefined'?newContactForm:{}).tags.split(',').map(t=>t.trim()).filter(Boolean).map((t,i)=><span key={i} style={{fontSize:10,padding:'2px 8px',borderRadius:6,background:T.accentBg,color:T.accent,fontWeight:600}}>{t}</span>)}</div>}
+  </div>
+  {/* Notes */}
+  <div>
+    <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Notes</label>
+    <textarea value={(typeof newContactForm!=='undefined'?newContactForm:{}).notes} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,notes:e.target.value}))} placeholder="Notes, informations complémentaires..." rows={3} style={{width:'100%',padding:10,borderRadius:8,border:`1px solid ${T.border}`,background:T.bg,fontSize:13,fontFamily:'inherit',resize:'vertical',color:T.text,outline:'none'}}/>
+  </div>
+  <div style={{display:'flex',gap:8,marginTop:8}}>
+    <Btn onClick={()=>setShowNewContact(false)} style={{flex:1}}>Annuler</Btn>
+    <Btn primary onClick={handleCollabCreateContact} style={{flex:1}}><I n="check" s={14}/> Créer le contact</Btn>
+  </div>
+</div>
+</Modal>
+
 {/* ── MODAL NOUVEAU STATUT ── */}
 <Modal open={showAddStage} onClose={()=>(typeof setShowAddStage==='function'?setShowAddStage:function(){})(false)} title="Nouveau statut" width={400}>
 <div style={{display:'flex',flexDirection:'column',gap:14}}>
@@ -882,7 +924,6 @@ const CrmTab = () => {
 </Modal>
 
 {/* ── FICHE CLIENT MODAL ── */}
-{selectedCrmContact && (
 <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>{setSelectedCrmContact(null);setCollabFicheTab("notes");}}>
   <div style={{background:T.surface,borderRadius:16,width:"100%",maxWidth:700,maxHeight:"90vh",overflow:"auto",padding:28,boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}} onClick={e=>e.stopPropagation()}>
     {(()=>{
@@ -1689,7 +1730,6 @@ const CrmTab = () => {
     })()}
   </div>
 </div>
-)}
     </>
   );
 };

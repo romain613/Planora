@@ -2,7 +2,7 @@
 
 import React from "react";
 import { T } from "../../../theme";
-import { I, Btn, Card, Avatar, Badge, Modal, Spinner, Stat } from "../../../shared/ui";
+import { I, Btn, Card, Avatar, Badge, Modal, Spinner } from "../../../shared/ui";
 import { DAYS_FR, DAYS_SHORT, MONTHS_FR, getDow, fmtDate } from "../../../shared/utils/dates";
 import { sendNotification, buildNotifyPayload } from "../../../shared/utils/notifications";
 import { _T } from "../../../shared/state/tabState";
@@ -33,25 +33,12 @@ const AgendaTab = () => {
     getBookingAt, getGoogleEventAt, updateBooking,
     portalTab, setPortalTab, setPortalTabKey,
     setPhoneScheduleForm, setPhoneShowScheduleModal,
-    isAvailableSlot,
-    // ═══ REWIRE 2026-04-20 — destructure complémentaire (17 symboles) ═══
-    ZOOM_LEVELS,
-    agendaScrolledRef,
-    basePreset,
-    dayBookings,
-    dayDate,
-    exportICS,
-    googleConnected,
-    googleLoading,
-    gridTheme,
-    hours,
-    monthMonth,
-    monthYear,
-    myGoogleEvents,
-    syncGoogle,
-    today,
-    todayStr,
-    weekDates,
+    // ── Hotfix audit 2026-04-23 — wire missing symbols ──
+  agendaScrolledRef,
+    // ── Hotfix audit 2026-04-23 (v3) ──
+  googleLoading,
+  // ── AST audit 2026-04-23 (v7) ──
+  basePreset, dayBookings, dayDate, exportICS, googleConnected, gridTheme, hours, isAvailableSlot, monthMonth, monthYear, myGoogleEvents, syncGoogle, today, todayStr, weekDates, ZOOM_LEVELS,
   } = useCollabContext();
 
   return (

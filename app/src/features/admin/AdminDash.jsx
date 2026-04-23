@@ -157,7 +157,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
   const [smsBulkCompany, setSmsBulkCompany] = useState("");
   const [smsBulkAmount, setSmsBulkAmount] = useState("");
   const [smsBulkMode, setSmsBulkMode] = useState("add"); // add | set
-  useEffect(()=>{ if(isSupraAdmin && tab==="vision" && company?.id) api("/api/init?companyId="+company.id).then(d=>{ if(d?.allSmsCredits) setCompanySmsCredits(d.allSmsCredits); if(d?.allCalendars) (typeof setAllCalendars==='function'?setAllCalendars:function(){})(d.allCalendars); if(d?.allBookings) (typeof setAllBookings==='function'?setAllBookings:function(){})(d.allBookings); if(d?.allContacts) (typeof setAllContacts==='function'?setAllContacts:function(){})(d.allContacts); if(d?.allUsers) (typeof setAllUsers==='function'?setAllUsers:function(){})(d.allUsers); if(d?.allCompanies) (typeof setAllCompanies==='function'?setAllCompanies:function(){})(d.allCompanies); if(d?.allPhoneNumbers) setAllPhoneNumbers(d.allPhoneNumbers); if(d?.phonePlans) setPhonePlans(d.phonePlans); if(d?.voipPacks) setVoipPacks(d.voipPacks); if(d?.smsPacks) setSmsPacks(d.smsPacks); if(d?.allTelecomCredits && typeof d.allTelecomCredits==='object') setAllTelecomCredits(d.allTelecomCredits); if(d?.telecomCreditLogs) setTelecomCreditLogs(d.telecomCreditLogs); }); },[tab]);
+  useEffect(()=>{ if(isSupraAdmin && tab==="vision") api("/api/init?companyId="+company.id).then(d=>{ if(d?.allSmsCredits) setCompanySmsCredits(d.allSmsCredits); if(d?.allCalendars) (typeof setAllCalendars==='function'?setAllCalendars:function(){})(d.allCalendars); if(d?.allBookings) (typeof setAllBookings==='function'?setAllBookings:function(){})(d.allBookings); if(d?.allContacts) (typeof setAllContacts==='function'?setAllContacts:function(){})(d.allContacts); if(d?.allUsers) (typeof setAllUsers==='function'?setAllUsers:function(){})(d.allUsers); if(d?.allCompanies) (typeof setAllCompanies==='function'?setAllCompanies:function(){})(d.allCompanies); if(d?.allPhoneNumbers) setAllPhoneNumbers(d.allPhoneNumbers); if(d?.phonePlans) setPhonePlans(d.phonePlans); if(d?.voipPacks) setVoipPacks(d.voipPacks); if(d?.smsPacks) setSmsPacks(d.smsPacks); if(d?.allTelecomCredits && typeof d.allTelecomCredits==='object') setAllTelecomCredits(d.allTelecomCredits); if(d?.telecomCreditLogs) setTelecomCreditLogs(d.telecomCreditLogs); }); },[tab]);
   useEffect(()=>{ if(isSupraAdmin && tab==="vision" && visionSubTab==="sms") { setSmsGlobalLoading(true); api("/api/sms/global-stats").then(d=>{ if(d) setSmsGlobalStats(d); setSmsGlobalLoading(false); }); } },[tab,visionSubTab]);
   // Load tickets for company
   useEffect(()=>{ if(company?.id) api(`/api/tickets?companyId=${company.id}`).then(r=>{ if(r?.tickets) setTickets(r.tickets); }); },[company?.id]);
@@ -1696,48 +1696,33 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
   }, [company?.id]);
 
   // Initialize Twilio Device (SDK now bundled via npm — no CDN polling needed)
-  // Deferred to first user gesture (browser autoplay policy: AudioContext cannot
-  // start before user interacts — token is pre-fetched at mount so device creation
-  // is instant at first click). Mirrors the lazy-init logic in CollabPortal.jsx.
   useEffect(() => {
     if (!(typeof voipConfigured!=='undefined'?voipConfigured:null)) return;
+    // Find the current collaborator identity: prefer collab with assigned marketplace number
     const myAssigned = (typeof appMyPhoneNumbers!=='undefined'?appMyPhoneNumbers:{}).find(pn => pn.collaboratorId && pn.status === 'assigned');
     const currentCollabId = myAssigned?.collaboratorId || collabs[0]?.id;
     if (!currentCollabId) return;
-    const tokenPromise = api('/api/voip/token', { method:'POST', body:{ companyId:company.id, collaboratorId:currentCollabId } })
-      .catch(err => { console.error('[VOIP TOKEN ERR]', err); return null; });
-    let initialized = false;
-    const initDevice = async () => {
-      if (initialized) return;
-      initialized = true;
-      const data = await tokenPromise;
-      if (!data?.token || data.demo) return;
-      const device = new TwilioDevice(data.token, { codecPreferences:['opus','pcmu'], edge:'dublin' });
-      device.on('registered', () => console.log('[VOIP] Device registered for', currentCollabId));
-      device.on('error', (err) => { console.error('[VOIP ERR]', err); notif('Erreur VoIP: '+err.message,'danger'); });
-      device.on('incoming', (call) => {
-        setVoipState('incoming');
-        setVoipIncomingInfo({ from: call.parameters.From });
-        voipCallRef.current = call;
-        api(`/api/voip/lookup?phone=${encodeURIComponent(call.parameters.From)}&companyId=${company.id}`)
-          .then(d => { if(d?.found) setVoipActiveContact(d.contact); });
-        setVoipDialerOpen(true);
-        call.on('cancel', () => { setVoipState('idle'); setVoipIncomingInfo(null); });
-        call.on('disconnect', () => handleVoipCallEnd());
+    api('/api/voip/token', { method:'POST', body:{ companyId:company.id, collaboratorId:currentCollabId } })
+      .then(data => {
+        if (!data?.token || data.demo) return;
+        const device = new TwilioDevice(data.token, { codecPreferences:['opus','pcmu'], edge:'dublin' });
+        device.on('registered', () => console.log('[VOIP] Device registered for', currentCollabId));
+        device.on('error', (err) => { console.error('[VOIP ERR]', err); notif('Erreur VoIP: '+err.message,'danger'); });
+        device.on('incoming', (call) => {
+          setVoipState('incoming');
+          setVoipIncomingInfo({ from: call.parameters.From });
+          voipCallRef.current = call;
+          api(`/api/voip/lookup?phone=${encodeURIComponent(call.parameters.From)}&companyId=${company.id}`)
+            .then(d => { if(d?.found) setVoipActiveContact(d.contact); });
+          setVoipDialerOpen(true);
+          call.on('cancel', () => { setVoipState('idle'); setVoipIncomingInfo(null); });
+          call.on('disconnect', () => handleVoipCallEnd());
+        });
+        device.register();
+        voipDeviceRef.current = device;
+        console.log('[VOIP] Device created and registering...');
       });
-      device.register();
-      voipDeviceRef.current = device;
-    };
-    const gestureOpts = { once: true, capture: true, passive: true };
-    document.addEventListener('click',      initDevice, gestureOpts);
-    document.addEventListener('keydown',    initDevice, gestureOpts);
-    document.addEventListener('touchstart', initDevice, gestureOpts);
-    return () => {
-      document.removeEventListener('click',      initDevice, { capture: true });
-      document.removeEventListener('keydown',    initDevice, { capture: true });
-      document.removeEventListener('touchstart', initDevice, { capture: true });
-      voipDeviceRef.current?.destroy();
-    };
+    return () => { voipDeviceRef.current?.destroy(); };
   }, [voipConfigured, company?.id, (typeof appMyPhoneNumbers!=='undefined'?appMyPhoneNumbers:{}).length]);
 
   const startVoipCall = async (phoneNumber, contact = null) => {
@@ -11313,7 +11298,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
         })()}
 
         {/* ─── LEADS TAB ─────────────────────────── */}
-        {tab === "leads" && <AdminLeadsScreen collab={collab} collabs={collabs} company={company} contacts={contacts} pushNotification={pushNotification} />}
+        {tab === "leads" && <AdminLeadsScreen collabs={collabs} company={company} contacts={contacts} pushNotification={pushNotification} />}
 
 
         {/* ─── OBJECTIFS TAB ─────────────────────────── */}
