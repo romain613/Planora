@@ -11457,7 +11457,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
         })()}
 
         {/* ─── LEADS TAB ─────────────────────────── */}
-        {tab === "leads" && <AdminLeadsScreen collab={collab} collabs={collabs} company={company} contacts={contacts} pushNotification={pushNotification} />}
+        {tab === "leads" && <AdminLeadsScreen collabs={collabs} company={company} contacts={contacts} pushNotification={pushNotification} />}
 
 
         {/* ─── OBJECTIFS TAB ─────────────────────────── */}
