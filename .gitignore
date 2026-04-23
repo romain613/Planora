@@ -28,3 +28,9 @@ ops/smoke/node_modules/
 ops/smoke/last-*.json
 ops/smoke/screenshots/
 app/dist/
+
+# Secrets
+.env
+.env.*
+server/.env
+server/.env.*
