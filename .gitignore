@@ -34,3 +34,6 @@ app/dist/
 .env.*
 server/.env
 server/.env.*
+!.env.example
+!*.env.example
+!server/.env.example
