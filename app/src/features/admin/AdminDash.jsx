@@ -157,7 +157,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
   const [smsBulkCompany, setSmsBulkCompany] = useState("");
   const [smsBulkAmount, setSmsBulkAmount] = useState("");
   const [smsBulkMode, setSmsBulkMode] = useState("add"); // add | set
-  useEffect(()=>{ if(isSupraAdmin && tab==="vision") api("/api/init?companyId="+company.id).then(d=>{ if(d?.allSmsCredits) setCompanySmsCredits(d.allSmsCredits); if(d?.allCalendars) (typeof setAllCalendars==='function'?setAllCalendars:function(){})(d.allCalendars); if(d?.allBookings) (typeof setAllBookings==='function'?setAllBookings:function(){})(d.allBookings); if(d?.allContacts) (typeof setAllContacts==='function'?setAllContacts:function(){})(d.allContacts); if(d?.allUsers) (typeof setAllUsers==='function'?setAllUsers:function(){})(d.allUsers); if(d?.allCompanies) (typeof setAllCompanies==='function'?setAllCompanies:function(){})(d.allCompanies); if(d?.allPhoneNumbers) setAllPhoneNumbers(d.allPhoneNumbers); if(d?.phonePlans) setPhonePlans(d.phonePlans); if(d?.voipPacks) setVoipPacks(d.voipPacks); if(d?.smsPacks) setSmsPacks(d.smsPacks); if(d?.allTelecomCredits && typeof d.allTelecomCredits==='object') setAllTelecomCredits(d.allTelecomCredits); if(d?.telecomCreditLogs) setTelecomCreditLogs(d.telecomCreditLogs); }); },[tab]);
+  useEffect(()=>{ if(isSupraAdmin && tab==="vision" && company?.id) api("/api/init?companyId="+company.id).then(d=>{ if(d?.allSmsCredits) setCompanySmsCredits(d.allSmsCredits); if(d?.allCalendars) (typeof setAllCalendars==='function'?setAllCalendars:function(){})(d.allCalendars); if(d?.allBookings) (typeof setAllBookings==='function'?setAllBookings:function(){})(d.allBookings); if(d?.allContacts) (typeof setAllContacts==='function'?setAllContacts:function(){})(d.allContacts); if(d?.allUsers) (typeof setAllUsers==='function'?setAllUsers:function(){})(d.allUsers); if(d?.allCompanies) (typeof setAllCompanies==='function'?setAllCompanies:function(){})(d.allCompanies); if(d?.allPhoneNumbers) setAllPhoneNumbers(d.allPhoneNumbers); if(d?.phonePlans) setPhonePlans(d.phonePlans); if(d?.voipPacks) setVoipPacks(d.voipPacks); if(d?.smsPacks) setSmsPacks(d.smsPacks); if(d?.allTelecomCredits && typeof d.allTelecomCredits==='object') setAllTelecomCredits(d.allTelecomCredits); if(d?.telecomCreditLogs) setTelecomCreditLogs(d.telecomCreditLogs); }); },[tab, company?.id]);
   useEffect(()=>{ if(isSupraAdmin && tab==="vision" && visionSubTab==="sms") { setSmsGlobalLoading(true); api("/api/sms/global-stats").then(d=>{ if(d) setSmsGlobalStats(d); setSmsGlobalLoading(false); }); } },[tab,visionSubTab]);
   // Load tickets for company
   useEffect(()=>{ if(company?.id) api(`/api/tickets?companyId=${company.id}`).then(r=>{ if(r?.tickets) setTickets(r.tickets); }); },[company?.id]);
@@ -173,7 +173,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
 
   // Load chat messages on mount
   const loadChatMessages = () => {
-    if (!company?.id) return;
+    if (isSupraAdmin || !company?.id) return;   // V1.8.10 — supra sans identite messaging
     const sender = collabs[0];
     const params = chatMode === "dm" && chatDmTarget
       ? `companyId=${company.id}&limit=50&senderId=${sender?.id}&recipientId=${chatDmTarget.id}`
@@ -186,7 +186,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
 
   // Chat: heartbeat for online status (every 10s)
   useEffect(() => {
-    if (!company?.id || !collabs[0]?.id) return;
+    if (isSupraAdmin || !company?.id || !collabs[0]?.id) return;   // V1.8.10
     const beat = () => api("/api/messaging/heartbeat", { method: "POST", body: { collaboratorId: collabs[0].id, companyId: company.id } });
     beat();
     const interval = setInterval(beat, 10000);
@@ -195,7 +195,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
 
   // Chat: poll online users every 10s
   useEffect(() => {
-    if (!company?.id) return;
+    if (isSupraAdmin || !company?.id) return;   // V1.8.10
     const poll = () => api(`/api/messaging/online?companyId=${company.id}`).then(r => { if (r?.online) setChatOnlineUsers(r.online); });
     poll();
     const interval = setInterval(poll, 10000);
@@ -204,7 +204,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
 
   // Chat polling — 3s when on messages tab or floating chat open
   useEffect(() => {
-    if ((!chatFloating && tab !== "messages") || !company?.id) return;
+    if (isSupraAdmin || (!chatFloating && tab !== "messages") || !company?.id) return;   // V1.8.10
     const sender = collabs[0];
     const poll = () => {
       const latest = chatMessages.length ? chatMessages[chatMessages.length - 1].createdAt : "";
@@ -226,7 +226,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
   // Chat: count unread when not on messages tab
   useEffect(() => {
     if (tab === "messages" || chatFloating) { setChatUnreadCount(0); return; }
-    if (!company?.id) return;
+    if (isSupraAdmin || !company?.id) return;   // V1.8.10
     const check = () => {
       const latest = chatMessages.length ? chatMessages[chatMessages.length - 1].createdAt : "";
       if (latest) api(`/api/messaging?companyId=${company.id}&after=${encodeURIComponent(latest)}`).then(r => {
@@ -6657,7 +6657,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
 
             {/* New Ticket Modal */}
             <Modal open={showNewTicket} onClose={()=>(typeof setShowNewTicket==='function'?setShowNewTicket:function(){})(false)} title="Nouveau ticket de support" width={560}>
-              {(()=>{
+              <HookIsolator>{() => {
                 const [cat, setCat] = useState("bug");
                 const [subj, setSubj] = useState("");
                 const [desc, setDesc] = useState("");
@@ -6718,7 +6718,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                     </div>
                   </div>
                 );
-              })()}
+              }}</HookIsolator>
             </Modal>
 
             {/* Ticket Detail Modal */}
