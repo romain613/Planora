@@ -301,13 +301,13 @@ router.post('/contacts', requireAuth, enforceCompany, requirePermission('contact
     }
     // Anti-doublon : si un contact avec le meme email OU phone existe deja dans la company → rejeter
     if (c.email) {
-      const dupEmail = db.prepare("SELECT id FROM contacts WHERE companyId = ? AND email = ? AND email != ''").get(c.companyId, c.email.trim().toLowerCase());
+      const dupEmail = db.prepare("SELECT id FROM contacts WHERE companyId = ? AND email = ? AND email != '' AND COALESCE(pipeline_stage, '') != 'perdu'").get(c.companyId, c.email.trim().toLowerCase());
       if (dupEmail) return res.json({ success: true, id: dupEmail.id, _duplicate: true });
     }
     if (c.phone) {
       const cleanPhone = c.phone.replace(/[^\d+]/g, '').slice(-9);
       if (cleanPhone.length >= 6) {
-        const candidates = db.prepare("SELECT id, phone FROM contacts WHERE companyId = ? AND phone != ''").all(c.companyId);
+        const candidates = db.prepare("SELECT id, phone FROM contacts WHERE companyId = ? AND phone != '' AND COALESCE(pipeline_stage, '') != 'perdu'").all(c.companyId);
         const dup = candidates.find(ct => ct.phone.replace(/[^\d+]/g, '').slice(-9) === cleanPhone);
         if (dup) return res.json({ success: true, id: dup.id, _duplicate: true });
       }
@@ -699,6 +699,8 @@ router.post('/contacts/bulk-delete', requireAuth, enforceCompany, requirePermiss
     for (let i = 0; i < idsToDelete.length; i += 100) {
       const batch = idsToDelete.slice(i, i + 100);
       const placeholders = batch.map(() => '?').join(',');
+      // V1.7.2 — soft-cancel confirmed bookings linked to these contacts before DELETE
+      db.prepare(`UPDATE bookings SET status='cancelled' WHERE contactId IN (${placeholders}) AND status='confirmed'`).run(...batch);
       db.prepare(`DELETE FROM contacts WHERE id IN (${placeholders}) AND companyId = ?`).run(...batch, companyId);
       deleted += batch.length;
     }
@@ -717,6 +719,8 @@ router.delete('/contacts/:id', requireAuth, requirePermission('contacts.delete')
     if (!req.auth.isSupra && record.companyId !== req.auth.companyId) return res.status(403).json({ error: 'Accès interdit' });
     // SECURITE: non-admin ne peut supprimer que SES contacts
     if (!req.auth.isAdmin && !req.auth.isSupra && record.assignedTo !== req.auth.collaboratorId) return res.status(403).json({ error: 'Accès interdit — contact assigné à un autre collaborateur' });
+    // V1.7.2 — soft-cancel confirmed bookings linked to this contact before DELETE
+    db.prepare("UPDATE bookings SET status='cancelled' WHERE contactId = ? AND status='confirmed'").run(id);
     remove('contacts', id);
     logAudit(req, 'contact_deleted', 'data', 'contact', id, 'Contact supprime: ' + (record.name || ''), { email: record.email, phone: record.phone });
     console.log(`[CONTACTS] Contact ${id} DELETED definitively`);

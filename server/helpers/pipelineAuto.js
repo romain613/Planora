@@ -48,8 +48,12 @@ export function autoPipelineAdvance(contactId, event) {
     const stage = contact.pipeline_stage || 'nouveau';
     const level = STAGE_LEVEL[stage];
 
-    // Ne jamais toucher les stages finaux ni les stages custom
-    if (FINAL_STAGES.includes(stage)) return { changed: false, from: stage, reason: 'final_stage' };
+    // Ne jamais toucher les stages finaux ni les stages custom.
+    // Exception: booking_created peut ressusciter un contact 'perdu' (re-engagement explicite).
+    const isResurrectFromPerdu = stage === 'perdu' && event === 'booking_created';
+    if (FINAL_STAGES.includes(stage) && !isResurrectFromPerdu) {
+      return { changed: false, from: stage, reason: 'final_stage' };
+    }
     if (level === undefined) return { changed: false, from: stage, reason: 'custom_stage' };
 
     let newStage = null;
@@ -57,7 +61,10 @@ export function autoPipelineAdvance(contactId, event) {
 
     switch (event) {
       case 'booking_created':
-        if (level < STAGE_LEVEL.rdv_programme) {
+        if (stage === 'perdu') {
+          newStage = 'rdv_programme';
+          reason = 'booking_created_from_perdu';
+        } else if (level < STAGE_LEVEL.rdv_programme) {
           newStage = 'rdv_programme';
           reason = 'booking_created';
         }

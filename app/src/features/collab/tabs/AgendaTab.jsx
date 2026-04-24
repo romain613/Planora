@@ -2,8 +2,9 @@
 
 import React from "react";
 import { T } from "../../../theme";
-import { I, Btn, Card, Avatar, Badge, Modal, Spinner } from "../../../shared/ui";
-import { DAYS_FR, DAYS_SHORT, MONTHS_FR, getDow, fmtDate } from "../../../shared/utils/dates";
+import { I, Btn, Card, Avatar, Badge, Modal, Spinner, Stat } from "../../../shared/ui"; // hotfix 2026-04-23 — +Stat
+import { DAYS_FR, DAYS_SHORT, MONTHS_FR, getDow, fmtDate, formatDateTime, formatDate } from "../../../shared/utils/dates";
+import { PIPELINE_LABELS, STATUS_COLORS } from "../../../shared/utils/pipeline";
 import { sendNotification, buildNotifyPayload } from "../../../shared/utils/notifications";
 import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";
@@ -30,7 +31,7 @@ const AgendaTab = () => {
     showGridColors, setShowGridColors,
     gridColorPresets,
     myBookings, myCalendars, monthDays, agendaFillRate,
-    getBookingAt, getGoogleEventAt, updateBooking,
+    getBookingAt, getGoogleEventAt, updateBooking, cancelBookingAndCascade,
     portalTab, setPortalTab, setPortalTabKey,
     setPhoneScheduleForm, setPhoneShowScheduleModal,
     // ── Hotfix audit 2026-04-23 — wire missing symbols ──
@@ -511,7 +512,7 @@ const AgendaTab = () => {
           </div>
           <div style={{ fontSize:14, fontWeight:700, color:T.text }}>{next.visitorName}</div>
           <div style={{ fontSize:11, color:T.text3, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-            <span>{fmtDate(next.date)} · {next.time} · {next.duration}min</span>
+            <span>{formatDateTime(next.date, next.time)} · {next.duration}min</span>
             {cal && <span style={{ color:cal.color, fontWeight:600 }}>{cal.name}</span>}
             {next.visitorPhone && <span><I n="phone" s={10}/> {next.visitorPhone}</span>}
           </div>
@@ -519,17 +520,17 @@ const AgendaTab = () => {
         </div>
         <div style={{ display:"flex", flexDirection:"column", gap:6, flexShrink:0 }}>
           {next.visitorPhone && (
-            <div onClick={() => { const phone = next.visitorPhone.replace(/\s/g,""); const msg = encodeURIComponent(`Bonjour ${next.visitorName}, rappel de votre RDV le ${fmtDate(next.date)} à ${next.time}. ${next.location||""}`); window.open(`https://wa.me/${phone.replace("+","")}?text=${msg}`,"_blank"); }} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 10px", borderRadius:8, background:"#25D36618", border:"1px solid #25D36640", color:"#25D366", fontSize:10, fontWeight:700, cursor:"pointer" }} title="Envoyer WhatsApp">
+            <div onClick={() => { const phone = next.visitorPhone.replace(/\s/g,""); const msg = encodeURIComponent(`Bonjour ${next.visitorName}, rappel de votre RDV le ${formatDateTime(next.date, next.time)}. ${next.location||""}`); window.open(`https://wa.me/${phone.replace("+","")}?text=${msg}`,"_blank"); }} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 10px", borderRadius:8, background:"#25D36618", border:"1px solid #25D36640", color:"#25D366", fontSize:10, fontWeight:700, cursor:"pointer" }} title="Envoyer WhatsApp">
               <I n="message-circle" s={13}/> WhatsApp
             </div>
           )}
           {next.visitorPhone && (
-            <div onClick={() => { const phone = next.visitorPhone.replace(/\s/g,""); window.open(`sms:${phone}?body=${encodeURIComponent(`Rappel: RDV le ${fmtDate(next.date)} à ${next.time}`)}`); }} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 10px", borderRadius:8, background:"#3B82F618", border:"1px solid #3B82F640", color:"#3B82F6", fontSize:10, fontWeight:700, cursor:"pointer" }} title="Envoyer SMS">
+            <div onClick={() => { const phone = next.visitorPhone.replace(/\s/g,""); window.open(`sms:${phone}?body=${encodeURIComponent(`Rappel: RDV le ${formatDateTime(next.date, next.time)}`)}`); }} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 10px", borderRadius:8, background:"#3B82F618", border:"1px solid #3B82F640", color:"#3B82F6", fontSize:10, fontWeight:700, cursor:"pointer" }} title="Envoyer SMS">
               <I n="smartphone" s={13}/> SMS
             </div>
           )}
           {next.visitorEmail && (
-            <div onClick={() => { const subject = encodeURIComponent(`Rappel : Votre RDV du ${fmtDate(next.date)} à ${next.time}`); const body = encodeURIComponent(`Bonjour ${next.visitorName},\n\nRappel de votre rendez-vous :\n- Date : ${fmtDate(next.date)} à ${next.time}\n- Durée : ${next.duration}min\n${next.location ? "- Lieu : "+next.location+"\n" : ""}${next.videoLink ? "- Lien visio : "+next.videoLink+"\n" : ""}\nCordialement,\n${collab.name}`); window.open(`mailto:${next.visitorEmail}?subject=${subject}&body=${body}`); }} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 10px", borderRadius:8, background:"#8B5CF618", border:"1px solid #8B5CF640", color:"#8B5CF6", fontSize:10, fontWeight:700, cursor:"pointer" }} title="Envoyer Email">
+            <div onClick={() => { const subject = encodeURIComponent(`Rappel : Votre RDV du ${formatDateTime(next.date, next.time)}`); const body = encodeURIComponent(`Bonjour ${next.visitorName},\n\nRappel de votre rendez-vous :\n- Date : ${formatDateTime(next.date, next.time)}\n- Durée : ${next.duration}min\n${next.location ? "- Lieu : "+next.location+"\n" : ""}${next.videoLink ? "- Lien visio : "+next.videoLink+"\n" : ""}\nCordialement,\n${collab.name}`); window.open(`mailto:${next.visitorEmail}?subject=${subject}&body=${body}`); }} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 10px", borderRadius:8, background:"#8B5CF618", border:"1px solid #8B5CF640", color:"#8B5CF6", fontSize:10, fontWeight:700, cursor:"pointer" }} title="Envoyer Email">
               <I n="mail" s={13}/> Email
             </div>
           )}
@@ -845,7 +846,7 @@ const AgendaTab = () => {
               <Badge color={b.status==='confirmed'?T.success:b.status==='pending'?T.warning:T.danger}>{b.status==='confirmed'?'Confirmé':b.status==='pending'?'Attente':'Annulé'}</Badge>
               <div style={{ display:'flex', gap:4 }}>
                 {b.status==='pending' && <Btn small success disabled={actionLoading===b.id+'c'} onClick={() => { (typeof setActionLoading==='function'?setActionLoading:function(){})(b.id+'c'); updateBooking(b.id,{status:'confirmed'}); showNotif('RDV confirmé'); sendNotification('booking-confirmed', buildNotifyPayload(b, calendars, [collab], company)); setTimeout(()=>(typeof setActionLoading==='function'?setActionLoading:function(){})(null),600); }}>{actionLoading===b.id+'c'?<Spinner size={12} color='#fff'/>:<I n='check' s={12}/>}</Btn>}
-                {b.status!=='cancelled' && <Btn small danger disabled={actionLoading===b.id+'x'} onClick={() => { (typeof setActionLoading==='function'?setActionLoading:function(){})(b.id+'x'); updateBooking(b.id,{status:'cancelled'}); showNotif('RDV annulé','danger'); sendNotification('cancelled', buildNotifyPayload(b, calendars, [collab], company)); setTimeout(()=>(typeof setActionLoading==='function'?setActionLoading:function(){})(null),600); }}>{actionLoading===b.id+'x'?<Spinner size={12} color='#fff'/>:<I n='x' s={12}/>}</Btn>}
+                {b.status!=='cancelled' && <Btn small danger disabled={actionLoading===b.id+'x'} onClick={() => { (typeof setActionLoading==='function'?setActionLoading:function(){})(b.id+'x'); cancelBookingAndCascade(b.id); showNotif('RDV annulé','danger'); sendNotification('cancelled', buildNotifyPayload(b, calendars, [collab], company)); setTimeout(()=>(typeof setActionLoading==='function'?setActionLoading:function(){})(null),600); }}>{actionLoading===b.id+'x'?<Spinner size={12} color='#fff'/>:<I n='x' s={12}/>}</Btn>}
                 <Btn small onClick={() => setSelectedBooking(b)}><I n='eye' s={12}/></Btn>
               </div>
             </div>

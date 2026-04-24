@@ -1,8 +1,8 @@
 // Phase 13a — extracted Home tab from CollabPortal.jsx (was lines 3605-4439 IIFE).
 
-import React from "react";
+import React, { useState, useEffect } from "react"; // hotfix 2026-04-23 — +hooks (HookIsolator callback L674-676)
 import { T } from "../../../theme";
-import { I, Btn, Card, Avatar, Stat, Stars } from "../../../shared/ui";
+import { I, Btn, Card, Avatar, Stat, Stars, HookIsolator } from "../../../shared/ui"; // hotfix 2026-04-23 — +HookIsolator
 import { api } from "../../../shared/services/api";
 import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";
@@ -36,17 +36,17 @@ const firstname = collab?.name?.split(' ')[0] || '';
 // KPI data
 const todayCalls = ((typeof voipCallLogs!=='undefined'?voipCallLogs:null)||[]).filter(c=>c.createdAt&&c.createdAt.startsWith(todayISO)).length;
 const todayBookings = (bookings||[]).filter(b=>b.date===todayISO&&b.status==='confirmed'&&(b.collaboratorId===collab.id)).sort((a,b)=>(a.time||'').localeCompare(b.time||''));
-const rdvPassesAQualifier = (contacts||[]).filter(c=>c.assignedTo===collab.id&&c.pipeline_stage==='rdv_programme'&&(()=>{const liveRdv=(bookings||[]).filter(b=>b.contactId===c.id&&b.status==='confirmed').sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))[0];const rdvD=liveRdv?liveRdv.date+(liveRdv.time?'T'+liveRdv.time:'T23:59'):c.next_rdv_date;return rdvD&&new Date(rdvD).getTime()<Date.now();})());
-const nrpToRelance = (contacts||[]).filter(c=>c.assignedTo===collab.id&&c.pipeline_stage==='nrp'&&c.nrp_next_relance&&c.nrp_next_relance<=todayISO);
-const contactsInactifs = (contacts||[]).filter(c=>c.assignedTo===collab.id&&!['perdu','client_valide'].includes(c.pipeline_stage)&&(()=>{const d=c.updatedAt||c.lastVisit||c.createdAt;return d&&Math.floor((Date.now()-new Date(d).getTime())/86400000)>=14;})());
-const nouveauxLeads = (contacts||[]).filter(c=>c.assignedTo===collab.id&&c.pipeline_stage==='nouveau'&&!c.lastVisit);
+const rdvPassesAQualifier = (contacts||[]).filter(c=>c&&c.assignedTo===collab.id&&c.pipeline_stage==='rdv_programme'&&(()=>{const liveRdv=(bookings||[]).filter(b=>b.contactId===c.id&&b.status==='confirmed').sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))[0];const rdvD=liveRdv?liveRdv.date+(liveRdv.time?'T'+liveRdv.time:'T23:59'):c.next_rdv_date;return rdvD&&new Date(rdvD).getTime()<Date.now();})());
+const nrpToRelance = (contacts||[]).filter(c=>c&&c.assignedTo===collab.id&&c.pipeline_stage==='nrp'&&c.nrp_next_relance&&c.nrp_next_relance<=todayISO);
+const contactsInactifs = (contacts||[]).filter(c=>c&&c.assignedTo===collab.id&&!['perdu','client_valide'].includes(c.pipeline_stage)&&(()=>{const d=c.updatedAt||c.lastVisit||c.createdAt;return d&&Math.floor((Date.now()-new Date(d).getTime())/86400000)>=14;})());
+const nouveauxLeads = (contacts||[]).filter(c=>c&&c.assignedTo===collab.id&&c.pipeline_stage==='nouveau'&&!c.lastVisit);
 const totalActions = rdvPassesAQualifier.length + nrpToRelance.length + contactsInactifs.length + nouveauxLeads.length;
 
 const weekStart = new Date();weekStart.setDate(weekStart.getDate()-weekStart.getDay()+1);
 const weekISO = weekStart.toISOString().split('T')[0];
 const weekCalls = ((typeof voipCallLogs!=='undefined'?voipCallLogs:null)||[]).filter(c=>c.createdAt&&c.createdAt>=weekISO).length;
 const totalContacts = (contacts||[]).filter(c=>c.assignedTo===collab.id).length;
-const clientsValides = (contacts||[]).filter(c=>c.assignedTo===collab.id&&c.pipeline_stage==='client_valide').length;
+const clientsValides = (contacts||[]).filter(c=>c&&c.assignedTo===collab.id&&c.pipeline_stage==='client_valide').length;
 const tauxConversion = totalContacts>0?Math.round(clientsValides/totalContacts*100):0;
 
 const timeEmoji = nowH < 7 ? '🌙' : nowH < 12 ? '☀️' : nowH < 18 ? '🔥' : '🌙';
@@ -374,13 +374,13 @@ return <div style={{padding:'0 4px'}}>
     // 3. RDV du jour
     todayBookings.forEach(b => {const c=(contacts||[]).find(x=>x.id===b.contactId);if(c&&!queue.some(q=>q.ct.id===c.id))queue.push({ct:c, type:'rdv_jour', priority:3, label:'RDV '+b.time, color:'#0EA5E9', icon:'calendar', action:'fiche', actionLabel:'Voir fiche', suggestion:'RDV prevu a '+b.time+'. Preparez votre approche.'});});
     // 4. Contacts chauds
-    (contacts||[]).filter(c=>c.assignedTo===collab.id&&!['perdu','client_valide'].includes(c.pipeline_stage)&&c.phone).map(c=>({...c,_t:getLeadTemperature(c)})).filter(c=>(c._t.temp==='hot'||c._t.temp==='warm')&&!queue.some(q=>q.ct.id===c.id)).sort((a,b)=>b._t.conversion-a._t.conversion).forEach(c => queue.push({ct:c, type:'hot', priority:4, label:c._t.temp==='hot'?'HOT':'WARM', color:c._t.temp==='hot'?'#EF4444':'#F59E0B', icon:'flame', action:'appeler', actionLabel:'Appeler', suggestion:'Contact chaud (score '+c._t.conversion+'%). Battre le fer tant qu\'il est chaud !'}));
+    (contacts||[]).filter(c=>c&&c.assignedTo===collab.id&&!['perdu','client_valide'].includes(c.pipeline_stage)&&c.phone).map(c=>({...c,_t:getLeadTemperature(c)})).filter(c=>(c._t.temp==='hot'||c._t.temp==='warm')&&!queue.some(q=>q.ct.id===c.id)).sort((a,b)=>b._t.conversion-a._t.conversion).forEach(c => queue.push({ct:c, type:'hot', priority:4, label:c._t.temp==='hot'?'HOT':'WARM', color:c._t.temp==='hot'?'#EF4444':'#F59E0B', icon:'flame', action:'appeler', actionLabel:'Appeler', suggestion:'Contact chaud (score '+c._t.conversion+'%). Battre le fer tant qu\'il est chaud !'}));
     // 5. Contacts inactifs (14j+)
     contactsInactifs.filter(c=>!queue.some(q=>q.ct.id===c.id)).forEach(c => { const days=Math.floor((Date.now()-new Date(c.updatedAt||c.lastVisit||c.createdAt).getTime())/86400000); queue.push({ct:c, type:'inactif', priority:5, label:'Inactif '+days+'j', color:'#F59E0B', icon:'alert-circle', action:'appeler', actionLabel:'Relancer', suggestion:'Aucune action depuis '+days+' jours. Une relance peut debloquer la situation.'}); });
     // 6. Nouveaux leads (jamais contactes)
     nouveauxLeads.filter(c=>c.phone&&!queue.some(q=>q.ct.id===c.id)).forEach(c => queue.push({ct:c, type:'nouveau', priority:6, label:'Nouveau lead', color:'#3B82F6', icon:'user-plus', action:'appeler', actionLabel:'1er contact', suggestion:'Premier contact ! Presentez-vous et qualifiez le besoin.'}));
     // 7. Tous les autres contacts actifs avec telephone (pas encore dans la queue)
-    (contacts||[]).filter(c=>c.assignedTo===collab.id&&c.phone&&!['perdu','client_valide'].includes(c.pipeline_stage)&&!queue.some(q=>q.ct.id===c.id)).forEach(c => { const stg2=PIPELINE_STAGES.find(s=>s.id===c.pipeline_stage)||PIPELINE_STAGES[0]; queue.push({ct:c, type:'contact', priority:7, label:stg2.label||'Contact', color:stg2.color||T.accent, icon:'user', action:'appeler', actionLabel:'Appeler', suggestion:''}); });
+    (contacts||[]).filter(c=>c&&c.assignedTo===collab.id&&c.phone&&!['perdu','client_valide'].includes(c.pipeline_stage)&&!queue.some(q=>q.ct.id===c.id)).forEach(c => { const stg2=PIPELINE_STAGES.find(s=>s.id===c.pipeline_stage)||PIPELINE_STAGES[0]; queue.push({ct:c, type:'contact', priority:7, label:stg2.label||'Contact', color:stg2.color||T.accent, icon:'user', action:'appeler', actionLabel:'Appeler', suggestion:''}); });
 
     if (queue.length === 0) return null;
 
@@ -760,7 +760,7 @@ return <div style={{padding:'0 4px'}}>
     const startDate = period === 'jour' ? todayS : period === 'semaine' ? weekS : period === 'mois' ? monthStart : '2020-01-01';
 
     // Filtres par période
-    const myContacts = (contacts||[]).filter(c=>c.assignedTo===collab.id);
+    const myContacts = (contacts||[]).filter(c=>c&&c.assignedTo===collab.id); // hotfix 2026-04-23 — null-safe
     const periodCalls = ((typeof voipCallLogs!=='undefined'?voipCallLogs:null)||[]).filter(c=>c.createdAt&&c.createdAt>=startDate);
     const periodCallsOut = periodCalls.filter(c=>c.direction==='outbound');
     const periodCallsIn = periodCalls.filter(c=>c.direction==='inbound');

@@ -14,8 +14,8 @@ import { COMMON_TIMEZONES, genCode } from "../../shared/utils/constants";
 import { HookIsolator, Logo, I, Avatar, Badge, Btn, Stars, Toggle, LoadBar, Card, Spinner, Req, Skeleton, Input, Stat, Modal, ConfirmModal, EmptyState, HelpTip, ValidatedInput, ErrorBoundary } from "../../shared/ui";
 
 // Phase 2 — pure data & utils extractions
-import { DAYS_FR, DAYS_SHORT, MONTHS_FR, getDow, fmtDate } from "../../shared/utils/dates";
-import { PIPELINE_CARD_COLORS_DEFAULT, RDV_CATEGORIES } from "../../shared/utils/pipeline";
+import { DAYS_FR, DAYS_SHORT, MONTHS_FR, getDow, fmtDate, formatDateTime, formatDate } from "../../shared/utils/dates";
+import { PIPELINE_CARD_COLORS_DEFAULT, RDV_CATEGORIES, PIPELINE_LABELS, STATUS_COLORS } from "../../shared/utils/pipeline";
 import { sendNotification, buildNotifyPayload } from "../../shared/utils/notifications";
 import { COMPANIES, INIT_COLLABS, defAvail, INIT_AVAILS, INIT_CALS, INIT_BOOKINGS, INIT_WORKFLOWS, INIT_ROUTING, INIT_POLLS, INIT_CONTACTS, COMPANY_SETTINGS, INIT_ALL_COMPANIES, INIT_ALL_USERS, INIT_ACTIVITY_LOG } from "../../data/fixtures";
 
@@ -34,6 +34,9 @@ import {
 
 // Phase 10+11 — context + extracted tabs
 import { CollabProvider } from "./context/CollabContext";
+
+// hotfix 2026-04-23 — TAB_ID declared in App.jsx not exported, used bare in CollabPortal.jsx L2689
+const TAB_ID = crypto.randomUUID ? crypto.randomUUID() : "tab-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
 import AiProfileTab from "./tabs/AiProfileTab";
 import TablesTab from "./tabs/TablesTab";
 import MessagesTab from "./tabs/MessagesTab";
@@ -708,7 +711,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       if (r?.success) {
         showNotif(r.message || 'Contact transféré', 'success');
         const updated = await api('/api/data/contacts?companyId=' + company.id + '&collaboratorId=' + collab.id);
-        if (updated?.contacts) setContacts(updated.contacts);
+        if (updated?.contacts) setContacts((updated.contacts||[]).filter(Boolean)); // hotfix 2026-04-23 — null-safe API boundary
         v7FollowersLoadedRef.current = false;
         const fm = await api('/api/transfer/followers-batch');
         if (fm && typeof fm === 'object' && !fm.error) setV7FollowersMap(fm);
@@ -1524,6 +1527,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     // Mode booking : creer un vrai RDV + deplacer en rdv_programme
     if(phoneScheduleForm._bookingMode) {
       const f = phoneScheduleForm;
+      // V1.7.4 — guard: block booking if contact is still pending server reconciliation
+      const _pendCt = f.contactId ? (contacts||[]).find(c => c.id === f.contactId) : null;
+      if (_pendCt && _pendCt._pending) { showNotif('Contact en cours de création — réessayez dans quelques secondes','danger'); return false; }
       const setBookErr=(msg)=>{setPhoneScheduleForm(p=>({...p,_error:msg,_submitting:false}));showNotif(msg,'danger');};
       console.log('[BOOKING DEBUG] form:', JSON.stringify({date:f.date,time:f.time,contactId:f.contactId,number:f.number,calendarId:f.calendarId,rdv_category:f.rdv_category,duration:f.duration,_bookingMode:f._bookingMode,_editBookingId:f._editBookingId}));
       if(!f.date||!f.time) { console.log('[BOOKING BLOCK] missing date/time'); setBookErr('Choisissez une date et heure'); return false; }
@@ -1538,7 +1544,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
         if(f.contactId) handleCollabUpdateContact(f.contactId, {next_rdv_date:f.date, next_rdv_booking_id:f._editBookingId});
         setPhoneShowScheduleModal(false);
         setPhoneScheduleForm({contactId:'',number:'',date:'',time:'',notes:''});
-        showNotif('RDV modifié — '+new Date(f.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+f.time,'success');
+        showNotif('RDV modifié — '+formatDateTime(f.date, f.time),'success');
         return true;
       }
 
@@ -1617,6 +1623,16 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       api('/api/bookings',{method:'POST',body:bk}).then(r => {
         if(r && r.error) throw new Error(r.error);
         console.log('[BOOKING OK]', bk.id, f.date, f.time);
+        // V1.8.1 — envoi confirmation email au visiteur si case cochée et email présent
+        if ((f._sendConfirmation !== false) && (ct?.email || f._newEmail)) {
+          const _notifBk = { ...bk, visitorEmail: ct?.email || f._newEmail || '' };
+          sendNotification('booking-confirmed', buildNotifyPayload(_notifBk, calendars, [collab], company))
+            .then(_nr => {
+              if (_nr?.email?.success) showNotif('📧 Email de confirmation envoyé', 'success');
+              else showNotif("RDV créé, mais l'email de confirmation n'a pas pu être envoyé", 'warning');
+            })
+            .catch(() => showNotif("RDV créé, mais l'email de confirmation n'a pas pu être envoyé", 'warning'));
+        }
         // V3: refetch contact individuel — le backend a exécuté autoPipelineAdvance
         api(`/api/data/contacts/${f.contactId}`).then(fresh => {
           if (fresh?.id) { setContacts(p => p.map(c => c.id === fresh.id ? fresh : c)); }
@@ -1631,7 +1647,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       });
       setPhoneShowScheduleModal(false);
       setPhoneScheduleForm({contactId:'',number:'',date:'',time:'',notes:''});
-      showNotif((cancelOld?'RDV déplacé':'RDV programmé')+' le '+new Date(f.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})+' à '+f.time+' ✅','success');
+      showNotif((cancelOld?'RDV déplacé':'RDV programmé')+' le '+formatDateTime(f.date, f.time)+' ✅','success');
       return true;
     }
 
@@ -2136,7 +2152,28 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       .then(r => { if (r?.error) throw new Error(r.error); })
       .catch(() => { if (prev) setBookings(p => p.map(b => b.id === id ? prev : b)); showNotif('Erreur: modification RDV non sauvegardée', 'danger'); });
   };
-  const deleteBooking = (id) => { updateBooking(id, { status:"cancelled" }); setSelectedBooking(null); showNotif("RDV annulé"); };
+  // V1.6 — cascade cancel booking → contact pipeline stage + next_rdv clear
+  // si c'etait le dernier RDV actif ET contact en rdv_programme, revert en contacte
+  // sinon, update next_rdv_date vers le prochain RDV chronologique
+  const cancelBookingAndCascade = (bookingId) => {
+    const b = (bookings||[]).find(bk => bk.id === bookingId);
+    if (!b) { updateBooking(bookingId, { status:"cancelled" }); return; }
+    updateBooking(bookingId, { status:"cancelled" });
+    if (!b.contactId) return;
+    const ct = (contacts||[]).find(c => c.id === b.contactId);
+    if (!ct) return;
+    const today = new Date().toISOString().split("T")[0];
+    const remaining = (bookings||[])
+      .filter(bk => bk.id !== bookingId && bk.contactId === b.contactId && bk.status === "confirmed" && (bk.date||"") >= today);
+    if (remaining.length === 0 && ct.pipeline_stage === "rdv_programme") {
+      handlePipelineStageChange(ct.id, "contacte", "RDV annulé — retour en Contacté");
+      handleCollabUpdateContact(ct.id, { next_rdv_date: "", next_rdv_booking_id: "", rdv_status: "" });
+    } else if (remaining.length > 0) {
+      const nextBk = [...remaining].sort((a,z) => ((a.date||"")+(a.time||"")).localeCompare((z.date||"")+(z.time||"")))[0];
+      handleCollabUpdateContact(ct.id, { next_rdv_date: nextBk.date, next_rdv_booking_id: nextBk.id });
+    }
+  };
+  const deleteBooking = (id) => { cancelBookingAndCascade(id); setSelectedBooking(null); showNotif("RDV annulé"); };
 
   const userAvail = avails[collab.id] || defAvail();
 
@@ -2641,7 +2678,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     const all = myCrmContacts.map(c => ({ ...c, _score: getCollabLeadScore(c) }));
     const stageCounts = {};
     PIPELINE_STAGES.forEach(s => stageCounts[s.id] = 0);
-    all.forEach(c => { const st = c.pipeline_stage||"nouveau"; if(stageCounts[st]!==undefined) stageCounts[st]++; else stageCounts[st] = 1; });
+    all.forEach(c => { if(!c) return; const st = c.pipeline_stage||"nouveau"; if(stageCounts[st]!==undefined) stageCounts[st]++; else stageCounts[st] = 1; }); // hotfix 2026-04-23 — null-safe
     const total = all.length || 1;
     const funnel = orderedStages.map((s,i) => {
       const count = stageCounts[s.id] || 0;
@@ -2710,6 +2747,17 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
             }
             // V3: délai de protection 5s post-succès
             setTimeout(() => { if (Date.now() - contactsLocalEditRef.current > 4000) contactsLocalEditRef.current = 0; }, 5000);
+            // V1.7.5 — cascade soft-cancel bookings futurs uniquement après succès réel du passage en perdu
+            if (updates.pipeline_stage === 'perdu') {
+              const _nowMs = Date.now();
+              const _futureBks = (bookings||[]).filter(b => {
+                if (b.contactId !== id || b.status !== 'confirmed') return false;
+                const _ms = new Date((b.date||'') + 'T' + (b.time || '23:59')).getTime();
+                return !isNaN(_ms) && _ms >= _nowMs;
+              });
+              for (const _b of _futureBks) { updateBooking(_b.id, { status: 'cancelled' }); }
+              if (_futureBks.length) console.log('[CASCADE PERDU]', _futureBks.length, 'bookings cancelled for contact', id);
+            }
           }
         })
         .catch(err => {
@@ -2728,6 +2776,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
           }
         });
     };
+    // V1.7.4 — guard: skip backend PUT if contact is still pending server reconciliation
+    const _tgt = (contacts||[]).find(c => c.id === id);
+    if (_tgt && _tgt._pending) { console.warn('[CONTACT UPDATE] skipped PUT — contact pending:', id); return; }
     saveToBackend();
   };
   // ── REGLE: RDV passé sans action → notification pour qualifier ──
@@ -2916,11 +2967,32 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     if (!fullName) { showNotif('Le nom est obligatoire','danger'); return; }
     const tags = (typeof newContactForm!=='undefined'?newContactForm:{}).tags ? (typeof newContactForm!=='undefined'?newContactForm:{}).tags.split(',').map(t=>t.trim()).filter(Boolean) : [];
     const nc = { id:'ct'+Date.now(), companyId:company.id, name:fullName, firstname:(typeof newContactForm!=='undefined'?newContactForm:{}).firstname?.trim()||'', lastname:(typeof newContactForm!=='undefined'?newContactForm:{}).lastname?.trim()||'', civility:(typeof newContactForm!=='undefined'?newContactForm:{}).civility||'', contact_type:(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type||'btc', email:(typeof newContactForm!=='undefined'?newContactForm:{}).email.trim(), phone:(typeof newContactForm!=='undefined'?newContactForm:{}).phone.trim()||(typeof newContactForm!=='undefined'?newContactForm:{}).mobile.trim(), mobile:(typeof newContactForm!=='undefined'?newContactForm:{}).mobile.trim(), company:(typeof newContactForm!=='undefined'?newContactForm:{}).company.trim(), address:(typeof newContactForm!=='undefined'?newContactForm:{}).address.trim(), website:(typeof newContactForm!=='undefined'?newContactForm:{}).website?.trim()||'', siret:(typeof newContactForm!=='undefined'?newContactForm:{}).siret?.trim()||'', totalBookings:0, lastVisit:'', tags, notes:(typeof newContactForm!=='undefined'?newContactForm:{}).notes.trim(), rating:null, docs:[], pipeline_stage:(typeof newContactForm!=='undefined'?newContactForm:{}).pipeline_stage||'nouveau', assignedTo:collab.id, shared_with:[], source:'manual', createdAt:new Date().toISOString() };
+    nc._pending = true;
     setContacts(p => [...p, nc]);
     setShowNewContact(false);
     setNewContactForm({name:'',email:'',phone:'',mobile:'',company:'',address:'',notes:'',pipeline_stage:'nouveau',tags:''});
     showNotif('Contact créé');
-    api('/api/data/contacts', { method:'POST', body:nc }).then(r => { if(!r||r.error||r._forbidden){console.error('[CONTACT CREATE FAIL]',r);showNotif('Erreur: '+(r?.error||'création contact échouée'),'danger');} });
+    api('/api/data/contacts', { method:'POST', body:nc }).then(r => {
+      if(!r||r.error||r._forbidden){
+        console.error('[CONTACT CREATE FAIL]',r);
+        setContacts(p => p.filter(c => c.id !== nc.id));
+        showNotif('Erreur: '+(r?.error||'création contact échouée'),'danger');
+        return;
+      }
+      if(r._duplicate){
+        setContacts(p => p.filter(c => c.id !== nc.id));
+        showNotif('Ce contact existait déjà — fusionné','info');
+        return;
+      }
+      if(!r.id){
+        console.error('[CONTACT CREATE] server response missing id', r);
+        setContacts(p => p.filter(c => c.id !== nc.id));
+        showNotif('Erreur: id serveur manquant — réessayez','danger');
+        return;
+      }
+      // Reconcile temp id → real backend id, clear pending flag
+      setContacts(p => p.map(c => c.id === nc.id ? {...c, id: r.id, _pending: false} : c));
+    });
   };
   // Quick add contact from phone number (inline in history/conversations)
   const handleQuickAddContact = () => {
@@ -3224,6 +3296,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       goalsLoading, myGoals, myTeamGoals, myRewards,
       // Phone/Pipeline Live tab — VoIP + dialer + conversations + history + AI copilot live
       phoneSubTab, setPhoneSubTab,
+      phoneLeftCollapsed, setPhoneLeftCollapsed, phoneRightCollapsed, setPhoneRightCollapsed, // hotfix 2026-04-23 — sidebar toggle states missing from provider
       phoneActiveCall, setPhoneActiveCall,
       phoneActiveScriptId, setPhoneActiveScriptId,
       phoneCallTimer,
@@ -3424,7 +3497,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       showGridColors, setShowGridColors,
       gridColorPresets,
       myBookings, myCalendars, monthDays, agendaFillRate,
-      getBookingAt, getGoogleEventAt, updateBooking,
+      getBookingAt, getGoogleEventAt, updateBooking, cancelBookingAndCascade,
       // Home tab
       bookings, voipCallLogs, smsCredits,
       portalTab, setPortalTab,
@@ -4398,7 +4471,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                           <div style={{fontSize:9,fontWeight:700,color:T.text3,marginBottom:3}}>Déplacer vers la colonne</div>
                           <select value={cd.targetStage||''} onChange={e=>{const arr=[...((typeof liveConfig!=='undefined'?liveConfig:{}).customDetections||[])];arr[i]={...arr[i],targetStage:e.target.value};saveLiveConfig({customDetections:arr});}} style={{width:'100%',padding:'5px 8px',borderRadius:6,border:'1px solid '+T.border,background:T.card,color:T.text,fontSize:10,fontFamily:'inherit',marginBottom:4}}>
                             <option value="">Choisir la colonne...</option>
-                            {(orderedStages||[]).map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
+                            {(orderedStages||[]).map(s=><option key={s.id} value={s.id}>{PIPELINE_LABELS[s.id]||s.label}</option>)}
                           </select>
                           <div style={{fontSize:8,color:T.text3}}>Le contact sera déplacé vers cette colonne quand le mot-clé est détecté (avec confirmation)</div>
                         </>}
@@ -4500,7 +4573,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                       return <div key={stage.id} style={{borderRadius:10,border:'1px solid '+(hasAny?stage.color+'40':T.border),background:hasAny?stage.color+'04':T.bg,overflow:'hidden'}}>
                         <div onClick={()=>setIaHubCollapse(p=>({...p,['pa_'+stage.id]:!p['pa_'+stage.id]}))} style={{padding:'10px 12px',display:'flex',alignItems:'center',gap:8,cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.background=stage.color+'08'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
                           <span style={{width:10,height:10,borderRadius:5,background:stage.color,flexShrink:0}}/>
-                          <span style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>{stage.label}</span>
+                          <span style={{fontSize:13,fontWeight:700,color:T.text,flex:1}}>{PIPELINE_LABELS[stage.id]||stage.label}</span>
                           {entryRule?.enabled && <span style={{fontSize:8,fontWeight:700,padding:'1px 6px',borderRadius:4,background:'#22C55E15',color:'#22C55E'}}>📥 {entryRule.send_sms&&entryRule.send_email?'SMS+Email':entryRule.send_sms?'SMS':'Email'}</span>}
                           {exitRule?.enabled && <span style={{fontSize:8,fontWeight:700,padding:'1px 6px',borderRadius:4,background:'#F59E0B15',color:'#F59E0B'}}>📤 {exitRule.send_sms&&exitRule.send_email?'SMS+Email':exitRule.send_sms?'SMS':'Email'}</span>}
                           <I n={isOpen?'chevron-up':'chevron-down'} s={14} style={{color:T.text3}}/>
@@ -4912,7 +4985,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                     <div style={{ fontSize:11, fontWeight:600, color:T.text3, marginBottom:6 }}>Statut du RDV</div>
                     <div style={{ display:'flex', gap:6 }}>
                       {[{id:'confirmed',label:'Confirmé',color:T.success,icon:'check'},{id:'pending',label:'En attente',color:T.warning,icon:'clock'},{id:'cancelled',label:'Annulé',color:T.danger,icon:'x'}].map(s => (
-                        <div key={s.id} onClick={() => { if(b.status!==s.id){ updateBooking(b.id,{status:s.id}); setSelectedBooking({...b,status:s.id}); showNotif(`RDV ${s.label.toLowerCase()}`); if(s.id==='confirmed') sendNotification('booking-confirmed',buildNotifyPayload(b,calendars,[collab],company)); if(s.id==='cancelled') sendNotification('cancelled',buildNotifyPayload(b,calendars,[collab],company)); }}} style={{ padding:'6px 12px', borderRadius:8, fontSize:12, fontWeight:b.status===s.id?700:500, background:b.status===s.id?s.color+'18':'transparent', color:b.status===s.id?s.color:T.text3, border:`1px solid ${b.status===s.id?s.color+'40':T.border}`, cursor:'pointer', display:'flex', alignItems:'center', gap:4, transition:'all .15s' }}>
+                        <div key={s.id} onClick={() => { if(b.status!==s.id){ if(s.id==='cancelled') { cancelBookingAndCascade(b.id); } else { updateBooking(b.id,{status:s.id}); } setSelectedBooking({...b,status:s.id}); showNotif(`RDV ${s.label.toLowerCase()}`); if(s.id==='confirmed') sendNotification('booking-confirmed',buildNotifyPayload(b,calendars,[collab],company)); if(s.id==='cancelled') sendNotification('cancelled',buildNotifyPayload(b,calendars,[collab],company)); }}} style={{ padding:'6px 12px', borderRadius:8, fontSize:12, fontWeight:b.status===s.id?700:500, background:b.status===s.id?s.color+'18':'transparent', color:b.status===s.id?s.color:T.text3, border:`1px solid ${b.status===s.id?s.color+'40':T.border}`, cursor:'pointer', display:'flex', alignItems:'center', gap:4, transition:'all .15s' }}>
                           <I n={s.icon} s={12}/> {s.label}
                         </div>
                       ))}
@@ -4940,7 +5013,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                         <Input label="Nouvelle heure" type="time" value={(typeof rescheduleData!=='undefined'?rescheduleData:{}).time} onChange={e => (typeof setRescheduleData==='function'?setRescheduleData:function(){})({...rescheduleData, time:e.target.value})} style={{ flex:1 }}/>
                       </div>
                       <div style={{ display:"flex", gap:8, marginTop:10 }}>
-                        <Btn small primary onClick={() => { updateBooking(b.id, { date:(typeof rescheduleData!=='undefined'?rescheduleData:{}).date, time:(typeof rescheduleData!=='undefined'?rescheduleData:{}).time }); const rPayload = buildNotifyPayload(b, calendars, collaborators, company); sendNotification('rescheduled', { ...rPayload, newDate: (typeof rescheduleData!=='undefined'?rescheduleData:{}).date, newTime: (typeof rescheduleData!=='undefined'?rescheduleData:{}).time }); setSelectedBooking({...b, date:(typeof rescheduleData!=='undefined'?rescheduleData:{}).date, time:(typeof rescheduleData!=='undefined'?rescheduleData:{}).time}); (typeof setRescheduleData==='function'?setRescheduleData:function(){})(null); showNotif("RDV replanifié"); }}>Confirmer</Btn>
+                        <Btn small primary onClick={() => { const _newDate=(typeof rescheduleData!=='undefined'?rescheduleData:{}).date; const _newTime=(typeof rescheduleData!=='undefined'?rescheduleData:{}).time; updateBooking(b.id, { date:_newDate, time:_newTime }); if(b.contactId) handleCollabUpdateContact(b.contactId, { next_rdv_date: _newDate, next_rdv_booking_id: b.id }); const rPayload = buildNotifyPayload(b, calendars, [collab], company); sendNotification('rescheduled', { ...rPayload, newDate: _newDate, newTime: _newTime }); setSelectedBooking({...b, date:_newDate, time:_newTime}); (typeof setRescheduleData==='function'?setRescheduleData:function(){})(null); showNotif("RDV replanifié"); }}>Confirmer</Btn>
                         <Btn small onClick={() => setRescheduleData(null)}>Annuler</Btn>
                       </div>
                     </div>
@@ -4981,8 +5054,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                     <div style={{ fontSize:11, fontWeight:600, color:T.text3, marginBottom:6 }}>Étape pipeline</div>
                     <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
                       {_bStages.map(s => (
-                        <div key={s.id} onClick={() => { handleCollabUpdateContact(_bContact.id, { pipeline_stage: s.id }); showNotif(`Étape → ${s.label}`); }} style={{ padding:'4px 10px', borderRadius:8, fontSize:11, fontWeight:_bContact.pipeline_stage===s.id?700:500, background:_bContact.pipeline_stage===s.id?s.color+'18':'transparent', color:_bContact.pipeline_stage===s.id?s.color:T.text3, border:`1px solid ${_bContact.pipeline_stage===s.id?s.color+'40':T.border}`, cursor:'pointer', transition:'all .15s' }}>
-                          <span style={{display:'inline-block',width:6,height:6,borderRadius:3,background:s.color,marginRight:4}}></span>{s.label}
+                        <div key={s.id} onClick={() => { handleCollabUpdateContact(_bContact.id, { pipeline_stage: s.id }); showNotif(`Étape → ${PIPELINE_LABELS[s.id]||s.label}`); }} style={{ padding:'4px 10px', borderRadius:8, fontSize:11, fontWeight:_bContact.pipeline_stage===s.id?700:500, background:_bContact.pipeline_stage===s.id?s.color+'18':'transparent', color:_bContact.pipeline_stage===s.id?s.color:T.text3, border:`1px solid ${_bContact.pipeline_stage===s.id?s.color+'40':T.border}`, cursor:'pointer', transition:'all .15s' }}>
+                          <span style={{display:'inline-block',width:6,height:6,borderRadius:3,background:STATUS_COLORS[s.id]||s.color,marginRight:4}}></span>{PIPELINE_LABELS[s.id]||s.label}
                         </div>
                       ))}
                     </div>
@@ -5325,7 +5398,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                         console.log('[CSV IMPORT] Result:',result);
                         if(result&&result.error){setCsvImportModal({...cim,step:"result",result:{error:result.error}});return;}
                         setCsvImportModal({...cim,step:"result",result});
-                        api("/api/data/contacts?companyId="+company.id).then(r=>{if(Array.isArray(r))setContacts(r);});
+                        api("/api/data/contacts?companyId="+company.id).then(r=>{if(Array.isArray(r))setContacts(r.filter(Boolean));}); // hotfix 2026-04-23 — null-safe API boundary
                         api("/api/contact-fields").then(r=>{if(Array.isArray(r))setContactFieldDefs(r);});
                       })
                       .catch(err=>{console.error('[CSV IMPORT] Error:',err);setCsvImportModal({...cim,step:"result",result:{error:err.message||"Erreur serveur — vérifiez la console (F12)"}});});
@@ -5480,10 +5553,24 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                 <label style={{fontSize:12,fontWeight:600,color:T.text2,marginBottom:4,display:'block'}}>Notes (optionnel)</label>
                 <textarea value={(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).notes} onChange={e=>(typeof setPhoneScheduleForm==='function'?setPhoneScheduleForm:function(){})(p=>({...p,notes:e.target.value}))} placeholder="Ajouter une note..." rows={2} style={{width:'100%',padding:'10px 14px',borderRadius:10,border:'1px solid #e5e7eb',background:'#f9fafb',fontSize:13,fontFamily:'inherit',color:'#111',resize:'none',outline:'none'}}/>
               </div>
+              {/* V1.8.1 — confirmation email */}
+              {(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{})._bookingMode && (()=>{
+                const _pf = (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{});
+                const _ct181 = _pf.contactId ? (contacts||[]).find(_c=>_c.id===_pf.contactId) : null;
+                const _vEmail = _ct181?.email || _pf._newEmail || '';
+                const _checked = (_pf._sendConfirmation !== false) && !!_vEmail;
+                return <div style={{display:'flex',alignItems:'center',gap:8,padding:'8px 12px',borderRadius:10,background:_vEmail?'#EFF6FF':'#F9FAFB',border:'1px solid '+(_vEmail?'#3B82F625':'#E5E7EB')}}>
+                  <input type="checkbox" id="_sendConf181" checked={_checked} disabled={!_vEmail} onChange={e=>(typeof setPhoneScheduleForm==='function'?setPhoneScheduleForm:function(){})(_p=>({..._p,_sendConfirmation:e.target.checked}))} style={{cursor:_vEmail?'pointer':'not-allowed',accentColor:'#3B82F6'}}/>
+                  <label htmlFor="_sendConf181" style={{fontSize:12,color:_vEmail?'#1E40AF':'#9CA3AF',cursor:_vEmail?'pointer':'default',flex:1}}>📧 Envoyer la confirmation par email au contact{!_vEmail && <span style={{fontSize:11}}> — email manquant</span>}</label>
+                </div>;
+              })()}
               {(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{})._bookingMode && (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).date && (()=>{
                 const selDate = (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).date;
                 const selCalId = (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).calendarId || '';
-                const selCollabId = selCalId ? ((calendars||[]).find(c=>c.id===selCalId)?.collaboratorId || collab.id) : collab.id;
+                // V1.7.7-Fix-A: résolution via calendar.collaborators (array) — pas collaboratorId (inexistant)
+                const _selCal = selCalId ? (calendars||[]).find(c=>c.id===selCalId) : null;
+                const _selCalCollabs = _selCal ? (Array.isArray(_selCal.collaborators) ? _selCal.collaborators : (()=>{try{return JSON.parse(_selCal.collaborators_json||'[]');}catch{return [];}})()) : [];
+                const selCollabId = _selCalCollabs.includes(collab.id) ? collab.id : (_selCalCollabs[0] || collab.id);
                 const dayBookings = (bookings||[]).filter(b=>(b.calendarId===selCalId || b.collaboratorId===selCollabId) && (b.date||'').startsWith(selDate) && b.status!=='cancelled');
                 const dayGCal = (googleEventsProp||[]).filter(ge=>(ge.collaboratorId===selCollabId) && (ge.start||ge.startDate||'').startsWith(selDate));
                 const buf = (typeof availBuffer!=='undefined'?availBuffer:null)||0;
@@ -5491,14 +5578,74 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                 dayBookings.forEach(b=>{ if(b.time) { const h=parseInt(b.time.split(':')[0]); const m=parseInt(b.time.split(':')[1]||0); const startMin=h*60+m-buf; const endMin=h*60+m+(b.duration||30)+buf; for(let i=Math.max(0,startMin);i<endMin;i+=30) busySlots.add(String(Math.floor(i/60)).padStart(2,'0')+':'+String(i%60).padStart(2,'0')); }});
                 dayGCal.forEach(ge=>{ try{ const st=new Date(ge.start||ge.startDate); const en=new Date(ge.end||ge.endDate||st.getTime()+3600000); const stBuf=st.getTime()-buf*60000; const enBuf=en.getTime()+buf*60000; for(let t=stBuf;t<enBuf;t+=1800000){const d=new Date(t);busySlots.add(String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'));} }catch{} });
                 const slots = [];
-                for(let h=8;h<=19;h++) for(let m=0;m<60;m+=30) {
-                  const slot = String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
-                  const isBusy = busySlots.has(slot);
-                  const isPast = selDate===new Date().toISOString().split('T')[0] && (h<new Date().getHours()||(h===new Date().getHours()&&m<=new Date().getMinutes()));
-                  slots.push({time:slot,busy:isBusy,past:isPast});
+                // V1.7.7 — Génération basée sur le planning hebdo du collab (pas hardcodé 8-19h)
+                const _dayDate = new Date(selDate+'T00:00:00');
+                const _dowIdx = (_dayDate.getDay()+6)%7; // 0=lundi ... 6=dimanche
+                const _DAY_KEYS_EN = ['monday','tuesday','wednesday','thursday','friday','saturday','sunday'];
+                const _DAY_KEYS_FR = ['lundi','mardi','mercredi','jeudi','vendredi','samedi','dimanche'];
+                const _targetAvails = (typeof avails!=='undefined'?avails:{})[selCollabId] || (typeof avails!=='undefined'?avails:{})[collab.id] || (typeof defAvail==='function'?defAvail():{});
+                const _dayCfg = _targetAvails[_dowIdx] || _targetAvails[String(_dowIdx)] || _targetAvails[_DAY_KEYS_EN[_dowIdx]] || _targetAvails[_DAY_KEYS_FR[_dowIdx]] || {active:false,slots:[]};
+                const _duration = (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).duration || 30;
+                const _todayStr = new Date().toISOString().split('T')[0];
+                const _curH = new Date().getHours();
+                const _curM = new Date().getMinutes();
+                if (_dayCfg.active && Array.isArray(_dayCfg.slots) && _dayCfg.slots.length > 0) {
+                  for (const _range of _dayCfg.slots) {
+                    const _sParts = String(_range.start||'09:00').split(':').map(Number);
+                    const _eParts = String(_range.end||'18:00').split(':').map(Number);
+                    const _startMin = (_sParts[0]||0)*60 + (_sParts[1]||0);
+                    const _endMin = (_eParts[0]||0)*60 + (_eParts[1]||0);
+                    for (let _t = _startMin; _t + _duration <= _endMin; _t += 30) {
+                      const _h = Math.floor(_t/60), _m = _t%60;
+                      const _slot = String(_h).padStart(2,'0')+':'+String(_m).padStart(2,'0');
+                      const _isBusy = busySlots.has(_slot);
+                      const _isPast = selDate === _todayStr && (_h < _curH || (_h === _curH && _m <= _curM));
+                      slots.push({time:_slot, busy:_isBusy, past:_isPast});
+                    }
+                  }
                 }
+                // V1.8.0 — Smart Scheduling: scoring simple priorisant densification puis proximité
+                const _bookingStartMins = dayBookings.map(_b => { const _p=(_b.time||'00:00').split(':').map(Number); return (_p[0]||0)*60+(_p[1]||0); });
+                const _scoreSlot = (_s) => {
+                  if (_s.busy || _s.past) return -1;
+                  const _p = _s.time.split(':').map(Number);
+                  const _mins = (_p[0]||0)*60 + (_p[1]||0);
+                  const _adjacent = _bookingStartMins.some(_bm => _bm !== _mins && Math.abs(_bm - _mins) <= 60);
+                  return (_adjacent ? 1000 : 0) + (1440 - _mins);
+                };
+                const _scoredSlots = slots.map(_s => { const _sc = _scoreSlot(_s); const _p = _s.time.split(':').map(Number); const _mins = (_p[0]||0)*60+(_p[1]||0); const _adj = _bookingStartMins.some(_bm => _bm !== _mins && Math.abs(_bm - _mins) <= 60); return { ..._s, _score: _sc, _adjacent: _adj }; }).filter(_s => _s._score >= 0);
+                const _recommendedSlots = [..._scoredSlots].sort((_a, _b) => _b._score - _a._score || _a.time.localeCompare(_b.time)).slice(0, 3);
+                const _showReco = slots.length >= 5 && _recommendedSlots.length >= 1;
+                const _labelFor = (_s, _rank) => { if (_s._adjacent) return "Proche d'un RDV"; if (_rank === 0) return 'Recommandé'; return 'Disponible tôt'; };
                 return <div>
                   <div style={{fontSize:12,fontWeight:600,color:T.text2,marginBottom:6}}>Creneaux disponibles</div>
+                  {(()=>{
+                    if (slots.length === 0) {
+                      const _msg = !_dayCfg || !_dayCfg.active
+                        ? 'Jour configuré comme inactif — activez-le dans Paramètres > Disponibilités'
+                        : (!Array.isArray(_dayCfg.slots) || _dayCfg.slots.length === 0)
+                          ? 'Aucune plage horaire définie ce jour — configurez dans Paramètres > Disponibilités'
+                          : 'Durée RDV trop longue pour les plages configurées ce jour';
+                      return <div style={{padding:'10px 12px',borderRadius:8,background:'#F9FAFB',border:'1px dashed #E5E7EB',fontSize:12,color:'#6B7280',textAlign:'center'}}>{_msg}</div>;
+                    }
+                    if (slots.every(_s => _s.busy || _s.past)) {
+                      return <div style={{padding:'10px 12px',borderRadius:8,background:'#FEF3C7',border:'1px dashed #F59E0B',fontSize:12,color:'#B45309',textAlign:'center'}}>Tous les créneaux sont occupés ou passés — choisissez une autre date</div>;
+                    }
+                    return null;
+                  })()}
+                  {_showReco && <div style={{marginBottom:10}}>
+                    <div style={{fontSize:11,fontWeight:700,color:'#3B82F6',marginBottom:6,display:'flex',alignItems:'center',gap:4}}><span>⚡</span> Créneaux recommandés</div>
+                    <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                      {_recommendedSlots.map((_r, _ri) => {
+                        const _selected = (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).time === _r.time;
+                        return <div key={_r.time} onClick={()=>(typeof setPhoneScheduleForm==='function'?setPhoneScheduleForm:function(){})(_p=>({..._p,time:_r.time}))} style={{padding:'10px 16px',borderRadius:12,background:_selected?'#7C3AED':'linear-gradient(135deg, #EFF6FF, #F0F9FF)',border:'1px solid '+(_selected?'#7C3AED':'#3B82F630'),cursor:'pointer',minWidth:96,textAlign:'center',boxShadow:_selected?'0 2px 6px #7C3AED30':'0 2px 6px #3B82F615',transition:'all .15s'}} onMouseEnter={e=>{if(!_selected){e.currentTarget.style.transform='scale(1.03)';e.currentTarget.style.boxShadow='0 4px 10px #3B82F625';}}} onMouseLeave={e=>{if(!_selected){e.currentTarget.style.transform='scale(1)';e.currentTarget.style.boxShadow='0 2px 6px #3B82F615';}}}>
+                          <div style={{fontSize:16,fontWeight:800,color:_selected?'#fff':'#1E40AF',lineHeight:1}}>{_r.time}</div>
+                          <div style={{fontSize:9,fontWeight:600,color:_selected?'#ffffffcc':'#3B82F6',marginTop:4}}>{_labelFor(_r, _ri)}</div>
+                        </div>;
+                      })}
+                    </div>
+                  </div>}
+                  <div style={{fontSize:11,fontWeight:600,color:T.text3,marginBottom:4}}>Tous les créneaux disponibles</div>
                   <div style={{display:'flex',gap:4,flexWrap:'wrap',maxHeight:120,overflow:'auto'}}>
                     {slots.map(s=>(
                       <div key={s.time} onClick={()=>{if(!s.busy&&!s.past)(typeof setPhoneScheduleForm==='function'?setPhoneScheduleForm:function(){})(p=>({...p,time:s.time}));}} style={{padding:'4px 10px',borderRadius:8,fontSize:11,fontWeight:600,cursor:s.busy||s.past?'not-allowed':'pointer',background:(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).time===s.time?'#7C3AED':s.busy?'#EF444415':s.past?'#f9fafb80':'#22C55E08',color:(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).time===s.time?'#fff':s.busy?'#EF4444':s.past?'#9ca3af':'#22C55E',border:'1px solid '+((typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).time===s.time?'#7C3AED':s.busy?'#EF444430':s.past?'#e5e7eb':'#22C55E30'),opacity:s.past?0.4:1,transition:'all .12s'}}>
@@ -5562,6 +5709,80 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
         );
       })()}
 
+{/* ── MODAL NOUVEAU CONTACT ── */}
+<Modal open={showNewContact} onClose={()=>(typeof setShowNewContact==='function'?setShowNewContact:function(){})(false)} title="Nouveau contact" width={540}>
+<div style={{display:'flex',flexDirection:'column',gap:12}}>
+  {/* Type + Civilité */}
+  <div style={{display:'flex',gap:10,alignItems:'flex-end'}}>
+    <div style={{flex:1}}>
+      <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Type</label>
+      <div style={{display:'flex',gap:6}}>
+        {[{v:'btc',l:'🟢 Particulier'},{v:'btb',l:'🔵 Entreprise'}].map(t=>(
+          <div key={t.v} onClick={()=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,contact_type:t.v}))} style={{padding:'6px 14px',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type===t.v?700:500,background:(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type===t.v?T.accentBg:'transparent',color:(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type===t.v?T.accent:T.text3,border:`1.5px solid ${(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type===t.v?T.accent:T.border}`}}>{t.l}</div>
+        ))}
+      </div>
+    </div>
+    <div>
+      <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Civilité</label>
+      <select value={(typeof newContactForm!=='undefined'?newContactForm:{}).civility||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,civility:e.target.value}))} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${T.border}`,background:T.bg,fontSize:13,fontFamily:'inherit',color:T.text,cursor:'pointer'}}>
+        <option value="">—</option>
+        <option value="M">M.</option>
+        <option value="Mme">Mme</option>
+      </select>
+    </div>
+  </div>
+  {/* Prénom + Nom */}
+  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+    <ValidatedInput label="Prénom *" required placeholder="Prénom" value={(typeof newContactForm!=='undefined'?newContactForm:{}).firstname||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,firstname:e.target.value}))} icon="user"/>
+    <ValidatedInput label="Nom *" required placeholder="Nom de famille" value={(typeof newContactForm!=='undefined'?newContactForm:{}).lastname||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,lastname:e.target.value}))} icon="user"/>
+  </div>
+  {/* Email */}
+  <ValidatedInput label="Email" placeholder="email@exemple.com" value={(typeof newContactForm!=='undefined'?newContactForm:{}).email} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,email:e.target.value}))} icon="mail" validate={v=>!v.trim()||isValidEmail(v)} errorMsg="Format email invalide"/>
+  {/* Téléphone + Mobile */}
+  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+    <ValidatedInput label="Téléphone" placeholder="+33 1 XX XX XX XX" value={(typeof newContactForm!=='undefined'?newContactForm:{}).phone} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,phone:e.target.value}))} icon="phone" validate={v=>!v.trim()||isValidPhone(v)} errorMsg="Format invalide"/>
+    <ValidatedInput label="Mobile" placeholder="+33 6 XX XX XX XX" value={(typeof newContactForm!=='undefined'?newContactForm:{}).mobile||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,mobile:e.target.value}))} icon="smartphone" validate={v=>!v.trim()||isValidPhone(v)} errorMsg="Format invalide"/>
+  </div>
+  {/* Adresse */}
+  <ValidatedInput label="Adresse" placeholder="Rue, Ville, Code postal" value={(typeof newContactForm!=='undefined'?newContactForm:{}).address||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,address:e.target.value}))} icon="map-pin"/>
+  {/* Champs entreprise conditionnels */}
+  {(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type==='btb'&&(
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,padding:10,borderRadius:8,background:'#2563EB08',border:'1px solid #2563EB20'}}>
+      <ValidatedInput label="Société *" placeholder="Nom de l'entreprise" value={(typeof newContactForm!=='undefined'?newContactForm:{}).company||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,company:e.target.value}))} icon="building-2"/>
+      <ValidatedInput label="Site web" placeholder="https://..." value={(typeof newContactForm!=='undefined'?newContactForm:{}).website||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,website:e.target.value}))} icon="globe"/>
+      <ValidatedInput label="SIRET / SIREN" placeholder="XXX XXX XXX XXXXX" value={(typeof newContactForm!=='undefined'?newContactForm:{}).siret||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,siret:e.target.value}))}/>
+    </div>
+  )}
+  {/* Statut pipeline */}
+  <div>
+    <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Statut pipeline</label>
+    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+      {PIPELINE_STAGES.map(s=>(
+        <div key={s.id} onClick={()=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,pipeline_stage:s.id}))} style={{padding:'6px 12px',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:(typeof newContactForm!=='undefined'?newContactForm:{}).pipeline_stage===s.id?700:500,background:(typeof newContactForm!=='undefined'?newContactForm:{}).pipeline_stage===s.id?(s.color||'#2563EB')+'18':'transparent',color:(typeof newContactForm!=='undefined'?newContactForm:{}).pipeline_stage===s.id?(s.color||'#2563EB'):T.text3,border:`1.5px solid ${(typeof newContactForm!=='undefined'?newContactForm:{}).pipeline_stage===s.id?(s.color||'#2563EB'):T.border}`,transition:'all .15s',display:'flex',alignItems:'center',gap:4}}>
+          <div style={{width:8,height:8,borderRadius:4,background:s.color||'#2563EB'}}/>
+          {s.label}
+        </div>
+      ))}
+    </div>
+  </div>
+  {/* Tags */}
+  <div>
+    <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Tags</label>
+    <input value={(typeof newContactForm!=='undefined'?newContactForm:{}).tags||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,tags:e.target.value}))} placeholder="VIP, Prospect, Urgent... (séparés par virgule)" style={{width:'100%',padding:'8px 10px',borderRadius:8,border:`1px solid ${T.border}`,background:T.bg,fontSize:13,fontFamily:'inherit',color:T.text,outline:'none'}}/>
+    {(typeof newContactForm!=='undefined'?newContactForm:{}).tags && <div style={{display:'flex',gap:4,marginTop:4,flexWrap:'wrap'}}>{(typeof newContactForm!=='undefined'?newContactForm:{}).tags.split(',').map(t=>t.trim()).filter(Boolean).map((t,i)=><span key={i} style={{fontSize:10,padding:'2px 8px',borderRadius:6,background:T.accentBg,color:T.accent,fontWeight:600}}>{t}</span>)}</div>}
+  </div>
+  {/* Notes */}
+  <div>
+    <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Notes</label>
+    <textarea value={(typeof newContactForm!=='undefined'?newContactForm:{}).notes} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,notes:e.target.value}))} placeholder="Notes, informations complémentaires..." rows={3} style={{width:'100%',padding:10,borderRadius:8,border:`1px solid ${T.border}`,background:T.bg,fontSize:13,fontFamily:'inherit',resize:'vertical',color:T.text,outline:'none'}}/>
+  </div>
+  <div style={{display:'flex',gap:8,marginTop:8}}>
+    <Btn onClick={()=>setShowNewContact(false)} style={{flex:1}}>Annuler</Btn>
+    <Btn primary onClick={handleCollabCreateContact} style={{flex:1}}><I n="check" s={14}/> Créer le contact</Btn>
+  </div>
+</div>
+</Modal>
+
       {/* ═══ CONTRACT MODAL — Client Validé ═══ */}
       {(typeof contractModal!=='undefined'?contractModal:null) && (
         <Modal open={true} onClose={()=>{
@@ -5623,9 +5844,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       {/* ═══ IA PROACTIVE WIDGET ═══ */}
       {(typeof showIaWidget!=='undefined'?showIaWidget:null) && collab.ai_copilot_enabled && (()=>{
         const todayISO2=new Date().toISOString().split('T')[0];
-        const rdvP=(contacts||[]).find(c=>c.assignedTo===collab.id&&c.pipeline_stage==='rdv_programme'&&c.next_rdv_date&&c.next_rdv_date<todayISO2);
-        const nrpR=(contacts||[]).find(c=>c.assignedTo===collab.id&&c.pipeline_stage==='nrp'&&c.nrp_next_relance&&c.nrp_next_relance<=todayISO2);
-        const inact=(contacts||[]).find(c=>c.assignedTo===collab.id&&!['perdu','client_valide'].includes(c.pipeline_stage)&&c.lastVisit&&Math.floor((Date.now()-new Date(c.lastVisit).getTime())/86400000)>=14);
+        const rdvP=(contacts||[]).find(c=>c&&c.assignedTo===collab.id&&c.pipeline_stage==='rdv_programme'&&c.next_rdv_date&&c.next_rdv_date<todayISO2); // hotfix 2026-04-23 — null-safe
+        const nrpR=(contacts||[]).find(c=>c&&c.assignedTo===collab.id&&c.pipeline_stage==='nrp'&&c.nrp_next_relance&&c.nrp_next_relance<=todayISO2); // hotfix 2026-04-23 — null-safe
+        const inact=(contacts||[]).find(c=>c&&c.assignedTo===collab.id&&!['perdu','client_valide'].includes(c.pipeline_stage)&&c.lastVisit&&Math.floor((Date.now()-new Date(c.lastVisit).getTime())/86400000)>=14); // hotfix 2026-04-23 — null-safe
         const first=rdvP||nrpR||inact;
         const msg=rdvP?`Qualifiez ${rdvP.name} — RDV passé`:nrpR?`Relancez ${nrpR.name} — NRP`:inact?`${inact.name} inactif depuis 14+ jours`:'Tout est à jour !';
         const color=rdvP?'#F97316':nrpR?'#EF4444':inact?'#F59E0B':'#22C55E';
@@ -5659,7 +5880,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                   <div style={{display:'flex',gap:3}}>
                     {[['Terminé','#22C55E'],['Reporté','#F59E0B'],['Annulé','#EF4444']].map(([label,clr])=>(
                       <div key={label} onClick={()=>{
-                        if(label==='Annulé'){updateBooking(b.id,{status:'cancelled'});if(b.contactId)handleCollabUpdateContact(b.contactId,{rdv_status:'rdv_annule'});}
+                        if(label==='Annulé'){cancelBookingAndCascade(b.id);}
                         else if(label==='Terminé'){updateBooking(b.id,{status:'completed'});if(b.contactId){handleCollabUpdateContact(b.contactId,{rdv_status:'rdv_passe'});handlePipelineStageChange(b.contactId,'client_valide','RDV terminé');}}
                         else if(label==='Reporté'&&b.contactId){handleCollabUpdateContact(b.contactId,{rdv_status:'rdv_en_attente'});setPhoneScheduleForm({contactId:b.contactId,contactName:(contacts||[]).find(c=>c.id===b.contactId)?.name||b.visitorName,number:b.visitorPhone||'',date:'',time:'',duration:b.duration||30,notes:'',calendarId:b.calendarId||'',_bookingMode:true});setPhoneShowScheduleModal(true);}
                         setRdvCountdownDismissed(prev=>new Set([...prev,b.id]));showNotif('RDV: '+label);
@@ -5750,7 +5971,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
             <div>
               <div style={{fontSize:10,fontWeight:700,color:'#6B7280',marginBottom:4}}>Changer étape</div>
               <select value={ct.pipeline_stage||'nouveau'} onChange={e=>{if(typeof handlePipelineStageChange==='function')handlePipelineStageChange(ct.id,e.target.value);}} style={{width:'100%',padding:'6px 8px',borderRadius:6,border:'1px solid #E5E7EB',fontSize:11,color:'#1F2937',background:'#fff'}}>
-                {PIPELINE_STAGES.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
+                {PIPELINE_STAGES.map(s=><option key={s.id} value={s.id}>{PIPELINE_LABELS[s.id]||s.label}</option>)}
               </select>
             </div>
 
@@ -5759,11 +5980,11 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
               <div style={{fontSize:11,fontWeight:700,color:'#1F2937',marginBottom:6,display:'flex',alignItems:'center',gap:4}}><I n="calendar" s={12} style={{color:'#0EA5E9'}}/> Agenda</div>
               {futureBookings.length===0 && pastBookings.length===0 && <div style={{fontSize:10,color:'#9CA3AF',padding:8}}>Aucun RDV pour ce contact</div>}
               {futureBookings.map(b=><div key={b.id} style={{padding:'6px 8px',borderRadius:6,background:'#ECFDF5',border:'1px solid #A7F3D0',marginBottom:4,fontSize:10}}>
-                <div style={{fontWeight:700,color:'#065F46'}}>📅 {new Date(b.date).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'})} à {b.time}</div>
+                <div style={{fontWeight:700,color:'#065F46'}}>📅 {formatDateTime(b.date, b.time)}</div>
                 <div style={{color:'#047857'}}>{b.duration||30}min{b.notes?' — '+b.notes.substring(0,30):''}</div>
               </div>)}
               {pastBookings.map(b=><div key={b.id} style={{padding:'4px 8px',borderRadius:6,background:'#F9FAFB',marginBottom:3,fontSize:9,color:'#6B7280'}}>
-                {new Date(b.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})} à {b.time} · {b.status||'passé'}
+                {formatDateTime(b.date, b.time)} · {b.status||'passé'}
               </div>)}
               <div onClick={()=>{const tomorrow=new Date();tomorrow.setDate(tomorrow.getDate()+1);setPhoneScheduleForm({contactId:ct.id,contactName:ct.name,number:ct.phone||(typeof phoneActiveCall!=='undefined'?phoneActiveCall:{}).number,date:tomorrow.toISOString().split('T')[0],time:'10:00',notes:'',_bookingMode:true});setPhoneShowScheduleModal(true);}} style={{padding:'6px 10px',borderRadius:6,background:'#EFF6FF',color:'#2563EB',fontSize:10,fontWeight:600,cursor:'pointer',textAlign:'center',marginTop:4,border:'1px solid #BFDBFE'}}>+ Prendre RDV</div>
             </div>

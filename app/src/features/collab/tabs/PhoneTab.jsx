@@ -9,12 +9,13 @@ import { T } from "../../../theme";
 import { I, Btn, Card, Avatar, Badge, Modal, Input, ValidatedInput, Stars, Spinner, Stat, EmptyState, HelpTip, HookIsolator } from "../../../shared/ui";
 import { displayPhone, formatPhoneFR } from "../../../shared/utils/phone";
 import { isValidEmail, isValidPhone } from "../../../shared/utils/validators";
-import { fmtDate, DAYS_FR, DAYS_SHORT, MONTHS_FR, getDow } from "../../../shared/utils/dates";
-import { PIPELINE_CARD_COLORS_DEFAULT, RDV_CATEGORIES } from "../../../shared/utils/pipeline";
+import { fmtDate, DAYS_FR, DAYS_SHORT, MONTHS_FR, getDow, formatDateTime, formatDate } from "../../../shared/utils/dates";
+import { PIPELINE_CARD_COLORS_DEFAULT, RDV_CATEGORIES, PIPELINE_LABELS, STATUS_COLORS } from "../../../shared/utils/pipeline";
 import { sendNotification, buildNotifyPayload } from "../../../shared/utils/notifications";
 import { api, recUrl, API_BASE, collectEnv } from "../../../shared/services/api";
 import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";
+import { FicheDocsPanelScreen } from "../screens"; // hotfix 2026-04-23 — Phase 14b missed import propagation
 
 const PhoneTab = () => {
   const ctx = useCollabContext();
@@ -125,7 +126,7 @@ const PhoneTab = () => {
     // ── Hotfix audit 2026-04-23 (v2) — JSX attr handler pattern ──
   acceptCollabIncomingCall, endPhoneCall, rejectCollabIncomingCall, togglePhoneDND, togglePhoneRecording,
     // ── Hotfix audit 2026-04-23 (v3) ──
-  handleColumnDragEnd, handleQuickAddContact, phoneTeamChatRef, pipeBulkStage, stopAutoDialer, togglePhoneAutoRecap, togglePhoneAutoSMS, togglePhoneRightPanel,
+  cancelBookingAndCascade, handleColumnDragEnd, handleQuickAddContact, phoneTeamChatRef, pipeBulkStage, stopAutoDialer, togglePhoneAutoRecap, togglePhoneAutoSMS, togglePhoneRightPanel,
   // ── AST audit 2026-04-23 (v7) ──
   _defaultLiveConfig, _tempColor, _tempEmoji, _tempLabel, addToBlacklist, autoDialerNext, calendars, CALL_TAGS, collabChatMessages, collabChatOnline, collabNotesTimerRef, collabsProp, contactAnalysesHistory, contactFieldDefs, contactsLocalEditRef, cScoreColor, cScoreLabel, fetchCallTranscript, generateCallAnalysis, getLeadTemperature, handleCollabDeleteContact, handleCollabUpdateContact, handleColumnDragStart, handleColumnDrop, handlePipelineStageChange, iaHubCollapse, isAdminView, perduMotifModal, PHONE_MODULES, pipelinePopupContact, pipelinePopupHistory, pipelineRightContact, postCallResultModal, rdvPasseModal, removeFromBlacklist, removeScheduledCall, saveCallRecording, savePhoneCallRating, savePhoneCallTag, saveScriptsDual, scanImageModal, setPerduMotifModal, setPipelinePopupContact, setPipelineRightTab, setPostCallResultModal, setScanImageModal, setV7TransferModal, setV7TransferTarget, smsCredits, startAutoDialer, toggleModule, togglePhoneFav, v7FollowersMap,
   } = ctx;
@@ -160,7 +161,7 @@ const PhoneTab = () => {
         const myBookings = (bookings||[]).filter(b=>b.collaboratorId===collab.id&&b.status!=='cancelled');
         const myGCal = (googleEventsProp||[]).filter(ge=>ge.collaboratorId===collab.id);
         const allEvents = [
-          ...myBookings.map(b=>({title:b.clientName||b.service||'RDV',time:new Date(b.date+(b.time?'T'+b.time:'')),src:'booking'})),
+          ...myBookings.map(b=>{const _ct=b.contactId?(contacts||[]).find(c=>c.id===b.contactId):null;return{title:_ct?.name||b.visitorName||b.service||'RDV',time:new Date(b.date+(b.time?'T'+b.time:'')),src:'booking'};}),
           ...myGCal.map(ge=>({title:ge.summary||ge.title||'Evenement',time:new Date(ge.start||ge.startDate),src:'google'}))
         ].filter(e=>e.time.getTime()>nowMs).sort((a,b)=>a.time-b.time);
         const nextRdv = allEvents[0];
@@ -168,14 +169,18 @@ const PhoneTab = () => {
         let rdvTime = '';
         let rdvTitle = '';
         let rdvDateStr = '';
+        let rdvIsToday = false;
         if(nextRdv) {
           rdvTime = nextRdv.time.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
           rdvTitle = nextRdv.title;
-          rdvDateStr = nextRdv.time.toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
+          rdvDateStr = nextRdv.time.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'});
+          rdvIsToday = nextRdv.time.toDateString() === new Date().toDateString();
           const diff = nextRdv.time.getTime() - nowMs;
           if(diff>0){
-            const h=Math.floor(diff/3600000); const m=Math.floor((diff%3600000)/60000); const s=Math.floor((diff%60000)/1000);
-            rdvCountdown = h>0 ? h+'h'+String(m).padStart(2,'0')+'m'+String(s).padStart(2,'0')+'s' : m>0 ? m+'m'+String(s).padStart(2,'0')+'s' : s+'s';
+            if(diff >= 86400000){ const d=Math.floor(diff/86400000); const h=Math.floor((diff%86400000)/3600000); const m=Math.floor((diff%3600000)/60000); const sc=Math.floor((diff%60000)/1000); rdvCountdown='Dans '+d+'j '+h+'h'+String(m).padStart(2,'0')+'m'+String(sc).padStart(2,'0')+'s'; }
+            else if(diff >= 3600000){ const h=Math.floor(diff/3600000); const m=Math.floor((diff%3600000)/60000); const sc=Math.floor((diff%60000)/1000); rdvCountdown='Dans '+h+'h'+String(m).padStart(2,'0')+'m'+String(sc).padStart(2,'0')+'s'; }
+            else if(diff >= 60000){ const m=Math.floor(diff/60000); const sc=Math.floor((diff%60000)/1000); rdvCountdown='Dans '+m+'m'+String(sc).padStart(2,'0')+'s'; }
+            else { const sc=Math.floor(diff/1000); rdvCountdown='Dans '+sc+'s'; }
           }
         }
 
@@ -268,11 +273,11 @@ const PhoneTab = () => {
           })()}
           {/* Prochain RDV */}
           {nextRdv && (
-            <div style={{display:'flex',alignItems:'center',gap:5,padding:'5px 10px',borderRadius:10,background:'#0EA5E90A',border:'1px solid #0EA5E918'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:5,padding:'5px 10px',borderRadius:10,background:'#0EA5E90A',border:'1px solid #0EA5E918'}}>
               <I n={nextRdv.src==='google'?'calendar':'calendar-check'} s={12} style={{color:'#0EA5E9'}}/>
-              <div>
-                <div style={{fontSize:10,fontWeight:700,color:'#0EA5E9',lineHeight:1}}>RDV le {rdvDateStr} a {rdvTime}</div>
-                <div style={{fontSize:9,color:'#0EA5E9',fontWeight:700,lineHeight:1,marginTop:2,fontFamily:'monospace'}}>{rdvCountdown}{nextRdv.src==='google'?' (GCal)':''}</div>
+              <div style={{textAlign:'center'}}>
+                <div style={{fontSize:10,fontWeight:700,color:'#0EA5E9',lineHeight:1.2}}>{rdvTime} {rdvIsToday?'Aujourd\'hui':'· '+rdvDateStr} — {rdvTitle}</div>
+                <div style={{fontSize:9,color:'#0EA5E9',fontWeight:600,lineHeight:1,marginTop:2}}>{rdvCountdown}{nextRdv.src==='google'?' (GCal)':''}</div>
               </div>
             </div>
           )}
@@ -1764,7 +1769,7 @@ if (n === ph) matched.set(c.id, c);
             <div style={{display:'flex',alignItems:'center',gap:4}}>
               <span style={{fontSize:9,padding:'2px 6px',borderRadius:4,background:'#22C55E15',color:'#22C55E',fontWeight:600}}>{b.duration||30}min</span>
               <div onClick={()=>{setPhoneScheduleForm({contactId:ct.id,contactName:ct.name,number:ct.phone||'',date:b.date,time:b.time,duration:b.duration||30,notes:'Modification RDV',calendarId:b.calendarId||'',rdv_category:b.rdv_category||'',rdv_subcategory:b.rdv_subcategory||'',_bookingMode:true,_editBookingId:b.id});setPhoneShowScheduleModal(true);}} style={{cursor:'pointer',padding:'2px 4px',borderRadius:4,color:T.text3}} title="Modifier"><I n="edit-2" s={10}/></div>
-              <div onClick={()=>{if(confirm('Annuler ce RDV ?')){setBookings(prev=>{const updated=prev.map(bk=>bk.id===b.id?{...bk,status:'cancelled'}:bk);const remaining=updated.filter(bk=>bk.contactId===ct.id&&bk.status==='confirmed'&&bk.date>=new Date().toISOString().split('T')[0]);if(remaining.length===0&&ct.pipeline_stage==='rdv_programme'){handlePipelineStageChange(ct.id,'contacte','RDV annulé — retour en Contacté');handleCollabUpdateContact(ct.id,{next_rdv_date:'',next_rdv_booking_id:'',rdv_status:''});}else if(remaining.length>0){const nextBk=remaining.sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))[0];handleCollabUpdateContact(ct.id,{next_rdv_date:nextBk.date,next_rdv_booking_id:nextBk.id});}return updated;});api('/api/bookings/'+b.id,{method:'PUT',body:{status:'cancelled'}});showNotif('RDV annulé');}}} style={{cursor:'pointer',padding:'2px 4px',borderRadius:4,color:'#EF4444'}} title="Annuler"><I n="x" s={10}/></div>
+              <div onClick={()=>{if(confirm('Annuler ce RDV ?')){cancelBookingAndCascade(b.id);showNotif('RDV annulé');}}} style={{cursor:'pointer',padding:'2px 4px',borderRadius:4,color:'#EF4444'}} title="Annuler"><I n="x" s={10}/></div>
             </div>
           </div>)}
         </div>}
@@ -1959,7 +1964,7 @@ if (n === ph) matched.set(c.id, c);
       </div>
       {callsForNumber.filter(c=>(typeof phoneCallRecordings!=='undefined'?phoneCallRecordings:null)[c.id]).slice(0,5).map(c=>(
         <div key={c.id} style={{padding:'6px 8px',borderRadius:8,background:T.bg,marginBottom:4}}>
-          <div style={{fontSize:10,fontWeight:600,color:T.text,marginBottom:4}}>{new Date(c.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})} · {fmtDur3(c.duration)}</div>
+          <div style={{fontSize:10,fontWeight:600,color:T.text,marginBottom:4}}>{formatDate(c.createdAt)} · {fmtDur3(c.duration)}</div>
           <audio controls src={typeof phoneCallRecordings[c.id]==='string'?phoneCallRecordings[c.id]:phoneCallRecordings[c.id]?.url} style={{width:'100%',height:28,borderRadius:6}}/>
         </div>
       ))}
@@ -1997,7 +2002,7 @@ if (n === ph) matched.set(c.id, c);
             {sms.content}
           </div>
           <div style={{fontSize:8,color:T.text3,marginTop:2,display:'flex',gap:4,alignItems:'center'}}>
-            <span>{new Date(sms.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})} {new Date(sms.createdAt).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</span>
+            <span>{formatDateTime((sms.createdAt||'').split('T')[0], (sms.createdAt||'').split('T')[1]?.slice(0,5))}</span>
             {sms.status && <span style={{padding:'1px 4px',borderRadius:3,background:sms.status==='sent'||sms.status==='delivered'?'#22C55E18':'#F59E0B18',color:sms.status==='sent'||sms.status==='delivered'?'#22C55E':'#F59E0B',fontSize:7,fontWeight:700}}>{sms.status}</span>}
           </div>
         </div>
@@ -4468,7 +4473,7 @@ const pipelineColors = Object.fromEntries(PIPELINE_STAGES.map(s=>[s.id,s.color])
 const pipelineLabels = Object.fromEntries(PIPELINE_STAGES.map(s=>[s.id,s.label]));
 
 const pipelineStats = {};
-allCrmContacts.forEach(c => { const s = c.pipeline_stage || 'nouveau'; pipelineStats[s] = (pipelineStats[s]||0)+1; });
+allCrmContacts.forEach(c => { if(!c) return; const s = c.pipeline_stage || 'nouveau'; pipelineStats[s] = (pipelineStats[s]||0)+1; }); // hotfix 2026-04-23 — null-safe
 
 const activeStageFilter = (typeof convFilter!=='undefined'?convFilter:null) !== 'all' ? (typeof convFilter!=='undefined'?convFilter:null) : null;
 
@@ -4962,23 +4967,12 @@ return(
 <div>
 <div style={{display:'flex',alignItems:'center',gap:8}}>
   <span style={{fontSize:14,fontWeight:800}}>Pipeline</span>
-  {/* Filtre favoris */}
-  <div onClick={()=>{const k='c360-pipe-fav-filter-'+collab.id;const cur=localStorage.getItem(k)==='1';localStorage.setItem(k,cur?'0':'1');setPhoneRightAccordion(p=>({...p,_r:Date.now()}));showNotif(cur?'Tous les contacts':'Favoris uniquement');}} style={{padding:'2px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',gap:3,background:localStorage.getItem('c360-pipe-fav-filter-'+collab.id)==='1'?'#F59E0B15':'transparent',color:localStorage.getItem('c360-pipe-fav-filter-'+collab.id)==='1'?'#F59E0B':T.text3,border:'1px solid '+(localStorage.getItem('c360-pipe-fav-filter-'+collab.id)==='1'?'#F59E0B30':T.border)}} title="Filtrer par favoris">
-    <I n="star" s={10} style={{fill:localStorage.getItem('c360-pipe-fav-filter-'+collab.id)==='1'?'#F59E0B':'none'}}/> Favoris
-  </div>
-  {/* Bouton enregistrement rapide */}
-  <div onClick={()=>{const next=!phoneRecordingEnabled;(typeof setPhoneRecordingEnabled==='function'?setPhoneRecordingEnabled:function(){})(next);showNotif(next?'Enregistrement activé':'Enregistrement désactivé');}} style={{padding:'2px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',gap:3,background:phoneRecordingEnabled?'#EF444415':'transparent',color:phoneRecordingEnabled?'#EF4444':T.text3,border:'1px solid '+(phoneRecordingEnabled?'#EF444430':T.border)}} title="Enregistrement des appels">
-    <I n="mic" s={10}/> REC
-  </div>
 </div>
-<div style={{display:'flex',gap:8,fontSize:11}}>
-  <span style={{fontWeight:700,color:T.text}}>{allCtx.length} contact{allCtx.length>1?'s':''}</span>
-  <span style={{color:T.text3}}>·</span>
-  <span style={{fontWeight:700,color:'#22C55E'}}>{won} gagné{won>1?'s':''}</span>
-  <span style={{color:T.text3}}>·</span>
-  <span style={{fontWeight:700,color:'#EF4444'}}>{lost} perdu{lost>1?'s':''}</span>
-  <span style={{color:T.text3}}>·</span>
-  <span style={{fontWeight:700,color:T.accent}}>{winRate}% taux conv.</span>
+<div style={{display:'flex',alignItems:'center',gap:14,fontSize:11,marginTop:4}}>
+  <span style={{fontWeight:700,color:T.text}}>{allCtx.length} contact{allCtx.length===1?'':'s'}</span>
+  <span style={{fontWeight:700,color:'#22C55E'}}>🟢 {won} gagné{won===1?'':'s'}</span>
+  <span style={{fontWeight:700,color:'#EF4444'}}>🔴 {lost} perdu{lost===1?'':'s'}</span>
+  <span style={{fontWeight:700,color:T.accent}}>⚡ {winRate}% conversion</span>
 </div>
 </div>
       </div>
@@ -5075,13 +5069,26 @@ return(
 <span style={{fontWeight:700,fontSize:12,color:T.accent}}>{(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length} sélectionné{(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length>1?'s':''}</span>
 <select value={pipeBulkStage} onChange={e => (typeof setPipeBulkStage==='function'?setPipeBulkStage:function(){})(e.target.value)} style={{padding:"3px 6px",borderRadius:8,border:`1px solid ${T.border}`,fontSize:11,background:T.surface,color:T.text}}>
 <option value="">Déplacer…</option>
-{STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+{STAGES.map(s => {
+  const _MODAL = ['rdv_programme','client_valide'];
+  const _multiBlock = _MODAL.includes(s.id) && ((typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:[])||[]).length > 1;
+  return <option key={s.id} value={s.id} disabled={_multiBlock}>{s.label}{_multiBlock?' (individuel uniquement)':''}</option>;
+})}
 </select>
 {(typeof pipeBulkStage!=='undefined'?pipeBulkStage:null) && <Btn small primary onClick={() => {
 const MODAL_STAGES = ['rdv_programme','client_valide'];
 const ids = (typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).filter(id => { const c=(contacts||[]).find(x=>x.id===id); return c && c.pipeline_stage !== (typeof pipeBulkStage!=='undefined'?pipeBulkStage:null); });
 if(ids.length===0){showNotif('Aucun contact à déplacer','info');return;}
-if(MODAL_STAGES.includes((typeof pipeBulkStage!=='undefined'?pipeBulkStage:null))){showNotif('Ce stage nécessite une action individuelle','info');return;}
+if(MODAL_STAGES.includes((typeof pipeBulkStage!=='undefined'?pipeBulkStage:null))){
+  if(ids.length === 1){
+    handlePipelineStageChange(ids[0], (typeof pipeBulkStage!=='undefined'?pipeBulkStage:null));
+    (typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})([]);
+    (typeof setPipeBulkStage==='function'?setPipeBulkStage:function(){})('');
+    return;
+  }
+  showNotif('Sélection multiple impossible pour ce stage — action individuelle requise','info');
+  return;
+}
 let note = '';
 if((typeof pipeBulkStage!=='undefined'?pipeBulkStage:null)==='perdu'){note=prompt('Raison de la perte :')||'Classé perdu en masse';}
 if((typeof pipeBulkStage!=='undefined'?pipeBulkStage:null)==='qualifie'){note=prompt('Note de qualification :')||'Qualifié en masse';}
@@ -5131,12 +5138,12 @@ return(
     const colId=e.dataTransfer.getData('columnId');
     if(colId){handleColumnDrop(e,stage.id);return;}
     const cid=e.dataTransfer.getData('contactId');
-    if(cid){handlePipelineStageChange(cid,stage.id);if(stage.id!=='rdv_programme'&&stage.id!=='perdu'&&stage.id!=='qualifie')showNotif('Contact → '+stage.label);}
+    if(cid){handlePipelineStageChange(cid,stage.id);if(stage.id!=='rdv_programme'&&stage.id!=='perdu'&&stage.id!=='qualifie')showNotif('Contact → '+(PIPELINE_LABELS[stage.id]||stage.label));}
   }}>
   {/* Column Header */}
   {_isColCollapsed ? (
-    <div onClick={()=>{const h={...(_T.pipeCollapsedCols||{})};h[stage.id]=false;_T.pipeCollapsedCols=h;try{localStorage.setItem('c360-pipe-cols',JSON.stringify(h));}catch{}setPhoneRightAccordion(p=>({...p,_cc:Date.now()}));}} style={{padding:'8px 4px',borderRadius:'12px 12px 0 0',background:stage.color+'14',borderBottom:`2.5px solid ${stage.color}`,cursor:'pointer',textAlign:'center',transition:'background .15s'}} onMouseEnter={e=>e.currentTarget.style.background=stage.color+'25'} onMouseLeave={e=>e.currentTarget.style.background=stage.color+'14'} title={'Ouvrir '+stage.label}>
-      <span style={{fontSize:9,fontWeight:700,color:stage.color,writingMode:'vertical-rl'}}>{stage.label.substring(0,4)}</span>
+    <div onClick={()=>{const h={...(_T.pipeCollapsedCols||{})};h[stage.id]=false;_T.pipeCollapsedCols=h;try{localStorage.setItem('c360-pipe-cols',JSON.stringify(h));}catch{}setPhoneRightAccordion(p=>({...p,_cc:Date.now()}));}} style={{padding:'8px 4px',borderRadius:'12px 12px 0 0',background:(STATUS_COLORS[stage.id]||stage.color)+'14',borderBottom:`2.5px solid ${STATUS_COLORS[stage.id]||stage.color}`,cursor:'pointer',textAlign:'center',transition:'background .15s'}} onMouseEnter={e=>e.currentTarget.style.background=(STATUS_COLORS[stage.id]||stage.color)+'25'} onMouseLeave={e=>e.currentTarget.style.background=(STATUS_COLORS[stage.id]||stage.color)+'14'} title={'Ouvrir '+(PIPELINE_LABELS[stage.id]||stage.label)}>
+      <span style={{fontSize:9,fontWeight:700,color:STATUS_COLORS[stage.id]||stage.color,writingMode:'vertical-rl'}}>{(PIPELINE_LABELS[stage.id]||stage.label).substring(0,4)}</span>
     </div>
   ) : (
     <div draggable onDragStart={e=>handleColumnDragStart(e,stage.id)} onDragEnd={handleColumnDragEnd} style={{padding:'8px 10px',borderRadius:'12px 12px 0 0',background:isDialingThis?stage.color+'25':stage.color+'14',borderBottom:`2.5px solid ${stage.color}`,transition:'background .3s',cursor:'grab'}}>
@@ -5146,7 +5153,7 @@ return(
             <div style={{display:'flex',gap:1}}><div style={{width:2,height:2,borderRadius:'50%',background:stage.color}}/><div style={{width:2,height:2,borderRadius:'50%',background:stage.color}}/></div>
             <div style={{display:'flex',gap:1}}><div style={{width:2,height:2,borderRadius:'50%',background:stage.color}}/><div style={{width:2,height:2,borderRadius:'50%',background:stage.color}}/></div>
           </div>
-          <span onClick={e=>{e.stopPropagation();const h={...(_T.pipeCollapsedCols||{})};h[stage.id]=true;_T.pipeCollapsedCols=h;try{localStorage.setItem('c360-pipe-cols',JSON.stringify(h));}catch{}setPhoneRightAccordion(p=>({...p,_cc:Date.now()}));}} style={{fontSize:11,fontWeight:700,color:stage.color,cursor:'pointer'}} title="Clic = réduire la colonne">{stage.label}</span>
+          <span onClick={e=>{e.stopPropagation();const h={...(_T.pipeCollapsedCols||{})};h[stage.id]=true;_T.pipeCollapsedCols=h;try{localStorage.setItem('c360-pipe-cols',JSON.stringify(h));}catch{}setPhoneRightAccordion(p=>({...p,_cc:Date.now()}));}} style={{fontSize:11,fontWeight:700,color:STATUS_COLORS[stage.id]||stage.color,cursor:'pointer'}} title="Clic = réduire la colonne">{PIPELINE_LABELS[stage.id]||stage.label}</span>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:4}}>
           {stage.id==='nouveau'&&<div onClick={(e)=>{e.stopPropagation();setShowNewContact(true);}} style={{width:20,height:20,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",background:"#22C55E",color:"#fff",flexShrink:0,boxShadow:"0 1px 3px #22C55E40",transition:"transform .15s"}} onMouseEnter={e=>e.currentTarget.style.transform='scale(1.15)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'} title="Ajouter un nouveau contact"><I n="user-plus" s={11}/></div>}
@@ -5157,7 +5164,7 @@ return(
           )}
           {isDialingThis&&<div style={{fontSize:8,fontWeight:700,color:'#fff',background:stage.color,borderRadius:8,padding:'1px 5px',animation:'pulse 1.5s infinite'}}>EN COURS</div>}
           <span style={{fontSize:11,fontWeight:800,color:T.text,background:T.surface,borderRadius:20,padding:'1px 7px',minWidth:18,textAlign:'center'}}>{stageContacts.length}</span>
-          {stageContacts.length>0&&<input type="checkbox" checked={stageContacts.every(c=>(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).includes(c.id))} onChange={e=>{e.stopPropagation();if(e.target.checked){(typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})(p=>[...new Set([...p,...stageContacts.map(c=>c.id)])]);}else{const stIds=new Set(stageContacts.map(c=>c.id));(typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})(p=>p.filter(id=>!stIds.has(id)));}}} onClick={e=>e.stopPropagation()} title={`Sélectionner tout ${stage.label}`} style={{cursor:'pointer',accentColor:stage.color,width:13,height:13,flexShrink:0}}/>}
+          {stageContacts.length>0&&<input type="checkbox" checked={stageContacts.every(c=>(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).includes(c.id))} onChange={e=>{e.stopPropagation();if(e.target.checked){(typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})(p=>[...new Set([...p,...stageContacts.map(c=>c.id)])]);}else{const stIds=new Set(stageContacts.map(c=>c.id));(typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})(p=>p.filter(id=>!stIds.has(id)));}}} onClick={e=>e.stopPropagation()} title={`Sélectionner tout ${PIPELINE_LABELS[stage.id]||stage.label}`} style={{cursor:'pointer',accentColor:stage.color,width:13,height:13,flexShrink:0}}/>}
         </div>
       </div>
     </div>
@@ -5165,9 +5172,9 @@ return(
 
   {/* Contact Cards — hidden when collapsed */}
   {_isColCollapsed ? (
-    <div onClick={e=>{e.stopPropagation();const h={...(_T.pipeCollapsedCols||{})};h[stage.id]=false;_T.pipeCollapsedCols=h;try{localStorage.setItem('c360-pipe-cols',JSON.stringify(h));}catch{}setPhoneRightAccordion(p=>({...p,_cc:Date.now()}));}} style={{flex:1,background:T.bg,borderRadius:'0 0 12px 12px',border:`1px solid ${T.border}`,borderTop:'none',display:'flex',flexDirection:'column',alignItems:'center',padding:'10px 4px',gap:6,cursor:'pointer',transition:'background .15s'}} onMouseEnter={e=>e.currentTarget.style.background=stage.color+'08'} onMouseLeave={e=>e.currentTarget.style.background=T.bg} title={'Ouvrir '+stage.label}>
+    <div onClick={e=>{e.stopPropagation();const h={...(_T.pipeCollapsedCols||{})};h[stage.id]=false;_T.pipeCollapsedCols=h;try{localStorage.setItem('c360-pipe-cols',JSON.stringify(h));}catch{}setPhoneRightAccordion(p=>({...p,_cc:Date.now()}));}} style={{flex:1,background:T.bg,borderRadius:'0 0 12px 12px',border:`1px solid ${T.border}`,borderTop:'none',display:'flex',flexDirection:'column',alignItems:'center',padding:'10px 4px',gap:6,cursor:'pointer',transition:'background .15s'}} onMouseEnter={e=>e.currentTarget.style.background=stage.color+'08'} onMouseLeave={e=>e.currentTarget.style.background=T.bg} title={'Ouvrir '+(PIPELINE_LABELS[stage.id]||stage.label)}>
       <div style={{width:22,height:22,borderRadius:11,background:stage.color,display:'flex',alignItems:'center',justifyContent:'center'}}><span style={{fontSize:10,fontWeight:800,color:'#fff'}}>{stageContacts.length}</span></div>
-      <span style={{fontSize:9,fontWeight:700,color:stage.color,writingMode:'vertical-rl',textOrientation:'mixed',letterSpacing:1}}>{stage.label}</span>
+      <span style={{fontSize:9,fontWeight:700,color:STATUS_COLORS[stage.id]||stage.color,writingMode:'vertical-rl',textOrientation:'mixed',letterSpacing:1}}>{PIPELINE_LABELS[stage.id]||stage.label}</span>
       <I n="chevron-right" s={12} style={{color:stage.color,marginTop:'auto'}}/>
     </div>
   ) : (
@@ -5216,7 +5223,7 @@ return(
         {/* ── V6: Statut + température ── */}
         <div style={{marginBottom:3,display:'flex',alignItems:'center',gap:4}}>
           <select value={ct.pipeline_stage||'nouveau'} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();const ns=e.target.value;if(ns===(ct.pipeline_stage||'nouveau'))return;handlePipelineStageChange(ct.id,ns);}} style={{padding:'1px 4px',borderRadius:4,fontSize:8,fontWeight:700,border:'1px solid '+(STAGES.find(s=>s.id===(ct.pipeline_stage||'nouveau'))?.color||T.border)+'80',background:(STAGES.find(s=>s.id===(ct.pipeline_stage||'nouveau'))?.color||'#ccc')+'12',color:STAGES.find(s=>s.id===(ct.pipeline_stage||'nouveau'))?.color||T.text,cursor:'pointer',fontFamily:'inherit',outline:'none'}}>
-            {STAGES.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
+            {STAGES.map(s=><option key={s.id} value={s.id}>{PIPELINE_LABELS[s.id]||s.label}</option>)}
           </select>
           <span style={{fontSize:7,fontWeight:800,padding:'1px 5px',borderRadius:4,background:_tempColor(ct._temp?.temp)+'18',color:_tempColor(ct._temp?.temp),flexShrink:0,letterSpacing:0.5}} title={'Score '+ct._temp?.conversion+'% — Engagement '+ct._temp?.engagement+'% · Réactivité '+ct._temp?.responsiveness+'% · Opportunité '+ct._temp?.opportunity+'% · Urgence '+ct._temp?.urgency+'% · Fatigue '+ct._temp?.fatigue+'%'}>{_tempEmoji(ct._temp?.temp)} {_tempLabel(ct._temp?.temp)}</span>
           {ct.pipeline_stage==='nrp'&&(()=>{try{const n=JSON.parse(ct.nrp_followups_json||'[]').filter(f=>f.done).length;return n>0?<span style={{fontSize:7,fontWeight:800,color:'#fff',padding:'1px 4px',borderRadius:3,background:'#EF4444'}}>x{n}</span>:null;}catch{return null;}})()}
@@ -5256,7 +5263,7 @@ return(
         {/* ── V5: Alerte contextuelle (1 seule, la plus urgente) ── */}
         {_isRdvPasse2?<div style={{fontSize:8,fontWeight:800,padding:'2px 6px',borderRadius:4,background:'linear-gradient(135deg,#F97316,#EF4444)',color:'#fff',marginBottom:2}}>⚠️ RDV passé — Statuer</div>
         :ct.pipeline_stage==='nrp'&&ct.nrp_next_relance&&ct.nrp_next_relance<=new Date().toISOString().split('T')[0]?<div style={{fontSize:8,fontWeight:700,padding:'2px 6px',borderRadius:4,background:'#EF444410',color:'#EF4444',marginBottom:2}}>📞 Relancer</div>
-        :!_isRdvPasse2&&ct.pipeline_stage==='rdv_programme'?(()=>{const bk=(bookings||[]).filter(b=>b.contactId===ct.id&&b.status==='confirmed').sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))[0];if(!bk)return null;const diff=Math.round((new Date(bk.date+'T'+(bk.time||'00:00')).getTime()-Date.now())/60000);return diff>=0?<div style={{fontSize:8,fontWeight:700,padding:'2px 6px',borderRadius:4,background:diff<=60?'#F59E0B10':'#0EA5E910',color:diff<=60?'#F59E0B':'#0EA5E9',marginBottom:2}}>📅 {diff<60?diff+'min':diff<1440?Math.floor(diff/60)+'h':new Date(bk.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})} {bk.time}</div>:null;})()
+        :!_isRdvPasse2&&ct.pipeline_stage==='rdv_programme'?(()=>{const bk=(bookings||[]).filter(b=>b.contactId===ct.id&&b.status==='confirmed').sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))[0];if(!bk)return null;const diff=Math.round((new Date(bk.date+'T'+(bk.time||'00:00')).getTime()-Date.now())/60000);return diff>=0?<div style={{fontSize:8,fontWeight:700,padding:'2px 6px',borderRadius:4,background:diff<=60?'#F59E0B10':'#0EA5E910',color:diff<=60?'#F59E0B':'#0EA5E9',marginBottom:2}}>📅 {formatDateTime(bk.date, bk.time)}</div>:null;})()
         :daysSince>=14?<div style={{fontSize:8,fontWeight:700,padding:'2px 6px',borderRadius:4,background:daysSince>=30?'#EF4444':'#F59E0B',color:'#fff',marginBottom:2}}>⏰ {daysSince}j</div>
         :null}
         {/* ── V5: Note (1 ligne) ── */}

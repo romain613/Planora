@@ -36,3 +36,21 @@ export const RDV_CATEGORIES = {
     }
   }
 };
+
+// V1.7.6 LOT 1 — display labels pipeline stage (keys = DB stage ids)
+export const PIPELINE_LABELS = {
+  'nrp': 'Non répondu',
+  'contacte': 'Contact établi',
+  'rdv_programme': 'RDV programmé',
+  'perdu': 'Perdu',
+  'client_valide': 'Gagné'
+};
+
+// V1.7.6 LOT 1 — unified status colors (keys = DB stage ids)
+export const STATUS_COLORS = {
+  'nrp': '#9CA3AF',
+  'contacte': '#3B82F6',
+  'rdv_programme': '#F59E0B',
+  'client_valide': '#10B981',
+  'perdu': '#EF4444'
+};

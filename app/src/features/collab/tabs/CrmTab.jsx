@@ -8,11 +8,11 @@
 
 import React, { useState, useMemo, useEffect, Fragment } from "react";
 import { T } from "../../../theme";
-import { I, Btn, Card, Avatar, Badge, Modal, Input, ValidatedInput, Stars, Spinner, EmptyState, HelpTip } from "../../../shared/ui";
+import { I, Btn, Card, Avatar, Badge, Modal, Input, ValidatedInput, Stars, Spinner, EmptyState, HelpTip, HookIsolator } from "../../../shared/ui"; // hotfix 2026-04-23 — +HookIsolator
 import { displayPhone, formatPhoneFR } from "../../../shared/utils/phone";
 import { isValidEmail, isValidPhone } from "../../../shared/utils/validators";
-import { fmtDate, DAYS_FR, MONTHS_FR } from "../../../shared/utils/dates";
-import { PIPELINE_CARD_COLORS_DEFAULT, RDV_CATEGORIES } from "../../../shared/utils/pipeline";
+import { fmtDate, DAYS_FR, MONTHS_FR, formatDateTime, formatDate } from "../../../shared/utils/dates";
+import { PIPELINE_CARD_COLORS_DEFAULT, RDV_CATEGORIES, PIPELINE_LABELS, STATUS_COLORS } from "../../../shared/utils/pipeline";
 import { sendNotification, buildNotifyPayload } from "../../../shared/utils/notifications";
 import { api } from "../../../shared/services/api";
 import { _T } from "../../../shared/state/tabState";
@@ -161,14 +161,11 @@ const CrmTab = () => {
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:12}}>
       <div style={{display:"flex",alignItems:"center",gap:12}}>
         <span style={{fontSize:13,fontWeight:700,color:T.text}}><I n="bar-chart-2" s={14}/> Pipeline</span>
-        <div style={{display:"flex",gap:8,fontSize:12}}>
-          <span style={{fontWeight:700,color:T.text}}>{filteredCollabCrm.length} contact{filteredCollabCrm.length>1?"s":""}</span>
-          <span style={{color:T.text3}}>·</span>
-          <span style={{fontWeight:700,color:"#22C55E"}}>{collabPipelineAnalytics.won} gagné{collabPipelineAnalytics.won>1?"s":""}</span>
-          <span style={{color:T.text3}}>·</span>
-          <span style={{fontWeight:700,color:"#EF4444"}}>{collabPipelineAnalytics.lost} perdu{collabPipelineAnalytics.lost>1?"s":""}</span>
-          <span style={{color:T.text3}}>·</span>
-          <span style={{fontWeight:700,color:T.accent}}>{collabPipelineAnalytics.winRate}% taux conv.</span>
+        <div style={{display:"flex",alignItems:"center",gap:14,fontSize:12}}>
+          <span style={{fontWeight:700,color:T.text}}>{filteredCollabCrm.length} contact{filteredCollabCrm.length===1?"":"s"}</span>
+          <span style={{fontWeight:700,color:"#22C55E"}}>🟢 {collabPipelineAnalytics.won} gagné{collabPipelineAnalytics.won===1?"":"s"}</span>
+          <span style={{fontWeight:700,color:"#EF4444"}}>🔴 {collabPipelineAnalytics.lost} perdu{collabPipelineAnalytics.lost===1?"":"s"}</span>
+          <span style={{fontWeight:700,color:T.accent}}>⚡ {collabPipelineAnalytics.winRate}% conversion</span>
         </div>
       </div>
       <div style={{display:"flex",gap:4,background:T.bg,borderRadius:10,padding:3}}>
@@ -398,17 +395,17 @@ const CrmTab = () => {
               </thead>
               <tbody>
                 {collabPaginatedContacts.map(ct=>(
-                  <tr key={ct.id} style={{borderBottom:`1px solid ${T.border}11`,transition:"background .15s"}} onMouseEnter={e=>e.currentTarget.style.background=T.accentBg} onMouseLeave={e=>e.currentTarget.style.background="transparent"}>
-                    <td style={{padding:"10px 8px",width:36}}>
+                  <tr key={ct.id} style={{borderBottom:`1px solid ${T.border}25`,transition:"all .18s",cursor:"default"}} onMouseEnter={e=>{e.currentTarget.style.background=T.accentBg;e.currentTarget.style.boxShadow="0 1px 4px "+T.accent+"15";}} onMouseLeave={e=>{e.currentTarget.style.background="transparent";e.currentTarget.style.boxShadow="none";}}>
+                    <td style={{padding:"14px 10px",width:36}}>
                       <input type="checkbox" checked={(typeof collabCrmSelectedIds!=='undefined'?collabCrmSelectedIds:{}).includes(ct.id)} onChange={e=>(typeof setCollabCrmSelectedIds==='function'?setCollabCrmSelectedIds:function(){})(p=>e.target.checked?[...p,ct.id]:p.filter(x=>x!==ct.id))} style={{cursor:"pointer",accentColor:T.accent}}/>
                     </td>
-                    {crmVisibleCols.map(col=><td key={col.k} style={{padding:"6px 6px"}}>{(()=>{
+                    {crmVisibleCols.map(col=><td key={col.k} style={{padding:"12px 10px"}}>{(()=>{
                       const ACT_MAP={call:{l:'Appeler',i:'phone',c:'#22C55E'},relance:{l:'Relancer',i:'phone-outgoing',c:'#EF4444'},rdv:{l:'RDV',i:'calendar-plus',c:'#8B5CF6'},email:{l:'Email',i:'mail',c:'#6366F1'},document:{l:'Document',i:'file-text',c:'#8B5CF6'},sms:{l:'SMS',i:'message-square',c:'#0EA5E9'},attente:{l:'Attente',i:'clock',c:'#F59E0B'},note:{l:'Note',i:'edit-3',c:'#64748B'}};
                       switch(col.k){
-                        case 'name': return <div style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}} onClick={()=>{setSelectedCrmContact(ct);setCollabFicheTab("notes");}}><Avatar name={ct.name} color={ct._stage.color} size={28}/><div><div style={{display:"flex",alignItems:"center",gap:4}}><span style={{fontWeight:600,fontSize:12}}>{ct.civility?ct.civility+' ':''}{ct.firstname||''} {ct.lastname||(!ct.firstname?ct.name:'')}</span>{ct.contact_type==='btb'&&<span style={{fontSize:7,padding:'1px 4px',borderRadius:4,background:'#2563EB10',color:'#2563EB',fontWeight:700}}>PRO</span>}</div>{ct.rating>0&&<span style={{color:"#F59E0B",fontSize:9}}>{"★".repeat(Math.min(ct.rating,5))}</span>}</div></div>;
+                        case 'name': return <div style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer"}} onClick={()=>{setSelectedCrmContact(ct);setCollabFicheTab("notes");}}><Avatar name={ct.name} color={ct._stage.color} size={28}/><div><div style={{display:"flex",alignItems:"center",gap:4}}><span style={{fontWeight:700,fontSize:13,color:T.text}}>{ct.civility?ct.civility+' ':''}{ct.firstname||''} {ct.lastname||(!ct.firstname?ct.name:'')}</span>{ct.contact_type==='btb'&&<span style={{fontSize:7,padding:'1px 4px',borderRadius:4,background:'#2563EB10',color:'#2563EB',fontWeight:700}}>PRO</span>}</div>{ct.rating>0&&<span style={{color:"#F59E0B",fontSize:9}}>{"★".repeat(Math.min(ct.rating,5))}</span>}</div></div>;
                         case 'phone': return ct.phone?<span onClick={e=>{e.stopPropagation();if(typeof prefillKeypad==='function')prefillKeypad(ct.phone);}} style={{cursor:'pointer',color:'#22C55E',fontWeight:600,fontSize:11,display:'inline-flex',alignItems:'center',gap:3}}><I n="phone" s={10}/>{ct.phone.replace('+33','0').replace(/(\d{2})(?=\d)/g,'$1 ')}</span>:<span style={{color:T.text3,fontSize:11}}>—</span>;
                         case 'email': return ct.email?<a href={"mailto:"+ct.email} style={{color:T.accent,textDecoration:"none",fontSize:11}} onClick={e=>e.stopPropagation()}>{ct.email.length>22?ct.email.slice(0,20)+'…':ct.email}</a>:<span style={{color:T.text3,fontSize:11}}>—</span>;
-                        case 'pipeline_stage': return <span style={{padding:"2px 8px",borderRadius:12,fontSize:10,fontWeight:600,background:ct._stage.color+"18",color:ct._stage.color,whiteSpace:"nowrap"}}>{ct._stage.label}</span>;
+                        case 'pipeline_stage': return <span style={{padding:"2px 8px",borderRadius:12,fontSize:10,fontWeight:600,background:(STATUS_COLORS[ct._stage.id]||ct._stage.color)+"18",color:STATUS_COLORS[ct._stage.id]||ct._stage.color,whiteSpace:"nowrap"}}>{PIPELINE_LABELS[ct._stage.id]||ct._stage.label}</span>;
                         case 'score': return <div style={{display:"flex",alignItems:"center",gap:4}}><div style={{width:24,height:24,borderRadius:6,background:cScoreColor(ct._score)+"18",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:10,color:cScoreColor(ct._score)}}>{ct._score}</div><span style={{fontSize:9,fontWeight:600,color:cScoreColor(ct._score)}}>{cScoreLabel(ct._score)}</span></div>;
                         case 'next_action': {
                           const saved=ct.next_action_type&&!ct.next_action_done?ACT_MAP[ct.next_action_type]:null;
@@ -420,10 +417,10 @@ const CrmTab = () => {
                           return <div style={{position:'relative',display:'inline-flex'}}><span onClick={e=>{e.stopPropagation();const sel=e.currentTarget.nextSibling;if(sel)sel.style.display=sel.style.display==='block'?'none':'block';}} style={{fontSize:10,padding:'3px 8px',borderRadius:8,background:act.c+'14',color:act.c,fontWeight:700,display:'inline-flex',alignItems:'center',gap:3,cursor:'pointer',border:`1px solid ${act.c}25`,whiteSpace:'nowrap'}}><I n={act.i} s={10}/> {act.l} {!saved&&<span style={{fontSize:8,opacity:0.6}}>●</span>}</span><div style={{display:'none',position:'absolute',top:'100%',left:0,zIndex:99,background:T.card,border:`1px solid ${T.border}`,borderRadius:8,boxShadow:'0 4px 12px rgba(0,0,0,0.1)',padding:4,minWidth:130,marginTop:2}}>{Object.entries(ACT_MAP).map(([id,a])=><div key={id} onClick={e=>{e.stopPropagation();handleCollabUpdateContact(ct.id,{next_action_type:id,next_action_label:a.l,next_action_done:0,next_action_set_by:collab?.id||'',next_action_set_at:new Date().toISOString()});e.currentTarget.parentElement.style.display='none';showNotif('Action: '+a.l,'success');}} style={{padding:'5px 8px',fontSize:11,fontWeight:600,cursor:'pointer',borderRadius:6,display:'flex',alignItems:'center',gap:6,color:a.c}} onMouseEnter={e=>e.currentTarget.style.background=a.c+'12'} onMouseLeave={e=>e.currentTarget.style.background='transparent'}><I n={a.i} s={11}/> {a.l}</div>)}</div></div>;
                         }
                         case 'lastVisit': {const d=Math.max(0,Math.floor((Date.now()-new Date(ct.lastVisit||ct.createdAt||0).getTime())/86400000));return d===0?<span style={{color:'#22C55E',fontWeight:600,fontSize:11}}>Aujourd'hui</span>:d<=3?<span style={{color:'#22C55E',fontSize:11}}>il y a {d}j</span>:d<=7?<span style={{fontSize:11}}>il y a {d}j</span>:d<=14?<span style={{color:'#F59E0B',fontSize:11}}>il y a {d}j</span>:d<=30?<span style={{color:'#EF4444',fontWeight:600,fontSize:11}}>il y a {d}j</span>:<span style={{color:'#EF4444',fontWeight:700,fontSize:11}}>{d}j 🔴</span>;}
-                        case 'totalBookings': {const nb=(bookings||[]).filter(b=>b.contactId===ct.id&&b.status!=='cancelled').length||(ct.totalBookings||0);const todayS=new Date().toISOString().split('T')[0];const next=(bookings||[]).filter(b=>b.contactId===ct.id&&b.status==='confirmed'&&b.date>=todayS).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))[0];return<div style={{textAlign:'center'}}><span style={{fontWeight:700,fontSize:12}}>{nb}</span>{next&&<div style={{fontSize:8,color:'#0EA5E9',fontWeight:600}}>{new Date(next.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</div>}</div>;}
+                        case 'totalBookings': {const nb=(bookings||[]).filter(b=>b.contactId===ct.id&&b.status!=='cancelled').length||(ct.totalBookings||0);const todayS=new Date().toISOString().split('T')[0];const next=(bookings||[]).filter(b=>b.contactId===ct.id&&b.status==='confirmed'&&b.date>=todayS).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))[0];return<div style={{textAlign:'center'}}><span style={{fontWeight:700,fontSize:12}}>{nb}</span>{next&&<div style={{fontSize:8,color:'#0EA5E9',fontWeight:600}}>{formatDate(next.date)}</div>}</div>;}
                         case 'source': return <span style={{fontSize:9,fontWeight:600,color:ct.source==='csv'?'#F97316':ct.source==='lead'?'#8B5CF6':ct.source==='dispatch'?'#0EA5E9':(ct.source==='booking'||ct.source==='agenda')?'#0D9488':'#64748B'}}>{ct.source==='csv'?'CSV':ct.source==='manual'?'Manuel':ct.source==='lead'?'Lead':ct.source==='dispatch'?'Dispatch':(ct.source==='booking'||ct.source==='agenda')?'Booking':ct.source||'—'}</span>;
-                        case 'createdAt': return <span style={{fontSize:10,color:T.text3}}>{ct.createdAt?new Date(ct.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'2-digit'}):'—'}</span>;
-                        case 'actions': return <div style={{display:"flex",gap:3}}>{ct.phone&&<span onClick={e=>{e.stopPropagation();if(typeof prefillKeypad==='function')prefillKeypad(ct.phone);}} style={{cursor:'pointer',width:24,height:24,borderRadius:6,background:'#22C55E14',display:'flex',alignItems:'center',justifyContent:'center'}} title="Appeler"><I n="phone" s={11} style={{color:'#22C55E'}}/></span>}{ct.email&&<span onClick={e=>{e.stopPropagation();window.open("mailto:"+ct.email);}} style={{cursor:'pointer',width:24,height:24,borderRadius:6,background:T.accentBg,display:'flex',alignItems:'center',justifyContent:'center'}} title="Email"><I n="mail" s={11} style={{color:T.accent}}/></span>}<span onClick={e=>{e.stopPropagation();setSelectedCrmContact(ct);setCollabFicheTab("notes");}} style={{cursor:'pointer',width:24,height:24,borderRadius:6,background:T.bg,display:'flex',alignItems:'center',justifyContent:'center',border:`1px solid ${T.border}`}} title="Voir fiche"><I n="eye" s={11} style={{color:T.text3}}/></span></div>;
+                        case 'createdAt': return <span style={{fontSize:10,color:T.text3}}>{ct.createdAt?formatDate(ct.createdAt):'—'}</span>;
+                        case 'actions': return <div style={{display:"flex",gap:6}}>{ct.phone&&<span onClick={e=>{e.stopPropagation();if(typeof prefillKeypad==='function')prefillKeypad(ct.phone);}} style={{cursor:'pointer',width:28,height:28,borderRadius:7,background:'#22C55E14',display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s'}} onMouseEnter={e=>e.currentTarget.style.background='#22C55E28'} onMouseLeave={e=>e.currentTarget.style.background='#22C55E14'} title="Appeler"><I n="phone" s={13} style={{color:'#22C55E'}}/></span>}{ct.email&&<span onClick={e=>{e.stopPropagation();window.open("mailto:"+ct.email);}} style={{cursor:'pointer',width:28,height:28,borderRadius:7,background:T.accentBg,display:'flex',alignItems:'center',justifyContent:'center',transition:'all .15s'}} onMouseEnter={e=>e.currentTarget.style.background=T.accent+'28'} onMouseLeave={e=>e.currentTarget.style.background=T.accentBg} title="Email"><I n="mail" s={13} style={{color:T.accent}}/></span>}<span onClick={e=>{e.stopPropagation();setSelectedCrmContact(ct);setCollabFicheTab("notes");}} style={{cursor:'pointer',width:28,height:28,borderRadius:7,background:T.bg,display:'flex',alignItems:'center',justifyContent:'center',border:`1px solid ${T.border}`,transition:'all .15s'}} onMouseEnter={e=>e.currentTarget.style.background=T.border} onMouseLeave={e=>e.currentTarget.style.background=T.bg} title="Voir fiche"><I n="eye" s={13} style={{color:T.text3}}/></span></div>;
                         default: {
                           // Champs personnalisés (cf_*)
                           if(col.k.startsWith('cf_')&&col.fieldKey){
@@ -553,11 +550,11 @@ const CrmTab = () => {
                 <div style={{display:'flex',gap:1}}><div style={{width:3,height:3,borderRadius:'50%',background:stage.color}}/><div style={{width:3,height:3,borderRadius:'50%',background:stage.color}}/></div>
               </div>
               <div style={{width:8,height:8,borderRadius:"50%",background:stage.color,flexShrink:0}}/>
-              <span title={stage.label} style={{fontSize:13,fontWeight:700,color:stage.color,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{stage.label}</span>
+              <span title={PIPELINE_LABELS[stage.id]||stage.label} style={{fontSize:13,fontWeight:700,color:STATUS_COLORS[stage.id]||stage.color,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{PIPELINE_LABELS[stage.id]||stage.label}</span>
               {stage.id==='nouveau'&&<div onClick={(e)=>{e.stopPropagation();setShowNewContact(true);}} style={{width:22,height:22,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",background:"#22C55E",color:"#fff",flexShrink:0,boxShadow:"0 1px 3px #22C55E40",transition:"transform .15s"}} onMouseEnter={e=>e.currentTarget.style.transform='scale(1.15)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'} title="Ajouter un nouveau contact"><I n="user-plus" s={12}/></div>}
               {stage.id==='nrp'&&(()=>{const totalNrp=stageContacts.reduce((sum,c)=>{try{return sum+JSON.parse(c.nrp_followups_json||'[]').filter(f=>f.done).length;}catch{return sum;}},0);return totalNrp>0?<span style={{fontSize:9,fontWeight:800,color:'#fff',background:'#EF4444',borderRadius:10,padding:'1px 6px',minWidth:18,textAlign:'center',lineHeight:'16px'}} title={'Total tentatives NRP: '+totalNrp}>{totalNrp} tent.</span>:null;})()}
               <Badge color={stage.color}>{stageContacts.length}</Badge>
-              {stageContacts.length>0&&<input type="checkbox" checked={stageContacts.every(c=>(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).includes(c.id))} onChange={e=>{e.stopPropagation();if(e.target.checked){(typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})(p=>[...new Set([...p,...stageContacts.map(c=>c.id)])]);}else{const stIds=new Set(stageContacts.map(c=>c.id));(typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})(p=>p.filter(id=>!stIds.has(id)));}}} onClick={e=>e.stopPropagation()} title={`Sélectionner tout ${stage.label}`} style={{cursor:'pointer',accentColor:stage.color,width:14,height:14,flexShrink:0}}/>}
+              {stageContacts.length>0&&<input type="checkbox" checked={stageContacts.every(c=>(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).includes(c.id))} onChange={e=>{e.stopPropagation();if(e.target.checked){(typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})(p=>[...new Set([...p,...stageContacts.map(c=>c.id)])]);}else{const stIds=new Set(stageContacts.map(c=>c.id));(typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})(p=>p.filter(id=>!stIds.has(id)));}}} onClick={e=>e.stopPropagation()} title={`Sélectionner tout ${PIPELINE_LABELS[stage.id]||stage.label}`} style={{cursor:'pointer',accentColor:stage.color,width:14,height:14,flexShrink:0}}/>}
               {stage.isCore ? (
                 <div style={{width:22,height:22,borderRadius:6,display:"flex",alignItems:"center",justifyContent:"center",color:T.text3,fontSize:10}} title="Colonne système (non modifiable)"><I n="lock" s={10}/></div>
               ) : stage.isDefault && !stage.isCore ? (
@@ -808,80 +805,6 @@ const CrmTab = () => {
   )}
 </div>
 
-{/* ── MODAL NOUVEAU CONTACT ── */}
-<Modal open={showNewContact} onClose={()=>(typeof setShowNewContact==='function'?setShowNewContact:function(){})(false)} title="Nouveau contact" width={540}>
-<div style={{display:'flex',flexDirection:'column',gap:12}}>
-  {/* Type + Civilité */}
-  <div style={{display:'flex',gap:10,alignItems:'flex-end'}}>
-    <div style={{flex:1}}>
-      <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Type</label>
-      <div style={{display:'flex',gap:6}}>
-        {[{v:'btc',l:'🟢 Particulier'},{v:'btb',l:'🔵 Entreprise'}].map(t=>(
-          <div key={t.v} onClick={()=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,contact_type:t.v}))} style={{padding:'6px 14px',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type===t.v?700:500,background:(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type===t.v?T.accentBg:'transparent',color:(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type===t.v?T.accent:T.text3,border:`1.5px solid ${(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type===t.v?T.accent:T.border}`}}>{t.l}</div>
-        ))}
-      </div>
-    </div>
-    <div>
-      <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Civilité</label>
-      <select value={(typeof newContactForm!=='undefined'?newContactForm:{}).civility||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,civility:e.target.value}))} style={{padding:'8px 12px',borderRadius:8,border:`1px solid ${T.border}`,background:T.bg,fontSize:13,fontFamily:'inherit',color:T.text,cursor:'pointer'}}>
-        <option value="">—</option>
-        <option value="M">M.</option>
-        <option value="Mme">Mme</option>
-      </select>
-    </div>
-  </div>
-  {/* Prénom + Nom */}
-  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-    <ValidatedInput label="Prénom *" required placeholder="Prénom" value={(typeof newContactForm!=='undefined'?newContactForm:{}).firstname||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,firstname:e.target.value}))} icon="user"/>
-    <ValidatedInput label="Nom *" required placeholder="Nom de famille" value={(typeof newContactForm!=='undefined'?newContactForm:{}).lastname||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,lastname:e.target.value}))} icon="user"/>
-  </div>
-  {/* Email */}
-  <ValidatedInput label="Email" placeholder="email@exemple.com" value={(typeof newContactForm!=='undefined'?newContactForm:{}).email} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,email:e.target.value}))} icon="mail" validate={v=>!v.trim()||isValidEmail(v)} errorMsg="Format email invalide"/>
-  {/* Téléphone + Mobile */}
-  <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
-    <ValidatedInput label="Téléphone" placeholder="+33 1 XX XX XX XX" value={(typeof newContactForm!=='undefined'?newContactForm:{}).phone} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,phone:e.target.value}))} icon="phone" validate={v=>!v.trim()||isValidPhone(v)} errorMsg="Format invalide"/>
-    <ValidatedInput label="Mobile" placeholder="+33 6 XX XX XX XX" value={(typeof newContactForm!=='undefined'?newContactForm:{}).mobile||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,mobile:e.target.value}))} icon="smartphone" validate={v=>!v.trim()||isValidPhone(v)} errorMsg="Format invalide"/>
-  </div>
-  {/* Adresse */}
-  <ValidatedInput label="Adresse" placeholder="Rue, Ville, Code postal" value={(typeof newContactForm!=='undefined'?newContactForm:{}).address||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,address:e.target.value}))} icon="map-pin"/>
-  {/* Champs entreprise conditionnels */}
-  {(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type==='btb'&&(
-    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10,padding:10,borderRadius:8,background:'#2563EB08',border:'1px solid #2563EB20'}}>
-      <ValidatedInput label="Société *" placeholder="Nom de l'entreprise" value={(typeof newContactForm!=='undefined'?newContactForm:{}).company||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,company:e.target.value}))} icon="building-2"/>
-      <ValidatedInput label="Site web" placeholder="https://..." value={(typeof newContactForm!=='undefined'?newContactForm:{}).website||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,website:e.target.value}))} icon="globe"/>
-      <ValidatedInput label="SIRET / SIREN" placeholder="XXX XXX XXX XXXXX" value={(typeof newContactForm!=='undefined'?newContactForm:{}).siret||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,siret:e.target.value}))}/>
-    </div>
-  )}
-  {/* Statut pipeline */}
-  <div>
-    <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Statut pipeline</label>
-    <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
-      {PIPELINE_STAGES.map(s=>(
-        <div key={s.id} onClick={()=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,pipeline_stage:s.id}))} style={{padding:'6px 12px',borderRadius:8,cursor:'pointer',fontSize:12,fontWeight:(typeof newContactForm!=='undefined'?newContactForm:{}).pipeline_stage===s.id?700:500,background:(typeof newContactForm!=='undefined'?newContactForm:{}).pipeline_stage===s.id?(s.color||'#2563EB')+'18':'transparent',color:(typeof newContactForm!=='undefined'?newContactForm:{}).pipeline_stage===s.id?(s.color||'#2563EB'):T.text3,border:`1.5px solid ${(typeof newContactForm!=='undefined'?newContactForm:{}).pipeline_stage===s.id?(s.color||'#2563EB'):T.border}`,transition:'all .15s',display:'flex',alignItems:'center',gap:4}}>
-          <div style={{width:8,height:8,borderRadius:4,background:s.color||'#2563EB'}}/>
-          {s.label}
-        </div>
-      ))}
-    </div>
-  </div>
-  {/* Tags */}
-  <div>
-    <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Tags</label>
-    <input value={(typeof newContactForm!=='undefined'?newContactForm:{}).tags||''} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,tags:e.target.value}))} placeholder="VIP, Prospect, Urgent... (séparés par virgule)" style={{width:'100%',padding:'8px 10px',borderRadius:8,border:`1px solid ${T.border}`,background:T.bg,fontSize:13,fontFamily:'inherit',color:T.text,outline:'none'}}/>
-    {(typeof newContactForm!=='undefined'?newContactForm:{}).tags && <div style={{display:'flex',gap:4,marginTop:4,flexWrap:'wrap'}}>{(typeof newContactForm!=='undefined'?newContactForm:{}).tags.split(',').map(t=>t.trim()).filter(Boolean).map((t,i)=><span key={i} style={{fontSize:10,padding:'2px 8px',borderRadius:6,background:T.accentBg,color:T.accent,fontWeight:600}}>{t}</span>)}</div>}
-  </div>
-  {/* Notes */}
-  <div>
-    <label style={{display:'block',fontSize:12,fontWeight:600,color:T.text2,marginBottom:5}}>Notes</label>
-    <textarea value={(typeof newContactForm!=='undefined'?newContactForm:{}).notes} onChange={e=>(typeof setNewContactForm==='function'?setNewContactForm:function(){})(p=>({...p,notes:e.target.value}))} placeholder="Notes, informations complémentaires..." rows={3} style={{width:'100%',padding:10,borderRadius:8,border:`1px solid ${T.border}`,background:T.bg,fontSize:13,fontFamily:'inherit',resize:'vertical',color:T.text,outline:'none'}}/>
-  </div>
-  <div style={{display:'flex',gap:8,marginTop:8}}>
-    <Btn onClick={()=>setShowNewContact(false)} style={{flex:1}}>Annuler</Btn>
-    <Btn primary onClick={handleCollabCreateContact} style={{flex:1}}><I n="check" s={14}/> Créer le contact</Btn>
-  </div>
-</div>
-</Modal>
-
 {/* ── MODAL NOUVEAU STATUT ── */}
 <Modal open={showAddStage} onClose={()=>(typeof setShowAddStage==='function'?setShowAddStage:function(){})(false)} title="Nouveau statut" width={400}>
 <div style={{display:'flex',flexDirection:'column',gap:14}}>
@@ -924,7 +847,7 @@ const CrmTab = () => {
 </Modal>
 
 {/* ── FICHE CLIENT MODAL ── */}
-<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>{setSelectedCrmContact(null);setCollabFicheTab("notes");}}>
+{selectedCrmContact && (<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.5)",zIndex:9999,display:"flex",alignItems:"center",justifyContent:"center",padding:20}} onClick={()=>{setSelectedCrmContact(null);setCollabFicheTab("notes");}}>
   <div style={{background:T.surface,borderRadius:16,width:"100%",maxWidth:700,maxHeight:"90vh",overflow:"auto",padding:28,boxShadow:"0 20px 60px rgba(0,0,0,0.2)"}} onClick={e=>e.stopPropagation()}>
     {(()=>{
       const ct = (typeof selectedCrmContact!=='undefined'?selectedCrmContact:null);
@@ -1011,7 +934,7 @@ const CrmTab = () => {
               {/* Badges Source + Créé le */}
               <div style={{display:'flex',gap:6,flexWrap:'wrap',alignItems:'center'}}>
                 {ct.source&&<span style={{padding:'2px 8px',borderRadius:12,fontSize:10,fontWeight:600,background:(ct.source==='booking'||ct.source==='agenda')?'#0D948818':'#6366F118',color:(ct.source==='booking'||ct.source==='agenda')?'#0D9488':'#6366F1',display:'inline-flex',alignItems:'center',gap:3}}><I n={(ct.source==='booking'||ct.source==='agenda')?'calendar':'log-in'} s={9}/> {ct.source==='manual'?'Ajout manuel':ct.source==='import'?'Import CSV':ct.source==='lead'?'Lead':ct.source==='dispatch'?'Dispatch':(ct.source==='booking'||ct.source==='agenda')?'Booking':ct.source}</span>}
-                {ct.createdAt&&<span style={{padding:'2px 8px',borderRadius:12,fontSize:10,fontWeight:600,background:T.bg,color:T.text3,border:`1px solid ${T.border}`}}>Créé le {new Date(ct.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})}</span>}
+                {ct.createdAt&&<span style={{padding:'2px 8px',borderRadius:12,fontSize:10,fontWeight:600,background:T.bg,color:T.text3,border:`1px solid ${T.border}`}}>Créé le {formatDate(ct.createdAt)}</span>}
                 {daysSinceContact!=null&&<span style={{padding:'2px 8px',borderRadius:12,fontSize:10,fontWeight:600,background:daysSinceContact>=30?'#EF444418':daysSinceContact>=14?'#F59E0B18':'#22C55E18',color:daysSinceContact>=30?'#EF4444':daysSinceContact>=14?'#F59E0B':'#22C55E'}}>{daysSinceContact===0?'Contacté aujourd\'hui':'Dernier contact il y a '+daysSinceContact+'j'}</span>}
               </div>
               {/* Prochain RDV */}
@@ -1020,7 +943,7 @@ const CrmTab = () => {
                   <I n="calendar" s={14} style={{color:'#0EA5E9',flexShrink:0}}/>
                   <div style={{flex:1}}>
                     <div style={{fontSize:12,fontWeight:700,color:'#0EA5E9'}}>Prochain RDV</div>
-                    <div style={{fontSize:13,fontWeight:600,color:T.text}}>{new Date(nextRdv.date).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'})} à {nextRdv.time} · {nextRdv.duration}min</div>
+                    <div style={{fontSize:13,fontWeight:600,color:T.text}}>{formatDateTime(nextRdv.date, nextRdv.time)} · {nextRdv.duration}min</div>
                   </div>
                   <span style={{fontSize:10,fontWeight:700,color:'#0EA5E9',padding:'2px 8px',borderRadius:8,background:'#0EA5E918'}}>{(()=>{const d=Math.round((new Date(nextRdv.date+'T'+(nextRdv.time||'00:00')).getTime()-Date.now())/60000);return d<0?'Passé':d<60?'Dans '+d+'min':d<1440?'Dans '+Math.floor(d/60)+'h':'Dans '+Math.floor(d/1440)+'j';})()}</span>
                 </div>
@@ -1227,7 +1150,7 @@ const CrmTab = () => {
                   <div key={b.id} style={{padding:'10px 12px',borderRadius:10,marginBottom:6,background:isUpcoming?stColor+'06':T.bg,border:`1px solid ${isUpcoming?stColor+'25':T.border}`,borderLeft:`4px solid ${stColor}`}}>
                     <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:4}}>
                       <div style={{flex:1}}>
-                        <div style={{fontSize:13,fontWeight:700,color:T.text}}>{new Date(b.date).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'})} à {b.time}</div>
+                        <div style={{fontSize:13,fontWeight:700,color:T.text}}>{formatDateTime(b.date, b.time)}</div>
                         <div style={{fontSize:11,color:T.text3}}>{cal?.name||'Calendrier'} · {b.duration}min</div>
                       </div>
                       <Badge color={stColor}>{b.status==='confirmed'?'Confirmé':b.status==='pending'?'En attente':'Annulé'}</Badge>
@@ -1729,7 +1652,7 @@ const CrmTab = () => {
       </>);
     })()}
   </div>
-</div>
+</div>)} {/* hotfix 2026-04-23 — null guard selectedCrmContact */}
     </>
   );
 };
