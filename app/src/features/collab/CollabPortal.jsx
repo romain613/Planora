@@ -1328,7 +1328,24 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const [phoneDND, setPhoneDND] = useState(() => { try { return localStorage.getItem("c360-phone-dnd-"+collab.id)==="1"; } catch { return false; } });
   const [phoneScheduledCalls, setPhoneScheduledCalls] = useState(() => { try { return JSON.parse(localStorage.getItem("c360-phone-scheduled-"+collab.id)||"[]"); } catch { return []; } });
   const [phoneShowScheduleModal, setPhoneShowScheduleModal] = useState(false);
-  const [phoneScheduleForm, setPhoneScheduleForm] = useState({contactId:'',number:'',date:'',time:'',notes:''});
+  const [phoneScheduleForm, setPhoneScheduleForm] = useState({contactId:'',number:'',date:'',time:'',notes:'',collaboratorId:collab.id});
+  // V1.8.2 — collab cible du RDV (default = moi). Si != moi, on filtre l'agenda et on prend les dispos de l'autre.
+  const _scheduleTargetCollabId = (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).collaboratorId || collab.id;
+  const _scheduleTargetCollab = (collabs||[]).find(c => c.id === _scheduleTargetCollabId) || collab;
+  const _scheduleAvailableCalendars = (calendars||[]).filter(c => {
+    try {
+      const cls = Array.isArray(c.collaborators) ? c.collaborators : JSON.parse(c.collaborators_json || '[]');
+      return cls.includes(_scheduleTargetCollabId);
+    } catch { return false; }
+  });
+  // V1.8.3 — collabs réellement bookables = ceux dont au moins un calendar est visible dans le state.
+  // En mode member, init.js filtre les calendars aux siens uniquement → les autres collabs sont retirés du sélecteur.
+  const _bookableCollabs = (collabs||[]).filter(_c => (calendars||[]).some(_cal => {
+    try {
+      const _ids = Array.isArray(_cal.collaborators) ? _cal.collaborators : JSON.parse(_cal.collaborators_json || '[]');
+      return _ids.includes(_c.id);
+    } catch { return false; }
+  }));
   const [schedContactMode, setSchedContactMode] = useState('new');
   const [schedSearchQ, setSchedSearchQ] = useState('');
   const schedSearchResults = useMemo(() => {
@@ -1543,7 +1560,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
         api('/api/bookings/'+f._editBookingId, {method:'PUT', body:updates}).catch(()=>showNotif('Erreur modification RDV','danger'));
         if(f.contactId) handleCollabUpdateContact(f.contactId, {next_rdv_date:f.date, next_rdv_booking_id:f._editBookingId});
         setPhoneShowScheduleModal(false);
-        setPhoneScheduleForm({contactId:'',number:'',date:'',time:'',notes:''});
+        setPhoneScheduleForm({contactId:'',number:'',date:'',time:'',notes:'',collaboratorId:collab.id});
         showNotif('RDV modifié — '+formatDateTime(f.date, f.time),'success');
         return true;
       }
@@ -1580,13 +1597,13 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       const newStart = new Date(f.date+'T'+f.time).getTime();
       const newEnd = newStart + (f.duration||30)*60000;
       const conflictBooking = (bookings||[]).find(b=>{
-        if(b.collaboratorId!==collab.id || b.date!==f.date || b.status!=='confirmed') return false;
+        if(b.collaboratorId!==(f.collaboratorId||collab.id) || b.date!==f.date || b.status!=='confirmed') return false;
         if(cancelOld && existingRdvs.some(er=>er.id===b.id)) return false; // ignore les RDV qu'on va annuler
         const bStart = new Date(b.date+'T'+(b.time||'00:00')).getTime() - bufferMs;
         const bEnd = bStart + (b.duration||30)*60000 + bufferMs*2;
         return newStart < bEnd && newEnd > bStart; // chevauchement avec buffer
       });
-      const conflictGCal = (googleEventsProp||[]).filter(ge=>ge.collaboratorId===collab.id).find(ge=>{
+      const conflictGCal = (googleEventsProp||[]).filter(ge=>ge.collaboratorId===(f.collaboratorId||collab.id)).find(ge=>{
         try{
           const st=new Date(ge.start||ge.startDate).getTime() - bufferMs;
           const en=new Date(ge.end||ge.endDate||st+3600000).getTime() + bufferMs;
@@ -1612,7 +1629,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       console.log('[BOOKING DEBUG] calId:', calId, 'calendars:', calendars?.length, 'collab.id:', collab.id, 'defaultCal:', defaultCal?.id);
       if(!calId) { setBookErr('Aucun calendrier trouvé pour votre compte — contactez votre admin'); console.error('[BOOKING BLOCK] No calendarId found'); return false; }
       const prevStage = ct?.pipeline_stage||'nouveau';
-      const bk = {id:bkId, companyId:company.id, collaboratorId:collab.id, calendarId:calId, contactId:f.contactId, visitorName:ct?.name||f.contactName||'', visitorEmail:ct?.email||'', visitorPhone:f.number||ct?.phone||'', date:f.date, time:f.time, duration:f.duration||30, status:'confirmed', source:'pipeline', notes:f.notes||'RDV depuis pipeline', rdv_category:f.rdv_category||'', rdv_subcategory:f.rdv_subcategory||''};
+      const bk = {id:bkId, companyId:company.id, collaboratorId:f.collaboratorId||collab.id, agendaOwnerId:f.collaboratorId||collab.id, bookedByCollaboratorId:collab.id, calendarId:calId, contactId:f.contactId, visitorName:ct?.name||f.contactName||'', visitorEmail:ct?.email||'', visitorPhone:f.number||ct?.phone||'', date:f.date, time:f.time, duration:f.duration||30, status:'confirmed', source:'pipeline', notes:f.notes||'RDV depuis pipeline', rdv_category:f.rdv_category||'', rdv_subcategory:f.rdv_subcategory||''};
       // Ajouter immédiatement au state local (optimistic)
       setBookings(p=>[...p,bk]);
       // Déplacer en rdv_programme (optimistic)
@@ -1626,7 +1643,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
         // V1.8.1 — envoi confirmation email au visiteur si case cochée et email présent
         if ((f._sendConfirmation !== false) && (ct?.email || f._newEmail)) {
           const _notifBk = { ...bk, visitorEmail: ct?.email || f._newEmail || '' };
-          sendNotification('booking-confirmed', buildNotifyPayload(_notifBk, calendars, [collab], company))
+          sendNotification('booking-confirmed', buildNotifyPayload(_notifBk, calendars, collabs, company))
             .then(_nr => {
               if (_nr?.email?.success) showNotif('📧 Email de confirmation envoyé', 'success');
               else showNotif("RDV créé, mais l'email de confirmation n'a pas pu être envoyé", 'warning');
@@ -1646,7 +1663,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
         handleCollabUpdateContact(f.contactId, {pipeline_stage:prevStage, next_rdv_date:'', next_rdv_booking_id:'', rdv_status:''});
       });
       setPhoneShowScheduleModal(false);
-      setPhoneScheduleForm({contactId:'',number:'',date:'',time:'',notes:''});
+      setPhoneScheduleForm({contactId:'',number:'',date:'',time:'',notes:'',collaboratorId:collab.id});
       showNotif((cancelOld?'RDV déplacé':'RDV programmé')+' le '+formatDateTime(f.date, f.time)+' ✅','success');
       return true;
     }
@@ -1655,7 +1672,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     const sc = {...phoneScheduleForm, id:"sc"+Date.now()};
     setPhoneScheduledCalls(prev => { const n=[...prev,sc]; localStorage.setItem("c360-phone-scheduled-"+collab.id,JSON.stringify(n)); return n; });
     setPhoneShowScheduleModal(false);
-    setPhoneScheduleForm({contactId:'',number:'',date:'',time:'',notes:''});
+    setPhoneScheduleForm({contactId:'',number:'',date:'',time:'',notes:'',collaboratorId:collab.id});
     showNotif("Rappel programmé ✓");
     return true;
   };
@@ -5511,12 +5528,24 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                 <label style={{fontSize:12,fontWeight:600,color:'#374151',marginBottom:4,display:'block'}}>Numéro de téléphone</label>
                 <input value={(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).number} onChange={e=>(typeof setPhoneScheduleForm==='function'?setPhoneScheduleForm:function(){})(p=>({...p,number:e.target.value}))} placeholder="+33 6 12 34 56 78" style={{width:'100%',padding:'10px 14px',borderRadius:10,border:'1px solid #e5e7eb',background:'#f9fafb',fontSize:13,color:'#111',outline:'none',fontFamily:'inherit'}}/>
               </div>}
-              {(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{})._bookingMode && (calendars||[]).length>0 && <div>
+              {/* V1.8.2 — Sélecteur collaborateur cible (masqué si 1 seul collab) */}
+              {(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{})._bookingMode && _bookableCollabs.length>1 && <div>
+                <label style={{fontSize:12,fontWeight:600,color:T.text2,marginBottom:4,display:'block'}}>Pour quel collaborateur ?</label>
+                <select value={_scheduleTargetCollabId} onChange={e=>setPhoneScheduleForm(p=>({...p,collaboratorId:e.target.value,calendarId:''}))} style={{width:'100%',padding:'10px 14px',borderRadius:10,border:`1px solid ${_scheduleTargetCollabId!==collab.id?'#7C3AED60':'#e5e7eb'}`,background:_scheduleTargetCollabId!==collab.id?'#7C3AED08':'#f9fafb',fontSize:13,color:'#111',fontFamily:'inherit'}}>
+                  {_bookableCollabs.map(c=><option key={c.id} value={c.id}>{c.id===collab.id?'Moi ('+(c.name||c.firstName||'')+')':(c.name||c.firstName||c.id)}</option>)}
+                </select>
+                {_scheduleTargetCollabId!==collab.id && <div style={{marginTop:6,padding:'6px 10px',borderRadius:8,background:'#7C3AED10',border:'1px solid #7C3AED25',fontSize:11,color:'#6D28D9',display:'flex',alignItems:'center',gap:6}}><span>👥</span> Vous prenez ce RDV pour <b>{_scheduleTargetCollab.name||_scheduleTargetCollab.firstName||''}</b> — il apparaîtra dans son agenda</div>}
+              </div>}
+              {/* V1.8.2 — Sélecteur Agenda filtré sur le collab cible */}
+              {(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{})._bookingMode && _scheduleAvailableCalendars.length>0 && <div>
                 <label style={{fontSize:12,fontWeight:600,color:T.text2,marginBottom:4,display:'block'}}>Agenda</label>
-                <select value={(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).calendarId||''} onChange={e=>(typeof setPhoneScheduleForm==='function'?setPhoneScheduleForm:function(){})(p=>({...p,calendarId:e.target.value}))} style={{width:'100%',padding:'10px 14px',borderRadius:10,border:'1px solid #e5e7eb',background:'#f9fafb',fontSize:13,color:'#111',fontFamily:'inherit'}}>
-                  {(calendars||[]).map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+                <select value={(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).calendarId||''} onChange={e=>setPhoneScheduleForm(p=>({...p,calendarId:e.target.value}))} style={{width:'100%',padding:'10px 14px',borderRadius:10,border:'1px solid #e5e7eb',background:'#f9fafb',fontSize:13,color:'#111',fontFamily:'inherit'}}>
+                  <option value="">— Choisir —</option>
+                  {_scheduleAvailableCalendars.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>}
+              {/* V1.8.3 — Warning précis selon contexte (mes propres agendas absents vs accès refusé) */}
+              {(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{})._bookingMode && _scheduleAvailableCalendars.length===0 && <div style={{padding:'10px 12px',borderRadius:10,background:'#FEF3C7',border:'1px solid #F59E0B40',fontSize:12,color:'#B45309'}}>⚠️ {_scheduleTargetCollabId===collab.id ? `Aucun agenda configuré pour vous — contactez votre admin` : `Vous n'avez pas accès à l'agenda de ${_scheduleTargetCollab.name||'ce collaborateur'} — demandez à votre admin si besoin`}</div>}
               <div style={{display:'flex',gap:8}}>
                 <div style={{flex:1}}>
                   <label style={{fontSize:12,fontWeight:600,color:T.text2,marginBottom:4,display:'block'}}>Date</label>
@@ -5567,10 +5596,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
               {(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{})._bookingMode && (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).date && (()=>{
                 const selDate = (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).date;
                 const selCalId = (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).calendarId || '';
-                // V1.7.7-Fix-A: résolution via calendar.collaborators (array) — pas collaboratorId (inexistant)
-                const _selCal = selCalId ? (calendars||[]).find(c=>c.id===selCalId) : null;
-                const _selCalCollabs = _selCal ? (Array.isArray(_selCal.collaborators) ? _selCal.collaborators : (()=>{try{return JSON.parse(_selCal.collaborators_json||'[]');}catch{return [];}})()) : [];
-                const selCollabId = _selCalCollabs.includes(collab.id) ? collab.id : (_selCalCollabs[0] || collab.id);
+                // V1.8.2 — collab cible explicite (vient du sélecteur "Pour quel collaborateur ?")
+                const selCollabId = _scheduleTargetCollabId;
                 const dayBookings = (bookings||[]).filter(b=>(b.calendarId===selCalId || b.collaboratorId===selCollabId) && (b.date||'').startsWith(selDate) && b.status!=='cancelled');
                 const dayGCal = (googleEventsProp||[]).filter(ge=>(ge.collaboratorId===selCollabId) && (ge.start||ge.startDate||'').startsWith(selDate));
                 const buf = (typeof availBuffer!=='undefined'?availBuffer:null)||0;

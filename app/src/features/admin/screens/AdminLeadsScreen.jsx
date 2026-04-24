@@ -71,6 +71,7 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
           const isAdmin = typeof collab !== 'undefined' ? (collab?.role === 'admin' || collab?.role === 'supra') : true;
 
           const loadData = () => {
+            if (!company?.id) return;   // V1.8.5 — defense contre transition supra (company peut être null)
             setLoading(true);
             const searchQ = (typeof csvFile === 'string' && csvFile) ? '&search='+encodeURIComponent(csvFile) : '';
             Promise.all([
@@ -104,7 +105,7 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
             loadData();
             const _refreshIv = setInterval(loadData, 30000);
             return ()=>clearInterval(_refreshIv);
-          }, [company.id, statusFilter]);
+          }, [company?.id, statusFilter]);
 
           const loadRules = (envId) => {
             if(!envId) return;

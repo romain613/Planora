@@ -34,6 +34,7 @@ export default function AdminSignalementsScreen({ company, showNotif }) {
           const [sigMultiWord, setSigMultiWord] = useState('');
 
           useEffect(() => {
+            if (!company?.id) return;   // V1.8.6 — defense contre transition supra (company peut être null)
             setSigLoading(true);
             api(`/api/secure-ia/signalements?companyId=${company.id}`).then(d => { setSigData(d); setSigLoading(false); }).catch(() => setSigLoading(false));
           }, []);

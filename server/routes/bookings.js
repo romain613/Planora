@@ -151,6 +151,8 @@ router.post('/', requireAuth, enforceCompany, requirePermission('bookings.create
       rdv_category: b.rdv_category || '',
       rdv_subcategory: b.rdv_subcategory || '',
       manageToken,
+      bookedByCollaboratorId: b.bookedByCollaboratorId || null,
+      agendaOwnerId: b.agendaOwnerId || b.collaboratorId || null,
     });
 
     // Sync to Google Calendar + Meet link

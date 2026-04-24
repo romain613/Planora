@@ -37,6 +37,7 @@ export default function AdminKnowledgeBaseScreen({ company, showNotif }) {
           // kbForm._aiMessages, kbForm._aiInput, kbForm._aiLoading
 
           useEffect(() => {
+            if (!company?.id) return;   // V1.8.7 — defense systémique company=null
             api(`/api/knowledge-base/${company.id}`).then(d => {
               if (!d) { setKbLoading(false); return; }
               const kb = d.kb || {};
@@ -54,7 +55,7 @@ export default function AdminKnowledgeBaseScreen({ company, showNotif }) {
               setKbDocs(d.documents || []);
               setKbLoading(false);
             }).catch(() => setKbLoading(false));
-          }, [company.id]);
+          }, [company?.id]);
 
           const saveKb = () => {
             setKbSaving(true);

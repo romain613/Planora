@@ -3749,7 +3749,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
         </Modal>
 
         {/* ── PERF COLLAB ── */}
-        {tab === "perfCollab" && <AdminPerfCollabScreen collabs={collabs} company={company} perfExpanded={perfExpanded} perfPeriod={perfPeriod} pushNotification={pushNotification} setPerfExpanded={setPerfExpanded} setPerfPeriod={setPerfPeriod} />}
+        {tab === "perfCollab" && company?.id && <AdminPerfCollabScreen collabs={collabs} company={company} perfExpanded={perfExpanded} perfPeriod={perfPeriod} pushNotification={pushNotification} setPerfExpanded={setPerfExpanded} setPerfPeriod={setPerfPeriod} />}
 
         {/* ── PAGES ── */}
         {tab === "pages" && (() => {
@@ -4465,7 +4465,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
         })()}
 
         {/* ── AI KNOWLEDGE BASE ── */}
-        {tab === "knowledge-base" && <AdminKnowledgeBaseScreen company={company} showNotif={showNotif} />}
+        {tab === "knowledge-base" && company?.id && <AdminKnowledgeBaseScreen company={company} showNotif={showNotif} />}
 
         {/* ── SETTINGS ── */}
         {tab === "settings" && (
@@ -10790,7 +10790,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                             <div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:4}}>
                               <div onClick={()=>{setSelectedContact(ct);setFicheTab("history");}} style={{flex:"1 1 28%",padding:"4px 0",textAlign:"center",borderRadius:6,background:T.accentBg,color:T.accent,fontSize:10,fontWeight:600,cursor:"pointer",transition:"opacity .15s"}} onMouseEnter={e=>e.currentTarget.style.opacity=.7} onMouseLeave={e=>e.currentTarget.style.opacity=1}>Fiche</div>
                               {ct.phone&&<div onClick={()=>{setPortalTab("phone");setTimeout(()=>{if(typeof prefillKeypad==="function")prefillKeypad(ct.phone);},200);}} style={{flex:"1 1 28%",padding:"4px 0",textAlign:"center",borderRadius:6,background:T.bg,color:T.text2,fontSize:10,fontWeight:600,cursor:"pointer",border:`1px solid ${T.border}`}}>Appel</div>}
-                              <div onClick={(e)=>{e.stopPropagation();setPhoneScheduleForm({contactId:ct.id,contactName:ct.name||ct.firstName||'',number:ct.phone||'',date:new Date(Date.now()+86400000).toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true});setPhoneShowScheduleModal(true);}} style={{flex:"1 1 28%",padding:"4px 0",textAlign:"center",borderRadius:6,background:"#F59E0B14",color:"#F59E0B",fontSize:10,fontWeight:600,cursor:"pointer",border:"1px solid #F59E0B30"}}>RDV</div>
+                              <div onClick={(e)=>{e.stopPropagation();setPhoneScheduleForm({contactId:ct.id,contactName:ct.name||ct.firstName||'',number:ct.phone||'',date:new Date(Date.now()+86400000).toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:(cals||[])[0]?.id||'',_bookingMode:true});setPhoneShowScheduleModal(true);}} style={{flex:"1 1 28%",padding:"4px 0",textAlign:"center",borderRadius:6,background:"#F59E0B14",color:"#F59E0B",fontSize:10,fontWeight:600,cursor:"pointer",border:"1px solid #F59E0B30"}}>RDV</div>
                               {ct.email&&<div onClick={()=>window.open("mailto:"+ct.email)} style={{flex:"1 1 28%",padding:"4px 0",textAlign:"center",borderRadius:6,background:T.bg,color:T.text2,fontSize:10,fontWeight:600,cursor:"pointer",border:`1px solid ${T.border}`}}>Email</div>}
                               <div onClick={(e)=>{e.stopPropagation();setSelectedContact(ct);setFicheTab("notes");}} style={{flex:"1 1 28%",padding:"4px 0",textAlign:"center",borderRadius:6,background:T.bg,color:T.text3,fontSize:10,fontWeight:600,cursor:"pointer",border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",gap:3}} title="Notes"><I n="edit-3" s={10}/> Notes</div>
                             </div>
@@ -11298,20 +11298,20 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
         })()}
 
         {/* ─── LEADS TAB ─────────────────────────── */}
-        {tab === "leads" && <AdminLeadsScreen collabs={collabs} company={company} contacts={contacts} pushNotification={pushNotification} />}
+        {tab === "leads" && company?.id && <AdminLeadsScreen collabs={collabs} company={company} contacts={contacts} pushNotification={pushNotification} />}
 
 
         {/* ─── OBJECTIFS TAB ─────────────────────────── */}
-        {tab === "objectifs" && <AdminObjectifsScreen collabs={collabs} company={company} pushNotification={pushNotification} />}
+        {tab === "objectifs" && company?.id && <AdminObjectifsScreen collabs={collabs} company={company} pushNotification={pushNotification} />}
 
         {/* ══════ ONGLET AGENTS IA ══════ */}
-        {tab === "ai-agents" && <AdminAiAgentsScreen calendars={calendars} company={company} showNotif={showNotif} />}
+        {tab === "ai-agents" && company?.id && <AdminAiAgentsScreen calendars={cals} company={company} showNotif={showNotif} />}
 
         {/* ══════ ONGLET SIGNALEMENTS ══════ */}
-        {tab === "signalements" && <AdminSignalementsScreen company={company} showNotif={showNotif} />}
+        {tab === "signalements" && company?.id && <AdminSignalementsScreen company={company} showNotif={showNotif} />}
 
         {/* ══════ ONGLET FORMULAIRES D'APPEL ══════ */}
-        {tab === "call-forms" && <AdminCallFormsScreen askConfirm={askConfirm} collabs={collabs} company={company} pushNotification={pushNotification} />}
+        {tab === "call-forms" && company?.id && <AdminCallFormsScreen askConfirm={askConfirm} collabs={collabs} company={company} pushNotification={pushNotification} />}
 
         {/* ═══ SUIVI SMS ═══ */}
         {tab === "sms-monitoring" && (()=>{

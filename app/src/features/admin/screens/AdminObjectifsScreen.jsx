@@ -43,6 +43,7 @@ export default function AdminObjectifsScreen({ collabs, company, pushNotificatio
           const getGoalType = (t) => GOAL_TYPES.find(g=>g.v===t) || GOAL_TYPES[0];
 
           const loadData = () => {
+            if (!company?.id) return;   // V1.8.7 — defense systémique company=null
             setLoading(true);
             Promise.all([
               api(`/api/goals/user?companyId=${company.id}`),
@@ -53,7 +54,7 @@ export default function AdminObjectifsScreen({ collabs, company, pushNotificatio
               api(`/api/leads/envelopes?companyId=${company.id}`),
             ]).then(([ug,tg,rw,st,pr,envs])=>{ setUserGoals(ug||[]); setTeamGoals(tg||[]); setRewards(rw||[]); setGoalStats(st||null); setProgress(pr||[]); setGoalEnvelopes(Array.isArray(envs)?envs:[]); setLoading(false); }).catch(()=>setLoading(false));
           };
-          useEffect(loadData, [company.id]);
+          useEffect(loadData, [company?.id]);
 
           const handleAddGoal = () => {
             api('/api/goals/user', { method:'POST', body:{ companyId:company.id, ...newGoal } }).then(()=>{ setShowAddGoal(false); setNewGoal({collaborator_id:'',type:'calls',target_value:100,period:'monthly',period_start:new Date().toISOString().split('T')[0],period_end:'',reward_leads:0}); loadData(); });

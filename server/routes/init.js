@@ -291,17 +291,45 @@ router.get('/', (req, res) => {
     // ─── COLLABORATEUR (member): minimal data ─────────
     // Filter to only this collaborator's data
     const collabId = authCollaboratorId;
-    const myCalendars = calendars.filter(cal => {
+    // V1.8.4 — Cross-collab booking : exposer tous les calendars de la company (pas de PII).
+    const myCalendars = calendars;
+    const myCalendarIds = new Set(myCalendars.map(c => c.id));
+    // V1.8.4 — Set des calendars dont je suis listé propriétaire (utilisé pour identifier mes bookings).
+    const _myOwnedCalendarIds = new Set(calendars.filter(cal => {
       try {
-        // parseRow converts collaborators_json → collaborators (array), so check both
         const ids = Array.isArray(cal.collaborators) ? cal.collaborators : (typeof cal.collaborators_json === 'string' ? JSON.parse(cal.collaborators_json) : []);
         return ids.includes(collabId);
       } catch { return false; }
+    }).map(c => c.id));
+    // V1.8.4 — Cross-collab booking : exposer tous les bookings de la company.
+    // Pour les bookings hors de mon périmètre, whitelist explicite (slot footprint only, ZERO PII).
+    // Future-safe : tout nouveau champ ajouté à bookings reste invisible par défaut.
+    const myBookings = parsedBookings.map(b => {
+      const isMine = b.collaboratorId === collabId || _myOwnedCalendarIds.has(b.calendarId);
+      if (isMine) return b;
+      return {
+        id: b.id,
+        calendarId: b.calendarId,
+        collaboratorId: b.collaboratorId,
+        date: b.date,
+        time: b.time,
+        duration: b.duration,
+        status: b.status,
+        noShow: b.noShow,
+        checkedIn: b.checkedIn,
+        reconfirmed: b.reconfirmed,
+        source: b.source,
+        googleEventId: b.googleEventId,
+        companyId: b.companyId,
+        bookedByCollaboratorId: b.bookedByCollaboratorId,
+        meetingCollaboratorId: b.meetingCollaboratorId,
+        agendaOwnerId: b.agendaOwnerId,
+        bookingType: b.bookingType,
+        bookingOutcomeAt: b.bookingOutcomeAt,
+        transferMode: b.transferMode,
+        _foreign: true,
+      };
     });
-    const myCalendarIds = new Set(myCalendars.map(c => c.id));
-    const myBookings = parsedBookings.filter(b =>
-      b.collaboratorId === collabId || myCalendarIds.has(b.calendarId)
-    );
 
     // ── Contacts: chaque collaborateur ne voit QUE ses contacts ──
     // REGLE: pas de pool commun. Un contact non-assigné n'est visible par personne
@@ -329,7 +357,8 @@ router.get('/', (req, res) => {
       company, collaborators, // team list needed for display
       calendars: myCalendars,
       bookings: myBookings,
-      availabilities: collabId ? { [collabId]: availabilities[collabId] || (() => { const d={}; for(let i=0;i<5;i++) d[i]={active:true,slots:[{start:'09:00',end:'12:00'},{start:'14:00',end:'18:00'}]}; d[5]={active:false,slots:[]}; d[6]={active:false,slots:[]}; return d; })() } : {},
+      // V1.8.4 — Toutes les availabilities de la company (pour calculer slots cross-collab).
+      availabilities,
       workflows: [], routings: [], polls: [], contacts: myContacts,
       // DEBUG: log contact count for this collab
       settings, pipelineAutomations: pipelineAutomations.filter(pa=>pa.collaboratorId===collabId),
@@ -347,7 +376,8 @@ router.get('/', (req, res) => {
       telecomCredits: 0, allTelecomCredits: {}, telecomCreditLogs: [],
       pipelineStages, customTables,
       contactFieldDefs: contactFieldDefs.filter(d => d.scope === 'company' || d.createdBy === collabId),
-      googleEvents: googleEvents.filter(e => e.collaboratorId === collabId),
+      // V1.8.4 — Tous les events GCal de la company. Summary remplacée par "Occupé" pour les autres collabs.
+      googleEvents: googleEvents.map(e => e.collaboratorId === collabId ? e : { ...e, summary: 'Occupé' }),
       conversations: conversations.filter(c => c.collaboratorId === collabId),
       myGoals, myTeamGoals, myRewards,
     });

@@ -33,6 +33,7 @@ export default function AdminCallFormsScreen({ askConfirm, collabs, company, pus
           const [cfEditingId, setCfEditingId] = useState(null);
 
           useEffect(() => {
+            if (!company?.id) return;   // V1.8.7 — defense systémique company=null
             setCfLoading(true);
             api(`/api/call-forms?companyId=${company.id}`).then(r => {
               if (Array.isArray(r)) setCallForms(r);

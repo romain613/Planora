@@ -6,7 +6,7 @@
 
 import React, { useState, useMemo, useEffect, useRef, Fragment } from "react";
 import { T } from "../../../theme";
-import { I, Btn, Card, Avatar, Badge, Modal, Input, ValidatedInput, Stars, Spinner, Stat, EmptyState, HelpTip, HookIsolator } from "../../../shared/ui";
+import { I, Btn, Card, Avatar, Badge, Modal, Input, ValidatedInput, Stars, Spinner, Stat, EmptyState, HelpTip, HookIsolator, ErrorBoundary } from "../../../shared/ui";
 import { displayPhone, formatPhoneFR } from "../../../shared/utils/phone";
 import { isValidEmail, isValidPhone } from "../../../shared/utils/validators";
 import { fmtDate, DAYS_FR, DAYS_SHORT, MONTHS_FR, getDow, formatDateTime, formatDate } from "../../../shared/utils/dates";
@@ -8618,6 +8618,7 @@ setPostCallResultModal(null);
 {/* ═══════════════════════════════════════════════════════════════════
     PHONE TEAM CHAT BUBBLE — Messagerie inter-collaborateurs
     ═══════════════════════════════════════════════════════════════════ */}
+<ErrorBoundary fallback={null}>
 {(()=>{
   const allCollabs = collabs.length ? collabs : (company?.collaborators || []);
   const teammates = allCollabs.filter(c=>c.id!==collab.id);
@@ -8631,7 +8632,7 @@ setPostCallResultModal(null);
   }).slice(-30);
 
   const sendTeamMsg = () => {
-    const msg = (typeof phoneTeamChatMsg!=='undefined'?phoneTeamChatMsg:{}).trim();
+    const msg = ((phoneTeamChatMsg??'')+'').trim();
     if (!msg) return;
     const body = { companyId: company.id, senderId: collab.id, senderName: collab.name, message: msg, type: (typeof phoneTeamChatTab!=='undefined'?phoneTeamChatTab:null) === 'group' ? 'group' : 'dm' };
     if ((typeof phoneTeamChatTab!=='undefined'?phoneTeamChatTab:null) !== 'group') body.recipientId = (typeof phoneTeamChatTab!=='undefined'?phoneTeamChatTab:null);
@@ -8757,8 +8758,8 @@ setPostCallResultModal(null);
 {/* Input */}
 <div style={{display:'flex',gap:6,padding:'8px 10px',borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bg}}>
 <input value={phoneTeamChatMsg} onChange={e=>(typeof setPhoneTeamChatMsg==='function'?setPhoneTeamChatMsg:function(){})(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendTeamMsg();}}} placeholder={phoneTeamChatTab==='group'?'Message au groupe...':'Message privé...'} style={{flex:1,padding:'8px 12px',borderRadius:10,border:`1px solid ${T.border}`,background:T.surface,fontSize:12,fontFamily:'inherit',color:T.text,outline:'none'}}/>
-<div onClick={sendTeamMsg} style={{width:34,height:34,borderRadius:10,background:(typeof phoneTeamChatMsg!=='undefined'?phoneTeamChatMsg:{}).trim()?'linear-gradient(135deg,#7C3AED,#2563EB)':T.border,display:'flex',alignItems:'center',justifyContent:'center',cursor:(typeof phoneTeamChatMsg!=='undefined'?phoneTeamChatMsg:{}).trim()?'pointer':'default',transition:'all .2s',flexShrink:0}}>
-  <I n="send" s={14} style={{color:(typeof phoneTeamChatMsg!=='undefined'?phoneTeamChatMsg:{}).trim()?'#fff':T.text3}}/>
+<div onClick={sendTeamMsg} style={{width:34,height:34,borderRadius:10,background:((phoneTeamChatMsg??'')+'').trim()?'linear-gradient(135deg,#7C3AED,#2563EB)':T.border,display:'flex',alignItems:'center',justifyContent:'center',cursor:((phoneTeamChatMsg??'')+'').trim()?'pointer':'default',transition:'all .2s',flexShrink:0}}>
+  <I n="send" s={14} style={{color:((phoneTeamChatMsg??'')+'').trim()?'#fff':T.text3}}/>
 </div>
 </div>
       </div>
@@ -8766,6 +8767,7 @@ setPostCallResultModal(null);
   </div>
   );
 })()}
+</ErrorBoundary>
 
 </div>
 {/* ═══ END 3-COLUMN CONTAINER (modals now inside) ═══ */}

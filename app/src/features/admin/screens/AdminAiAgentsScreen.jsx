@@ -38,6 +38,7 @@ export default function AdminAiAgentsScreen({ calendars, company, showNotif }) {
           const [saving, setSaving] = useState(false);
 
           useEffect(() => {
+            if (!company?.id) return;   // V1.8.7 — defense systémique company=null
             api(`/api/ai-agents?companyId=${company.id}`).then(r => {
               if (Array.isArray(r)) setAgents(r);
               setLoading(false);

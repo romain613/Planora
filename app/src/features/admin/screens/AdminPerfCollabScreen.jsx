@@ -32,11 +32,12 @@ export default function AdminPerfCollabScreen({ collabs, company, perfExpanded, 
           const [scoreSettings, setScoreSettings] = useState(null);
 
           const loadDashboard = useCallback(() => {
+            if (!company?.id) return;   // V1.8.7 — defense systémique company=null
             setLoading(true);
             api(`/api/perf/dashboard?companyId=${company.id}&period=${perfPeriod}`)
               .then(r => { if (r && !r.error) setPerfData(r); setLoading(false); })
               .catch(() => setLoading(false));
-          }, [company.id, perfPeriod]);
+          }, [company?.id, perfPeriod]);
 
           useEffect(() => { loadDashboard(); }, [loadDashboard]);
 

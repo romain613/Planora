@@ -6,6 +6,7 @@ class ErrorBoundary extends React.Component {
   componentDidCatch(error, errorInfo) { this.setState({ errorInfo }); console.error("[ErrorBoundary] Error:", error); console.error("[ErrorBoundary] Stack:", errorInfo?.componentStack); console.error("[ErrorBoundary] Error message:", error?.message); }
   render() {
     if (this.state.hasError) {
+      if (this.props.fallback !== undefined) return this.props.fallback;
       const errMsg = this.state.error?.message || String(this.state.error);
       const stack = this.state.errorInfo?.componentStack || "";
       return React.createElement("div", { style: { padding: 40, fontFamily: "monospace", background: "#FEF2F2", color: "#DC2626", minHeight: "100vh" } },
