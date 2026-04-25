@@ -68,6 +68,32 @@ function validateStages(stagesJson) {
   }
 }
 
+// ═══════════════════════════════════════════════════════════════════════════
+// ⚠ ORDRE DES ROUTES — RÈGLE CRITIQUE
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Express matche les routes dans l'ordre de déclaration. Une route littérale
+// (ex : `/preflight`) DOIT être déclarée AVANT toute route paramétrée à 1
+// segment (ex : `/:id`), sinon Express interprète le segment littéral comme
+// la valeur du paramètre — résultat : le handler de `/:id` exécute
+// `SELECT ... WHERE id='preflight'`, ne trouve rien, renvoie 404.
+//
+// Bug historique réglé en V1.8.18 (2026-04-26) — voir commit 76b140a4.
+//
+// ✅ Toute nouvelle route littérale (sans `:`) à 1 segment doit être ajoutée
+//    AVANT le bloc `GET /:id` ci-dessous. Exemples : `/preflight`, `/stats`,
+//    `/all`, `/search`, etc.
+//
+// ✅ Les routes `/collaborators/:collabId/...` (segment 1 littéral + params
+//    plus profonds) sont safe car `/:id` ne matche qu'à 1 segment.
+//
+// ✅ Les routes `/:id/publish`, `/:id/archive`, `/:id/snapshots` sont safe
+//    car le segment 2 est littéral et différencie le matching.
+//
+// Pattern de référence vu en `conversations.js` (sms-history avant /:id) :
+//   "MUST be before /:id to avoid Express matching '<literal>' as :id"
+// ═══════════════════════════════════════════════════════════════════════════
+
 // ─── LIST — GET /api/admin/pipeline-templates ─────────────────────────────
 router.get('/', requireAuth, requireAdmin, enforceCompany, (req, res) => {
   try {
