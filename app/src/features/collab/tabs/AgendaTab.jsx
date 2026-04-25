@@ -2,8 +2,9 @@
 
 import React from "react";
 import { T } from "../../../theme";
-import { I, Btn, Card, Avatar, Badge, Modal, Spinner, Stat } from "../../../shared/ui";
-import { DAYS_FR, DAYS_SHORT, MONTHS_FR, getDow, fmtDate } from "../../../shared/utils/dates";
+import { I, Btn, Card, Avatar, Badge, Modal, Spinner, Stat } from "../../../shared/ui"; // hotfix 2026-04-23 — +Stat
+import { DAYS_FR, DAYS_SHORT, MONTHS_FR, getDow, fmtDate, formatDateTime, formatDate } from "../../../shared/utils/dates";
+import { PIPELINE_LABELS, STATUS_COLORS } from "../../../shared/utils/pipeline";
 import { sendNotification, buildNotifyPayload } from "../../../shared/utils/notifications";
 import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";
@@ -30,28 +31,15 @@ const AgendaTab = () => {
     showGridColors, setShowGridColors,
     gridColorPresets,
     myBookings, myCalendars, monthDays, agendaFillRate,
-    getBookingAt, getGoogleEventAt, updateBooking,
+    getBookingAt, getGoogleEventAt, updateBooking, cancelBookingAndCascade,
     portalTab, setPortalTab, setPortalTabKey,
     setPhoneScheduleForm, setPhoneShowScheduleModal,
-    isAvailableSlot,
-    // ═══ REWIRE 2026-04-20 — destructure complémentaire (17 symboles) ═══
-    ZOOM_LEVELS,
-    agendaScrolledRef,
-    basePreset,
-    dayBookings,
-    dayDate,
-    exportICS,
-    googleConnected,
-    googleLoading,
-    gridTheme,
-    hours,
-    monthMonth,
-    monthYear,
-    myGoogleEvents,
-    syncGoogle,
-    today,
-    todayStr,
-    weekDates,
+    // ── Hotfix audit 2026-04-23 — wire missing symbols ──
+  agendaScrolledRef,
+    // ── Hotfix audit 2026-04-23 (v3) ──
+  googleLoading,
+  // ── AST audit 2026-04-23 (v7) ──
+  basePreset, dayBookings, dayDate, exportICS, googleConnected, gridTheme, hours, isAvailableSlot, monthMonth, monthYear, myGoogleEvents, syncGoogle, today, todayStr, weekDates, ZOOM_LEVELS,
   } = useCollabContext();
 
   return (
@@ -273,7 +261,7 @@ const AgendaTab = () => {
               <div key={hour} style={{ display:"grid", gridTemplateColumns:"56px 1fr", height:slotH, borderBottom:`1px solid ${isFullHour ? '#e5e7eb' : '#f3f4f6'}`, position:"relative" }}>
                 {isNow && <div style={{ position:"absolute", left:48, right:0, top:nowOffsetPx, height:2, background:'#EA4335', zIndex:10 }}><div style={{ position:'absolute', left:-5, top:-4, width:10, height:10, borderRadius:5, background:'#EA4335' }}/></div>}
                 <div style={{ padding:"0 8px", fontSize:11, color:isFullHour?'#70757a':'transparent', textAlign:"right", fontFamily:"-apple-system,sans-serif", lineHeight:slotH+'px', borderRight:'1px solid #dadce0', fontWeight:400, userSelect:'none' }}>{isFullHour ? (parseInt(hour)<10?parseInt(hour):hour.slice(0,2))+':00' : ''}</div>
-                <div onClick={()=>{if(!isFreeSlot)return;const calForCollab=(calendars||[]).find(c=>{let ids=Array.isArray(c.collaborators)?c.collaborators:[];if(!ids.length&&c.collaborators_json){try{ids=JSON.parse(c.collaborators_json);}catch{}}return ids.includes(collab.id);});if(!calForCollab?.id){showNotif('Aucun agenda assigné à ce collaborateur — contactez votre admin','danger');return;}setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:dayDate,time:hour,duration:30,notes:'',calendarId:calForCollab.id,_bookingMode:true});setPhoneShowScheduleModal(true);}} onMouseEnter={e=>{if(isFreeSlot)e.currentTarget.style.background='#E8F5E920';}} onMouseLeave={e=>{if(isFreeSlot)e.currentTarget.style.background=isAvail?'#fff':'#f8f9fa';}} style={{ position:"relative", overflow:"visible", background: isAvail ? '#fff' : '#f8f9fa', cursor:isFreeSlot?'pointer':'default', transition:'background .1s' }}>
+                <div onClick={()=>{if(isFreeSlot){setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:dayDate,time:hour,duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true});setPhoneShowScheduleModal(true);}}} onMouseEnter={e=>{if(isFreeSlot)e.currentTarget.style.background='#E8F5E920';}} onMouseLeave={e=>{if(isFreeSlot)e.currentTarget.style.background=isAvail?'#fff':'#f8f9fa';}} style={{ position:"relative", overflow:"visible", background: isAvail ? '#fff' : '#f8f9fa', cursor:isFreeSlot?'pointer':'default', transition:'background .1s' }}>
                   {hBookings.map(b => {
                     const cal = calendars.find(c => c.id === b.calendarId);
                     const dur = b.duration || 30;
@@ -296,16 +284,8 @@ const AgendaTab = () => {
                         opacity:b.status==="cancelled"?0.4:1,
                         boxShadow:`0 1px 3px ${_bColor}40`, color:'#fff',
                       }}>
-                        <div style={{ fontWeight:600, textDecoration:b.status==="cancelled"?"line-through":"none", overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
-                          {b.bookingType==='share_transfer' && <span title="Contact partagé par un collègue" style={{ marginRight:4 }}>📤</span>}
-                          {b.visitorName}
-                        </div>
+                        <div style={{ fontWeight:600, textDecoration:b.status==="cancelled"?"line-through":"none", overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{(()=>{const _ct=b.contactId?(contacts||[]).find(_c=>_c.id===b.contactId):null; const _xc=_ct?.assignedTo&&Array.isArray(_ct.shared_with)&&_ct.shared_with.length>0; return _xc?<span title="RDV cross-collaborateur">🤝 </span>:null;})()}{b.visitorName}</div>
                         <div style={{ fontSize:11, opacity:0.9 }}>{b.time} → {endTime} · {dur}min</div>
-                        {b.bookingType==='share_transfer' && b.notes && (
-                          <div style={{ fontSize:10, opacity:0.85, marginTop:2, fontStyle:'italic', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }} title={b.notes}>
-                            « {b.notes} »
-                          </div>
-                        )}
                       </div>
                     );
                   })}
@@ -378,7 +358,7 @@ const AgendaTab = () => {
               const isGeStart = (ge) => { if (ge.allDay) return hour === hours[0]; const geSlotMin = parseInt(ge.startTime.slice(11,13))*60+parseInt(ge.startTime.slice(14,16)); return geSlotMin >= slotMin && geSlotMin < slotMin + 30; };
               const isEmptyAvail = isAvail && cellBookings.length===0 && cellGoogleEvents.length===0;
               return (
-                <div key={ds+hour} onClick={()=>{if(!isEmptyAvail)return;const calForCollab=(calendars||[]).find(c=>{let ids=Array.isArray(c.collaborators)?c.collaborators:[];if(!ids.length&&c.collaborators_json){try{ids=JSON.parse(c.collaborators_json);}catch{}}return ids.includes(collab.id);});if(!calForCollab?.id){showNotif('Aucun agenda assigné à ce collaborateur — contactez votre admin','danger');return;}setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:ds,time:hour,duration:30,notes:'',calendarId:calForCollab.id,_bookingMode:true});setPhoneShowScheduleModal(true);}} title={isEmptyAvail?'+ Créer un RDV':undefined} onMouseEnter={e=>{if(isEmptyAvail)e.currentTarget.style.background='#E8F5E920';}} onMouseLeave={e=>{e.currentTarget.style.background=isToday?'#E8F0FE40':isAvail?'#fff':'#f8f9fa';}} style={{
+                <div key={ds+hour} onClick={()=>{if(isEmptyAvail){setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:ds,time:hour,duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true});setPhoneShowScheduleModal(true);}}} title={isEmptyAvail?'+ Créer un RDV':undefined} onMouseEnter={e=>{if(isEmptyAvail)e.currentTarget.style.background='#E8F5E920';}} onMouseLeave={e=>{e.currentTarget.style.background=isToday?'#E8F0FE40':isAvail?'#fff':'#f8f9fa';}} style={{
                   borderRight:i<6?'1px solid #dadce060':'none', padding:0,
                   background: isToday ? '#E8F0FE40' : isAvail ? '#fff' : '#f8f9fa',
                   height:slotH, position:"relative", overflow:'visible',
@@ -395,6 +375,8 @@ const AgendaTab = () => {
                     const blockHeight = Math.max(20, Math.round(dur / 30 * slotH));
                     const _wContact=b.contactId&&(contacts||[]).find(c=>c.id===b.contactId);
                     const bkDisplayName = _wContact?.name || b.visitorName;
+                    const _agXC = _wContact?.assignedTo && Array.isArray(_wContact.shared_with) && _wContact.shared_with.length > 0;
+                    const _agDisplay = _agXC ? '🤝 ' + bkDisplayName : bkDisplayName;
                     const _wColor=_wContact?.card_color||'#4285F4';
                     return (
                       <div key={b.id} onClick={(e) => {e.stopPropagation(); setSelectedBooking(b);}} style={{
@@ -406,7 +388,7 @@ const AgendaTab = () => {
                         opacity:b.status==="cancelled"?0.4:1,
                         boxShadow:`0 1px 3px ${_wColor}40`,
                       }}>
-                        <div style={{ fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textDecoration:b.status==="cancelled"?"line-through":"none" }} title={bkDisplayName}>{bkDisplayName}</div>
+                        <div style={{ fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textDecoration:b.status==="cancelled"?"line-through":"none" }} title={bkDisplayName}>{_agDisplay}</div>
                         <div style={{ fontSize:9, opacity:0.85 }}>{b.time}–{endTime}</div>
                       </div>
                     );
@@ -467,7 +449,8 @@ const AgendaTab = () => {
                 {dayBk.slice(0,3).map(b => {
                   const cal = calendars.find(c => c.id === b.calendarId);
                   const _mContact=b.contactId&&(contacts||[]).find(c=>c.id===b.contactId);
-                  const bkName = _mContact?.name || b.visitorName;
+                  const _mXC = _mContact?.assignedTo && Array.isArray(_mContact.shared_with) && _mContact.shared_with.length > 0;
+                  const bkName = (_mXC ? '🤝 ' : '') + (_mContact?.name || b.visitorName);
                   const _mColor=_mContact?.card_color||gridTheme.booking;
                   return (
                     <div key={b.id} title={`${b.time} — ${bkName}`} style={{ fontSize:10, padding:"2px 4px", borderRadius:3, background:_mColor+"18", color:_mColor, fontWeight:600, marginBottom:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", borderLeft:`2px solid ${_mColor}` }}>
@@ -532,7 +515,7 @@ const AgendaTab = () => {
           </div>
           <div style={{ fontSize:14, fontWeight:700, color:T.text }}>{next.visitorName}</div>
           <div style={{ fontSize:11, color:T.text3, display:"flex", alignItems:"center", gap:6, flexWrap:"wrap" }}>
-            <span>{fmtDate(next.date)} · {next.time} · {next.duration}min</span>
+            <span>{formatDateTime(next.date, next.time)} · {next.duration}min</span>
             {cal && <span style={{ color:cal.color, fontWeight:600 }}>{cal.name}</span>}
             {next.visitorPhone && <span><I n="phone" s={10}/> {next.visitorPhone}</span>}
           </div>
@@ -540,17 +523,17 @@ const AgendaTab = () => {
         </div>
         <div style={{ display:"flex", flexDirection:"column", gap:6, flexShrink:0 }}>
           {next.visitorPhone && (
-            <div onClick={() => { const phone = next.visitorPhone.replace(/\s/g,""); const msg = encodeURIComponent(`Bonjour ${next.visitorName}, rappel de votre RDV le ${fmtDate(next.date)} à ${next.time}. ${next.location||""}`); window.open(`https://wa.me/${phone.replace("+","")}?text=${msg}`,"_blank"); }} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 10px", borderRadius:8, background:"#25D36618", border:"1px solid #25D36640", color:"#25D366", fontSize:10, fontWeight:700, cursor:"pointer" }} title="Envoyer WhatsApp">
+            <div onClick={() => { const phone = next.visitorPhone.replace(/\s/g,""); const msg = encodeURIComponent(`Bonjour ${next.visitorName}, rappel de votre RDV le ${formatDateTime(next.date, next.time)}. ${next.location||""}`); window.open(`https://wa.me/${phone.replace("+","")}?text=${msg}`,"_blank"); }} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 10px", borderRadius:8, background:"#25D36618", border:"1px solid #25D36640", color:"#25D366", fontSize:10, fontWeight:700, cursor:"pointer" }} title="Envoyer WhatsApp">
               <I n="message-circle" s={13}/> WhatsApp
             </div>
           )}
           {next.visitorPhone && (
-            <div onClick={() => { const phone = next.visitorPhone.replace(/\s/g,""); window.open(`sms:${phone}?body=${encodeURIComponent(`Rappel: RDV le ${fmtDate(next.date)} à ${next.time}`)}`); }} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 10px", borderRadius:8, background:"#3B82F618", border:"1px solid #3B82F640", color:"#3B82F6", fontSize:10, fontWeight:700, cursor:"pointer" }} title="Envoyer SMS">
+            <div onClick={() => { const phone = next.visitorPhone.replace(/\s/g,""); window.open(`sms:${phone}?body=${encodeURIComponent(`Rappel: RDV le ${formatDateTime(next.date, next.time)}`)}`); }} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 10px", borderRadius:8, background:"#3B82F618", border:"1px solid #3B82F640", color:"#3B82F6", fontSize:10, fontWeight:700, cursor:"pointer" }} title="Envoyer SMS">
               <I n="smartphone" s={13}/> SMS
             </div>
           )}
           {next.visitorEmail && (
-            <div onClick={() => { const subject = encodeURIComponent(`Rappel : Votre RDV du ${fmtDate(next.date)} à ${next.time}`); const body = encodeURIComponent(`Bonjour ${next.visitorName},\n\nRappel de votre rendez-vous :\n- Date : ${fmtDate(next.date)} à ${next.time}\n- Durée : ${next.duration}min\n${next.location ? "- Lieu : "+next.location+"\n" : ""}${next.videoLink ? "- Lien visio : "+next.videoLink+"\n" : ""}\nCordialement,\n${collab.name}`); window.open(`mailto:${next.visitorEmail}?subject=${subject}&body=${body}`); }} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 10px", borderRadius:8, background:"#8B5CF618", border:"1px solid #8B5CF640", color:"#8B5CF6", fontSize:10, fontWeight:700, cursor:"pointer" }} title="Envoyer Email">
+            <div onClick={() => { const subject = encodeURIComponent(`Rappel : Votre RDV du ${formatDateTime(next.date, next.time)}`); const body = encodeURIComponent(`Bonjour ${next.visitorName},\n\nRappel de votre rendez-vous :\n- Date : ${formatDateTime(next.date, next.time)}\n- Durée : ${next.duration}min\n${next.location ? "- Lieu : "+next.location+"\n" : ""}${next.videoLink ? "- Lien visio : "+next.videoLink+"\n" : ""}\nCordialement,\n${collab.name}`); window.open(`mailto:${next.visitorEmail}?subject=${subject}&body=${body}`); }} style={{ display:"flex", alignItems:"center", gap:5, padding:"6px 10px", borderRadius:8, background:"#8B5CF618", border:"1px solid #8B5CF640", color:"#8B5CF6", fontSize:10, fontWeight:700, cursor:"pointer" }} title="Envoyer Email">
               <I n="mail" s={13}/> Email
             </div>
           )}
@@ -860,13 +843,13 @@ const AgendaTab = () => {
             <div key={b.id} style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 16px', borderBottom:`1px solid ${T.border}08`, opacity:b.status==='cancelled'?0.5:1 }}>
               <div style={{ width:4, height:36, borderRadius:2, background:cal?.color, flexShrink:0 }}/>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:13, fontWeight:600, color:T.text }}>{b.visitorName}</div>
+                <div style={{ fontSize:13, fontWeight:600, color:T.text }}>{(()=>{const _ct=b.contactId?(contacts||[]).find(_c=>_c.id===b.contactId):null; const _xc=_ct?.assignedTo&&Array.isArray(_ct.shared_with)&&_ct.shared_with.length>0; return _xc?<span title="RDV cross-collaborateur">🤝 </span>:null;})()}{b.visitorName}</div>
                 <div style={{ fontSize:11, color:T.text3 }}>{cal?.name} · {fmtDate(b.date)} · {b.time} · {b.duration}min</div>
               </div>
               <Badge color={b.status==='confirmed'?T.success:b.status==='pending'?T.warning:T.danger}>{b.status==='confirmed'?'Confirmé':b.status==='pending'?'Attente':'Annulé'}</Badge>
               <div style={{ display:'flex', gap:4 }}>
                 {b.status==='pending' && <Btn small success disabled={actionLoading===b.id+'c'} onClick={() => { (typeof setActionLoading==='function'?setActionLoading:function(){})(b.id+'c'); updateBooking(b.id,{status:'confirmed'}); showNotif('RDV confirmé'); sendNotification('booking-confirmed', buildNotifyPayload(b, calendars, [collab], company)); setTimeout(()=>(typeof setActionLoading==='function'?setActionLoading:function(){})(null),600); }}>{actionLoading===b.id+'c'?<Spinner size={12} color='#fff'/>:<I n='check' s={12}/>}</Btn>}
-                {b.status!=='cancelled' && <Btn small danger disabled={actionLoading===b.id+'x'} onClick={() => { (typeof setActionLoading==='function'?setActionLoading:function(){})(b.id+'x'); updateBooking(b.id,{status:'cancelled'}); showNotif('RDV annulé','danger'); sendNotification('cancelled', buildNotifyPayload(b, calendars, [collab], company)); setTimeout(()=>(typeof setActionLoading==='function'?setActionLoading:function(){})(null),600); }}>{actionLoading===b.id+'x'?<Spinner size={12} color='#fff'/>:<I n='x' s={12}/>}</Btn>}
+                {b.status!=='cancelled' && <Btn small danger disabled={actionLoading===b.id+'x'} onClick={() => { (typeof setActionLoading==='function'?setActionLoading:function(){})(b.id+'x'); cancelBookingAndCascade(b.id); showNotif('RDV annulé','danger'); sendNotification('cancelled', buildNotifyPayload(b, calendars, [collab], company)); setTimeout(()=>(typeof setActionLoading==='function'?setActionLoading:function(){})(null),600); }}>{actionLoading===b.id+'x'?<Spinner size={12} color='#fff'/>:<I n='x' s={12}/>}</Btn>}
                 <Btn small onClick={() => setSelectedBooking(b)}><I n='eye' s={12}/></Btn>
               </div>
             </div>

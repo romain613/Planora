@@ -20,4 +20,4 @@ export { default as EmptyState } from "./EmptyState";
 export { default as HelpTip } from "./HelpTip";
 export { default as ValidatedInput } from "./ValidatedInput";
 export { default as ErrorBoundary } from "./ErrorBoundary";
-export { default as EnvelopeBadge } from "./EnvelopeBadge";
+export { default as MiniMonthCalendar } from "./MiniMonthCalendar";

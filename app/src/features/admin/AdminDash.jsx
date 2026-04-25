@@ -37,20 +37,16 @@ import {
 // Phase 9a — extracted forms barrel
 import { NewCollabForm, NewCompanyForm, PlacesAutocomplete, TemplateEditorPopup, NewCalForm } from "./forms";
 
-import { useBrand } from "../../shared/brand/useBrand";
-
-// Pipeline Templates (Phase 2 Admin UI) — nouvel onglet dans Équipe
-// Phase 3 — AssignTemplateModal pour bascule collab + migration
-import { TemplatesSection, AssignTemplateModal } from "./templates";
+// V1.8.15 — Pipeline Templates Admin UI (rebrancher feature dormante)
+import { TemplatesSection } from "./templates";
 
 const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, setBookings, avails, setAvails, collabs, setCollabs, cals, setCals, darkMode, setDarkMode, blackouts, setBlackouts, vacations, setVacations, isSupraAdmin, allCompanies, setAllCompanies, allUsers, setAllUsers, allCalendars, setAllCalendars, allBookings, setAllBookings, allContacts, setAllContacts, activityLog, setActivityLog, smsCredits, setSmsCredits, smsHistory, setSmsHistory, voipCredits, setVoipCredits, voipCallLogs, setVoipCallLogs, voipConfigured, setVoipConfigured, appPhonePlans, setAppPhonePlans, appMyPhoneNumbers, setAppMyPhoneNumbers, appAvailableNumbers, setAppAvailableNumbers, contacts, setContacts, onSwitchCompany, pipelineStages, setPipelineStages, contactFieldDefs, setContactFieldDefs }) => {
   const [tab, _setTab] = useState(() => { try { return localStorage.getItem("c360-tab") || "home"; } catch { return "home"; } });
   const [tabKey, setTabKey] = useState(0); // for re-triggering animation on tab change
-  const TAB_TITLES = { home:"Dashboard", calendars:"Calendriers", team:"Équipe", bookings:"Rendez-vous", agenda:"Agenda", workflows:"Workflows", routing:"Routing", polls:"Sondages", tables:"Tables", contacts:"Contacts CRM", phone:"Téléphone", boutique:"Boutique Telecom", analytics:"Analytics", perfCollab:"Perf Collab", forms:"Formulaires", pages:"Pages", "knowledge-base":"Base IA", settings:"Paramètres", messages:"Messages", support:"Support", vision:"Vision", leads:"Leads", objectifs:"Objectifs", signalements:"Signalements", "ai-agents":"Agents IA", "call-forms":"Formulaires d'appel", "sms-monitoring":"Suivi SMS" };
-  const brand = useBrand();
-  const setTab = (v) => { const val = typeof v === "function" ? v(tab) : v; _setTab(val); localStorage.setItem("c360-tab", val); setTabKey(k=>k+1); document.title = brand.name + " — " + (TAB_TITLES[val]||val); document.querySelector('.dash-main')?.scrollTo({ top:0, behavior:'smooth' }); };
+  const TAB_TITLES = { home:"Dashboard", calendars:"Calendriers", team:"Équipe", bookings:"Rendez-vous", agenda:"Agenda", workflows:"Workflows", routing:"Routing", polls:"Sondages", tables:"Tables", contacts:"Contacts CRM", phone:"Téléphone", boutique:"Boutique Telecom", analytics:"Analytics", perfCollab:"Perf Collab", forms:"Formulaires", pages:"Pages", "knowledge-base":"Base IA", settings:"Paramètres", messages:"Messages", support:"Support", vision:"Vision", leads:"Leads", objectifs:"Objectifs", signalements:"Signalements", "ai-agents":"Agents IA", "call-forms":"Formulaires d'appel", "sms-monitoring":"Suivi SMS", "pipeline-templates":"Templates Pipeline" };
+  const setTab = (v) => { const val = typeof v === "function" ? v(tab) : v; _setTab(val); localStorage.setItem("c360-tab", val); setTabKey(k=>k+1); document.title = "Calendar360 — " + (TAB_TITLES[val]||val); document.querySelector('.dash-main')?.scrollTo({ top:0, behavior:'smooth' }); };
   // Set title on mount
-  useEffect(() => { document.title = brand.name + " — " + (TAB_TITLES[tab]||tab); }, []);
+  useEffect(() => { document.title = "Calendar360 — " + (TAB_TITLES[tab]||tab); }, []);
   // liveConfig for AdminDash settings (document templates, etc.)
   const _adminLiveConfigKey = 'c360-live-config-' + (company?.id || 'default');
   const _defaultLiveConfig = { detectionsEnabled:{}, documentTemplates:[
@@ -62,10 +58,6 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
   // Keyboard shortcuts state
   const [shortcutsOpen, setShortcutsOpen] = useState(false);
   const [showNewCollab, setShowNewCollab] = useState(false);
-  // Phase 2 Templates Pipeline : sous-onglet dans Équipe (members | templates)
-  const [teamSubTab, setTeamSubTab] = useState("members");
-  // Phase 3 Templates Pipeline : état modale assignation (collab cible ou null)
-  const [assignTemplateTarget, setAssignTemplateTarget] = useState(null);
   const [showNewCal, setShowNewCal] = useState(false);
   const [calSettingsId, setCalSettingsId] = useState(null);
   const [editCalId, setEditCalId] = useState(null);
@@ -168,7 +160,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
   const [smsBulkCompany, setSmsBulkCompany] = useState("");
   const [smsBulkAmount, setSmsBulkAmount] = useState("");
   const [smsBulkMode, setSmsBulkMode] = useState("add"); // add | set
-  useEffect(()=>{ if(isSupraAdmin && tab==="vision" && company?.id) api("/api/init?companyId="+company.id).then(d=>{ if(d?.allSmsCredits) setCompanySmsCredits(d.allSmsCredits); if(d?.allCalendars) (typeof setAllCalendars==='function'?setAllCalendars:function(){})(d.allCalendars); if(d?.allBookings) (typeof setAllBookings==='function'?setAllBookings:function(){})(d.allBookings); if(d?.allContacts) (typeof setAllContacts==='function'?setAllContacts:function(){})(d.allContacts); if(d?.allUsers) (typeof setAllUsers==='function'?setAllUsers:function(){})(d.allUsers); if(d?.allCompanies) (typeof setAllCompanies==='function'?setAllCompanies:function(){})(d.allCompanies); if(d?.allPhoneNumbers) setAllPhoneNumbers(d.allPhoneNumbers); if(d?.phonePlans) setPhonePlans(d.phonePlans); if(d?.voipPacks) setVoipPacks(d.voipPacks); if(d?.smsPacks) setSmsPacks(d.smsPacks); if(d?.allTelecomCredits && typeof d.allTelecomCredits==='object') setAllTelecomCredits(d.allTelecomCredits); if(d?.telecomCreditLogs) setTelecomCreditLogs(d.telecomCreditLogs); }); },[tab]);
+  useEffect(()=>{ if(isSupraAdmin && tab==="vision" && company?.id) api("/api/init?companyId="+company.id).then(d=>{ if(d?.allSmsCredits) setCompanySmsCredits(d.allSmsCredits); if(d?.allCalendars) (typeof setAllCalendars==='function'?setAllCalendars:function(){})(d.allCalendars); if(d?.allBookings) (typeof setAllBookings==='function'?setAllBookings:function(){})(d.allBookings); if(d?.allContacts) (typeof setAllContacts==='function'?setAllContacts:function(){})(d.allContacts); if(d?.allUsers) (typeof setAllUsers==='function'?setAllUsers:function(){})(d.allUsers); if(d?.allCompanies) (typeof setAllCompanies==='function'?setAllCompanies:function(){})(d.allCompanies); if(d?.allPhoneNumbers) setAllPhoneNumbers(d.allPhoneNumbers); if(d?.phonePlans) setPhonePlans(d.phonePlans); if(d?.voipPacks) setVoipPacks(d.voipPacks); if(d?.smsPacks) setSmsPacks(d.smsPacks); if(d?.allTelecomCredits && typeof d.allTelecomCredits==='object') setAllTelecomCredits(d.allTelecomCredits); if(d?.telecomCreditLogs) setTelecomCreditLogs(d.telecomCreditLogs); }); },[tab, company?.id]);
   useEffect(()=>{ if(isSupraAdmin && tab==="vision" && visionSubTab==="sms") { setSmsGlobalLoading(true); api("/api/sms/global-stats").then(d=>{ if(d) setSmsGlobalStats(d); setSmsGlobalLoading(false); }); } },[tab,visionSubTab]);
   // Load tickets for company
   useEffect(()=>{ if(company?.id) api(`/api/tickets?companyId=${company.id}`).then(r=>{ if(r?.tickets) setTickets(r.tickets); }); },[company?.id]);
@@ -184,7 +176,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
 
   // Load chat messages on mount
   const loadChatMessages = () => {
-    if (!company?.id) return;
+    if (isSupraAdmin || !company?.id) return;   // V1.8.10 — supra sans identite messaging
     const sender = collabs[0];
     const params = chatMode === "dm" && chatDmTarget
       ? `companyId=${company.id}&limit=50&senderId=${sender?.id}&recipientId=${chatDmTarget.id}`
@@ -197,7 +189,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
 
   // Chat: heartbeat for online status (every 10s)
   useEffect(() => {
-    if (!company?.id || !collabs[0]?.id) return;
+    if (isSupraAdmin || !company?.id || !collabs[0]?.id) return;   // V1.8.10
     const beat = () => api("/api/messaging/heartbeat", { method: "POST", body: { collaboratorId: collabs[0].id, companyId: company.id } });
     beat();
     const interval = setInterval(beat, 10000);
@@ -206,7 +198,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
 
   // Chat: poll online users every 10s
   useEffect(() => {
-    if (!company?.id) return;
+    if (isSupraAdmin || !company?.id) return;   // V1.8.10
     const poll = () => api(`/api/messaging/online?companyId=${company.id}`).then(r => { if (r?.online) setChatOnlineUsers(r.online); });
     poll();
     const interval = setInterval(poll, 10000);
@@ -215,7 +207,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
 
   // Chat polling — 3s when on messages tab or floating chat open
   useEffect(() => {
-    if ((!chatFloating && tab !== "messages") || !company?.id) return;
+    if (isSupraAdmin || (!chatFloating && tab !== "messages") || !company?.id) return;   // V1.8.10
     const sender = collabs[0];
     const poll = () => {
       const latest = chatMessages.length ? chatMessages[chatMessages.length - 1].createdAt : "";
@@ -237,7 +229,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
   // Chat: count unread when not on messages tab
   useEffect(() => {
     if (tab === "messages" || chatFloating) { setChatUnreadCount(0); return; }
-    if (!company?.id) return;
+    if (isSupraAdmin || !company?.id) return;   // V1.8.10
     const check = () => {
       const latest = chatMessages.length ? chatMessages[chatMessages.length - 1].createdAt : "";
       if (latest) api(`/api/messaging?companyId=${company.id}&after=${encodeURIComponent(latest)}`).then(r => {
@@ -1587,45 +1579,14 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
       const code = genCode().slice(0,4) + "-" + genCode().slice(0,4);
       const nameParts = (c.name||"").trim().split(" ").filter(Boolean);
       const pw = (nameParts.length > 0 ? nameParts.map(n=>(n[0]||"").toLowerCase()).join("") : "user") + Math.floor(1000+Math.random()*9000);
-      // Phase 3 bis — extraction des champs transitoires d'assignation template
-      // (ils ne doivent PAS être envoyés à POST /api/collaborators)
-      const _assignPipelineMode = c._assignPipelineMode || "free";
-      const _assignPipelineTemplateId = c._assignPipelineTemplateId || null;
-      const { _assignPipelineMode: _omitMode, _assignPipelineTemplateId: _omitId, ...cClean } = c;
-      const newCollab = { ...cClean, id:`u${Date.now()}`, companyId:company.id, code, password:pw };
+      const newCollab = { ...c, id:`u${Date.now()}`, companyId:company.id, code, password:pw };
       setCollabs(prev => [...prev, newCollab]);
       setAvails(prev => ({ ...prev, [newCollab.id]: defAvail() }));
       setShowNewCollab(false);
       setCreatedCollab(newCollab);
       pushNotification("Collaborateur créé", newCollab.name+" — "+newCollab.email, "success");
       api("/api/collaborators", { method:"POST", body:newCollab })
-        .then(r => {
-          if(!r?.success) {
-            pushNotification("Erreur","Création échouée: "+(r?.error||'erreur inconnue'),"danger");
-            return;
-          }
-          // Phase 3 bis — si template choisi à la création, assignation immédiate via migrate
-          // Collab tout neuf = zéro contact → fallbackStage non requis, pre-flight trivial.
-          if (_assignPipelineMode === "template" && _assignPipelineTemplateId) {
-            api(`/api/admin/pipeline-templates/collaborators/${encodeURIComponent(newCollab.id)}/migrate`, {
-              method: "POST",
-              body: { templateId: _assignPipelineTemplateId, fallbackStage: null },
-            })
-              .then(r2 => {
-                if (r2?.error) {
-                  pushNotification("Pipeline", "Assignation template échouée: " + r2.error, "danger");
-                  return;
-                }
-                pushNotification("Pipeline", `Template assigné : ${r2.targetTemplateName || 'OK'}`, "success");
-                // Mettre à jour le state local du nouveau collab avec le mode template
-                setCollabs(prev => prev.map(cc => cc.id === newCollab.id
-                  ? { ...cc, pipelineMode: r2.newMode, pipelineSnapshotId: r2.snapshotId }
-                  : cc
-                ));
-              })
-              .catch(err => pushNotification("Pipeline", "Assignation template échouée: " + err.message, "danger"));
-          }
-        })
+        .then(r => { if(!r?.success) pushNotification("Erreur","Création échouée: "+(r?.error||'erreur inconnue'),"danger"); })
         .catch(err => pushNotification("Erreur","Création échouée: "+err.message,"danger"));
       // Auto-send welcome email with credentials
       if (newCollab.email) {
@@ -1681,6 +1642,9 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
     { type:"category", key:"leadsMgmt", label:"Leads & Objectifs", icon:"target", items:[
       { id:"leads", icon:"inbox", label:"Leads" },
       { id:"objectifs", icon:"target", label:"Objectifs" },
+    ]},
+    { type:"category", key:"pipelines", label:"Pipelines", icon:"layers", items:[
+      { id:"pipeline-templates", icon:"layers", label:"Templates" },
     ]},
     { type:"category", key:"communication", label:"Communication", icon:"phone", items:[
       { id:"phone", icon:"phone", label:"Téléphone" },
@@ -1738,48 +1702,33 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
   }, [company?.id]);
 
   // Initialize Twilio Device (SDK now bundled via npm — no CDN polling needed)
-  // Deferred to first user gesture (browser autoplay policy: AudioContext cannot
-  // start before user interacts — token is pre-fetched at mount so device creation
-  // is instant at first click). Mirrors the lazy-init logic in CollabPortal.jsx.
   useEffect(() => {
     if (!(typeof voipConfigured!=='undefined'?voipConfigured:null)) return;
+    // Find the current collaborator identity: prefer collab with assigned marketplace number
     const myAssigned = (typeof appMyPhoneNumbers!=='undefined'?appMyPhoneNumbers:{}).find(pn => pn.collaboratorId && pn.status === 'assigned');
     const currentCollabId = myAssigned?.collaboratorId || collabs[0]?.id;
     if (!currentCollabId) return;
-    const tokenPromise = api('/api/voip/token', { method:'POST', body:{ companyId:company.id, collaboratorId:currentCollabId } })
-      .catch(err => { console.error('[VOIP TOKEN ERR]', err); return null; });
-    let initialized = false;
-    const initDevice = async () => {
-      if (initialized) return;
-      initialized = true;
-      const data = await tokenPromise;
-      if (!data?.token || data.demo) return;
-      const device = new TwilioDevice(data.token, { codecPreferences:['opus','pcmu'], edge:'dublin' });
-      device.on('registered', () => console.log('[VOIP] Device registered for', currentCollabId));
-      device.on('error', (err) => { console.error('[VOIP ERR]', err); notif('Erreur VoIP: '+err.message,'danger'); });
-      device.on('incoming', (call) => {
-        setVoipState('incoming');
-        setVoipIncomingInfo({ from: call.parameters.From });
-        voipCallRef.current = call;
-        api(`/api/voip/lookup?phone=${encodeURIComponent(call.parameters.From)}&companyId=${company.id}`)
-          .then(d => { if(d?.found) setVoipActiveContact(d.contact); });
-        setVoipDialerOpen(true);
-        call.on('cancel', () => { setVoipState('idle'); setVoipIncomingInfo(null); });
-        call.on('disconnect', () => handleVoipCallEnd());
+    api('/api/voip/token', { method:'POST', body:{ companyId:company.id, collaboratorId:currentCollabId } })
+      .then(data => {
+        if (!data?.token || data.demo) return;
+        const device = new TwilioDevice(data.token, { codecPreferences:['opus','pcmu'], edge:'dublin' });
+        device.on('registered', () => console.log('[VOIP] Device registered for', currentCollabId));
+        device.on('error', (err) => { console.error('[VOIP ERR]', err); notif('Erreur VoIP: '+err.message,'danger'); });
+        device.on('incoming', (call) => {
+          setVoipState('incoming');
+          setVoipIncomingInfo({ from: call.parameters.From });
+          voipCallRef.current = call;
+          api(`/api/voip/lookup?phone=${encodeURIComponent(call.parameters.From)}&companyId=${company.id}`)
+            .then(d => { if(d?.found) setVoipActiveContact(d.contact); });
+          setVoipDialerOpen(true);
+          call.on('cancel', () => { setVoipState('idle'); setVoipIncomingInfo(null); });
+          call.on('disconnect', () => handleVoipCallEnd());
+        });
+        device.register();
+        voipDeviceRef.current = device;
+        console.log('[VOIP] Device created and registering...');
       });
-      device.register();
-      voipDeviceRef.current = device;
-    };
-    const gestureOpts = { once: true, capture: true, passive: true };
-    document.addEventListener('click',      initDevice, gestureOpts);
-    document.addEventListener('keydown',    initDevice, gestureOpts);
-    document.addEventListener('touchstart', initDevice, gestureOpts);
-    return () => {
-      document.removeEventListener('click',      initDevice, { capture: true });
-      document.removeEventListener('keydown',    initDevice, { capture: true });
-      document.removeEventListener('touchstart', initDevice, { capture: true });
-      voipDeviceRef.current?.destroy();
-    };
+    return () => { voipDeviceRef.current?.destroy(); };
   }, [voipConfigured, company?.id, (typeof appMyPhoneNumbers!=='undefined'?appMyPhoneNumbers:{}).length]);
 
   const startVoipCall = async (phoneNumber, contact = null) => {
@@ -1946,7 +1895,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
           </div>
           <div style={{ marginTop:12, padding:"8px 10px", borderRadius:8, background:T.bg, border:`1px solid ${T.border}`, fontSize:12 }}>
             <div style={{ fontWeight:600 }}>{company?.name||"Calendar360"}</div>
-            <div style={{ color:T.text3, fontSize:11, marginTop:2 }}>{company?.slug||"app"}.{brand.domain}</div>
+            <div style={{ color:T.text3, fontSize:11, marginTop:2 }}>{company?.slug||"app"}.calendar360.fr</div>
           </div>
         </div>
         <nav style={{ flex:1, padding:"0 8px", overflowY:"auto" }}>
@@ -2735,7 +2684,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                     </div>
                     <div style={{ padding:"8px 12px", borderRadius:8, background:T.bg, border:`1px solid ${T.border}`, marginBottom:12, display:"flex", alignItems:"center", gap:8 }}>
                       <I n="link" s={13} style={{ color:T.text3, flexShrink:0 }}/>
-                      <span title={`${brand.domain}/book/${company.slug}/${cal.slug}`} style={{ fontSize:12, color:T.accent, fontWeight:600, fontFamily:"monospace", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1 }}>{brand.domain}/book/{company.slug}/{cal.slug}</span>
+                      <span title={`calendar360.fr/book/${company.slug}/${cal.slug}`} style={{ fontSize:12, color:T.accent, fontWeight:600, fontFamily:"monospace", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap", flex:1 }}>calendar360.fr/book/{company.slug}/{cal.slug}</span>
                       <span onClick={(e) => { e.stopPropagation(); navigator.clipboard.writeText(`https://calendar360.fr/book/${company.slug}/${cal.slug}`); notif("URL copiée !"); }} style={{ cursor:"pointer", padding:"3px 8px", borderRadius:6, background:T.accentBg, color:T.accent, fontSize:11, fontWeight:600, flexShrink:0, display:"flex", alignItems:"center", gap:4 }}><I n="copy" s={11}/> Copier</span>
                     </div>
                     <div style={{ display:"flex", gap:6, flexWrap:"wrap", marginBottom:12 }}>
@@ -2762,7 +2711,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                       <div style={{ padding:14, borderRadius:10, background:T.bg, border:`1px solid ${T.border}`, marginBottom:12 }}>
                         <div style={{ fontSize:11, fontWeight:600, color:T.text2, marginBottom:8 }}>Code d'intégration (iframe)</div>
                         <div style={{ position:"relative" }}>
-                          <pre style={{ padding:"10px 12px", borderRadius:8, background:T.surface, border:`1px solid ${T.border}`, fontSize:10, fontFamily:"monospace", color:T.accent, overflow:"auto", whiteSpace:"pre-wrap", wordBreak:"break-all", margin:0, lineHeight:1.5 }}>{`<iframe src="https://${brand.domain}/book/${company.slug}/${cal.slug}" width="100%" height="700" frameborder="0" style="border-radius:12px;border:1px solid #E2E8F0;"></iframe>`}</pre>
+                          <pre style={{ padding:"10px 12px", borderRadius:8, background:T.surface, border:`1px solid ${T.border}`, fontSize:10, fontFamily:"monospace", color:T.accent, overflow:"auto", whiteSpace:"pre-wrap", wordBreak:"break-all", margin:0, lineHeight:1.5 }}>{`<iframe src="https://calendar360.fr/book/${company.slug}/${cal.slug}" width="100%" height="700" frameborder="0" style="border-radius:12px;border:1px solid #E2E8F0;"></iframe>`}</pre>
                           <span onClick={() => { navigator.clipboard.writeText(`<iframe src="https://calendar360.fr/book/${company.slug}/${cal.slug}" width="100%" height="700" frameborder="0" style="border-radius:12px;border:1px solid #E2E8F0;"></iframe>`); notif("Code embed copié !"); }} style={{ position:"absolute", top:6, right:6, cursor:"pointer", padding:"3px 8px", borderRadius:6, background:T.accentBg, color:T.accent, fontSize:10, fontWeight:600 }}>Copier</span>
                         </div>
                         <div style={{ marginTop:8, fontSize:10, color:T.text3 }}>Collez ce code sur votre site web pour afficher la page de réservation.</div>
@@ -2799,48 +2748,15 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
         {/* ── TEAM ── */}
         {tab === "team" && (
           <div>
-            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:16 }}>
+            <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:24 }}>
               <h1 style={{ fontSize:22, fontWeight:700 }}>Équipe</h1>
-              {teamSubTab === "members" && (
-                <Btn primary onClick={() => { (typeof setShowNewCollab==='function'?setShowNewCollab:function(){})(!showNewCollab); setCreatedCollab(null); }}><I n="plus" s={14}/> Nouveau collaborateur</Btn>
-              )}
+              <Btn primary onClick={() => { (typeof setShowNewCollab==='function'?setShowNewCollab:function(){})(!showNewCollab); setCreatedCollab(null); }}><I n="plus" s={14}/> Nouveau collaborateur</Btn>
             </div>
-            {/* Sub-tabs Équipe (Phase 2 Templates Pipeline) */}
-            <div style={{ display:"flex", gap:0, borderBottom:`1.5px solid ${T.border}`, marginBottom:20 }}>
-              {[
-                { key: "members", label: "Membres", icon: "users" },
-                { key: "templates", label: "Templates Pipeline Live", icon: "layout" }
-              ].map(st => (
-                <div
-                  key={st.key}
-                  onClick={() => setTeamSubTab(st.key)}
-                  style={{
-                    padding: "10px 18px",
-                    cursor: "pointer",
-                    fontSize: 13,
-                    fontWeight: teamSubTab === st.key ? 700 : 500,
-                    color: teamSubTab === st.key ? T.accent : T.text2,
-                    borderBottom: `2.5px solid ${teamSubTab === st.key ? T.accent : "transparent"}`,
-                    marginBottom: -1.5,
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    transition: "all .15s"
-                  }}
-                >
-                  <I n={st.icon} s={14} /> {st.label}
-                </div>
-              ))}
-            </div>
-            {teamSubTab === "templates" && (
-              <TemplatesSection company={company} showNotif={showNotif} />
-            )}
-            {teamSubTab === "members" && (<Fragment>
 
             {(typeof showNewCollab!=='undefined'?showNewCollab:null) && (
               <Card style={{ marginBottom:20, border:`1px solid ${T.accentBorder}` }}>
                 <h3 style={{ fontSize:15, fontWeight:700, marginBottom:16 }}>Nouveau collaborateur</h3>
-                <NewCollabForm onClose={() => setShowNewCollab(false)} onCreate={handleCreateCollab} companyId={company?.id}/>
+                <NewCollabForm onClose={() => setShowNewCollab(false)} onCreate={handleCreateCollab}/>
               </Card>
             )}
 
@@ -2887,37 +2803,6 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                         <div style={{ width:36, height:36, borderRadius:18, background:T.accent+"18", display:"flex", alignItems:"center", justifyContent:"center", color:T.accent }}><I n="edit-2" s={16}/></div>
                         <h3 style={{ fontSize:15, fontWeight:700, margin:0 }}>Modifier le collaborateur</h3>
                         <span onClick={() => { setEditingCollabId(null); setEditCollabForm({}); }} style={{ marginLeft:"auto", cursor:"pointer", color:T.text3 }}><I n="x" s={16}/></span>
-                      </div>
-                      {/* ── Phase finitions — Pipeline Équipe (accès explicite dans l'édition) ── */}
-                      <div style={{
-                        display:"flex", alignItems:"center", gap:12,
-                        padding:"10px 14px", borderRadius:10, marginBottom:16,
-                        background: c.pipelineMode === 'template' ? "#7C3AED10" : T.bg,
-                        border: `1px solid ${c.pipelineMode === 'template' ? '#7C3AED35' : T.border}`,
-                      }}>
-                        <div style={{
-                          width:32, height:32, borderRadius:8,
-                          background: c.pipelineMode === 'template' ? "#7C3AED20" : T.surface,
-                          color: c.pipelineMode === 'template' ? "#7C3AED" : T.text3,
-                          display:"flex", alignItems:"center", justifyContent:"center", flexShrink:0,
-                        }}>
-                          <I n={c.pipelineMode === 'template' ? "lock" : "layout"} s={16}/>
-                        </div>
-                        <div style={{ flex:1, minWidth:0 }}>
-                          <div style={{ fontSize:12, fontWeight:700, color:T.text }}>Pipeline Équipe</div>
-                          <div style={{ fontSize:11, color:T.text2 }}>
-                            {c.pipelineMode === 'template'
-                              ? <>Mode actuel : <strong>Template imposé</strong>. Le collaborateur ne peut pas modifier la structure de son pipeline.</>
-                              : <>Mode actuel : <strong>Mode libre</strong>. Le collaborateur configure lui-même son pipeline.</>}
-                          </div>
-                        </div>
-                        <Btn
-                          small
-                          onClick={() => setAssignTemplateTarget(c)}
-                          style={{ fontSize:11, flexShrink:0 }}
-                        >
-                          <I n="edit-2" s={11}/> Changer
-                        </Btn>
                       </div>
                       <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:12, marginBottom:12 }}>
                         <Input label="Nom complet" value={(typeof editCollabForm!=='undefined'?editCollabForm:{}).name||''} onChange={e => (typeof setEditCollabForm==='function'?setEditCollabForm:function(){})(p=>({...p,name:e.target.value}))} icon="user"/>
@@ -3341,21 +3226,6 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                         <Btn small onClick={() => handleStartEditCollab(c)} style={{ background:T.accentBg, color:T.accent, border:`1px solid ${T.accentBorder}` }}>
                           <I n="edit-2" s={12}/> Modifier
                         </Btn>
-                        <Btn
-                          small
-                          onClick={() => setAssignTemplateTarget(c)}
-                          style={{
-                            background: c.pipelineMode === 'template' ? "#7C3AED18" : T.bg,
-                            color: c.pipelineMode === 'template' ? "#7C3AED" : T.text2,
-                            border: `1px solid ${c.pipelineMode === 'template' ? '#7C3AED40' : T.border}`,
-                            fontWeight: 600,
-                          }}
-                          title={c.pipelineMode === 'template'
-                            ? 'Pipeline imposé par un template — clic pour changer ou revenir en mode libre'
-                            : 'Pipeline en mode libre — clic pour imposer un template'}
-                        >
-                          <I n={c.pipelineMode === 'template' ? 'lock' : 'layout'} s={12}/> {c.pipelineMode === 'template' ? 'Template imposé' : 'Mode libre'}
-                        </Btn>
                         <Btn small onClick={() => setConfirmDeleteCollab(c)} style={{ background:"#FEE2E2", color:"#DC2626", border:"1px solid #FECACA" }}>
                           <I n="trash-2" s={12}/>
                         </Btn>
@@ -3509,29 +3379,6 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                   </div>
                 </div>
               </div>
-            )}
-            </Fragment>)}
-
-            {/* Phase 3 — Modal assignation template (pré-flight + migration) */}
-            {assignTemplateTarget && (
-              <AssignTemplateModal
-                isOpen={true}
-                onClose={() => setAssignTemplateTarget(null)}
-                collaborator={assignTemplateTarget}
-                companyId={company?.id}
-                showNotif={(msg, type) => pushNotification(
-                  type === 'danger' ? 'Erreur' : 'Pipeline',
-                  msg,
-                  type === 'danger' ? 'danger' : 'success'
-                )}
-                onSuccess={(result) => {
-                  // Mettre à jour le state local des collabs pour refléter le nouveau mode
-                  setCollabs(prev => prev.map(c => c.id === assignTemplateTarget.id
-                    ? { ...c, pipelineMode: result.newMode, pipelineSnapshotId: result.snapshotId }
-                    : c
-                  ));
-                }}
-              />
             )}
 
           </div>
@@ -3908,7 +3755,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
         </Modal>
 
         {/* ── PERF COLLAB ── */}
-        {tab === "perfCollab" && <AdminPerfCollabScreen collabs={collabs} company={company} perfExpanded={perfExpanded} perfPeriod={perfPeriod} pushNotification={pushNotification} setPerfExpanded={setPerfExpanded} setPerfPeriod={setPerfPeriod} />}
+        {tab === "perfCollab" && company?.id && <AdminPerfCollabScreen collabs={collabs} company={company} perfExpanded={perfExpanded} perfPeriod={perfPeriod} pushNotification={pushNotification} setPerfExpanded={setPerfExpanded} setPerfPeriod={setPerfPeriod} />}
 
         {/* ── PAGES ── */}
         {tab === "pages" && (() => {
@@ -4457,7 +4304,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
               {/* Slug / URL editor */}
               <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:20, marginLeft:44, padding:"8px 14px", borderRadius:10, background:T.bg, border:`1px solid ${T.border}` }}>
                 <I name="link" size={14} style={{color:T.text3,flexShrink:0}}/>
-                <span style={{ fontSize:12, color:T.text3, flexShrink:0, fontFamily:"monospace" }}>{brand.domain}/page/{company?.slug||"..."}/</span>
+                <span style={{ fontSize:12, color:T.text3, flexShrink:0, fontFamily:"monospace" }}>calendar360.fr/page/{company?.slug||"..."}/</span>
                 <input value={bpSlug} onChange={e => (typeof setBpSlug==='function'?setBpSlug:function(){})(e.target.value.toLowerCase().replace(/[^a-z0-9-]/g,''))} placeholder="mon-slug-unique" style={{ flex:1, padding:"4px 8px", borderRadius:6, border:`1px solid ${T.border}`, fontSize:13, fontFamily:"monospace", background:T.surface, color:T.accent, fontWeight:600, outline:"none", minWidth:120 }}/>
                 <Btn small onClick={() => navigator.clipboard.writeText(`https://calendar360.fr/page/${company?.slug||"app"}/${bpSlug}`).then(()=>notif("URL copiée !"))}><I name="copy" size={12}/></Btn>
               </div>
@@ -4550,7 +4397,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                         <span style={{ width:8, height:8, borderRadius:4, background:"#27C840" }}/>
                       </div>
                       <div style={{ flex:1, padding:"3px 8px", borderRadius:5, background:T.surface, border:`1px solid ${T.border}`, fontSize:9, color:T.text3, fontFamily:"monospace", overflow:"hidden", textOverflow:"ellipsis", whiteSpace:"nowrap" }}>
-                        {brand.domain}/page/{company?.slug||"..."}/{(typeof bpSlug!=='undefined'?bpSlug:null)||"slug"}
+                        calendar360.fr/page/{company?.slug||"..."}/{(typeof bpSlug!=='undefined'?bpSlug:null)||"slug"}
                       </div>
                     </div>
                     <div style={{ maxHeight:480, overflowY:"auto", background:"#FFFFFF" }}>
@@ -4624,7 +4471,8 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
         })()}
 
         {/* ── AI KNOWLEDGE BASE ── */}
-        {tab === "knowledge-base" && <AdminKnowledgeBaseScreen company={company} showNotif={showNotif} />}
+        {tab === "knowledge-base" && company?.id && <AdminKnowledgeBaseScreen company={company} showNotif={showNotif} />}
+        {tab === "pipeline-templates" && company?.id && <TemplatesSection company={company} showNotif={showNotif} />}
 
         {/* ── SETTINGS ── */}
         {tab === "settings" && (
@@ -4811,7 +4659,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
               </Card>
               <Card>
                 <h3 style={{ fontSize:15, fontWeight:700, marginBottom:16 }}><I n="code" s={16}/> Embed & API</h3>
-                {[{l:"Inline embed",d:'<div id="calendar360-inline"></div>'},{l:"Popup widget",d:'<script src="calendar360.js"></script>'},{l:"Lien direct",d:(company?.slug||"app")+"."+brand.domain},{l:"API REST",d:"/api/v1/bookings"},{l:"Webhook URL",d:"/webhooks/events"}].map((e,i)=>(<div key={i} style={{padding:"8px 12px",borderRadius:8,background:T.bg,border:`1px solid ${T.border}`,marginBottom:6}}><div style={{fontSize:12,fontWeight:600}}>{e.l}</div><div style={{fontSize:11,fontFamily:"monospace",color:T.accent}}>{e.d}</div></div>))}
+                {[{l:"Inline embed",d:'<div id="calendar360-inline"></div>'},{l:"Popup widget",d:'<script src="calendar360.js"></script>'},{l:"Lien direct",d:(company?.slug||"app")+".calendar360.fr"},{l:"API REST",d:"/api/v1/bookings"},{l:"Webhook URL",d:"/webhooks/events"}].map((e,i)=>(<div key={i} style={{padding:"8px 12px",borderRadius:8,background:T.bg,border:`1px solid ${T.border}`,marginBottom:6}}><div style={{fontSize:12,fontWeight:600}}>{e.l}</div><div style={{fontSize:11,fontFamily:"monospace",color:T.accent}}>{e.d}</div></div>))}
               </Card>
               {/* ── SMS RECHARGE SYSTEM ── */}
               <Card style={{gridColumn:"1/-1", background:"linear-gradient(135deg,#FAFAF8,#F5F3FF)", border:`1.5px solid ${T.accentBorder}`}}>
@@ -6002,7 +5850,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                     {/* Preview header bar */}
                     <div style={{padding:"8px 16px",background:"#fff",borderBottom:"1px solid #E2E8F0",display:"flex",alignItems:"center",gap:6}}>
                       <div style={{width:8,height:8,borderRadius:4,background:"#FF5F57"}}/><div style={{width:8,height:8,borderRadius:4,background:"#FEBC2E"}}/><div style={{width:8,height:8,borderRadius:4,background:"#28C840"}}/>
-                      <div style={{flex:1,textAlign:"center",fontSize:10,color:"#999",fontFamily:"monospace"}}>{brand.domain}/form/{company?.slug}/...</div>
+                      <div style={{flex:1,textAlign:"center",fontSize:10,color:"#999",fontFamily:"monospace"}}>calendar360.fr/form/{company?.slug}/...</div>
                     </div>
                     <div style={{padding:24}}>
                       <div style={{width:50,height:5,borderRadius:3,background:(typeof fbColor!=='undefined'?fbColor:null),marginBottom:16}}/>
@@ -6049,7 +5897,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                         )}
                       </div>
 
-                      {(typeof fbShowLogo!=='undefined'?fbShowLogo:null) && <div style={{textAlign:"center",marginTop:16,fontSize:10,color:"#999"}}>Propulsé par <span style={{color:(typeof fbColor!=='undefined'?fbColor:null),fontWeight:600}}>{brand.name}</span></div>}
+                      {(typeof fbShowLogo!=='undefined'?fbShowLogo:null) && <div style={{textAlign:"center",marginTop:16,fontSize:10,color:"#999"}}>Propulsé par <span style={{color:(typeof fbColor!=='undefined'?fbColor:null),fontWeight:600}}>Calendar360</span></div>}
                     </div>
                   </div>
 
@@ -6057,7 +5905,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                   {selForm && !(typeof fbPreviewMode!=='undefined'?fbPreviewMode:null) && (
                     <Card style={{marginTop:12}}>
                       <div style={{fontSize:12,fontWeight:700,marginBottom:8}}><I n="share-2" s={13}/> Partager & Intégrer</div>
-                      <div style={{padding:8,borderRadius:6,background:T.bg,border:`1px solid ${T.border}`,fontSize:10,fontFamily:"monospace",wordBreak:"break-all",color:T.text2,marginBottom:8}}>https://{brand.domain}/form/{company.slug}/{selForm.slug}</div>
+                      <div style={{padding:8,borderRadius:6,background:T.bg,border:`1px solid ${T.border}`,fontSize:10,fontFamily:"monospace",wordBreak:"break-all",color:T.text2,marginBottom:8}}>https://calendar360.fr/form/{company.slug}/{selForm.slug}</div>
                       <div style={{display:"flex",gap:6}}>
                         <Btn small onClick={()=>{navigator.clipboard.writeText(`https://calendar360.fr/form/${company.slug}/${selForm.slug}`);notif("Lien copié !");}}><I n="link" s={12}/> Lien</Btn>
                         <Btn small onClick={()=>{navigator.clipboard.writeText(`<iframe src="https://calendar360.fr/form/${company.slug}/${selForm.slug}" width="100%" height="700" frameborder="0"></iframe>`);notif("Code iframe copié !");}}><I n="code" s={12}/> Iframe</Btn>
@@ -6816,7 +6664,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
 
             {/* New Ticket Modal */}
             <Modal open={showNewTicket} onClose={()=>(typeof setShowNewTicket==='function'?setShowNewTicket:function(){})(false)} title="Nouveau ticket de support" width={560}>
-              {(()=>{
+              <HookIsolator>{() => {
                 const [cat, setCat] = useState("bug");
                 const [subj, setSubj] = useState("");
                 const [desc, setDesc] = useState("");
@@ -6877,7 +6725,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                     </div>
                   </div>
                 );
-              })()}
+              }}</HookIsolator>
             </Modal>
 
             {/* Ticket Detail Modal */}
@@ -7000,7 +6848,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                     <tbody>
                       {(typeof allCompanies!=='undefined'?allCompanies:{}).filter(c=>!visionSearch||c.name.toLowerCase().includes((typeof visionSearch!=='undefined'?visionSearch:{}).toLowerCase())||c.domain.toLowerCase().includes((typeof visionSearch!=='undefined'?visionSearch:{}).toLowerCase())).map(co=>(
                         <tr key={co.id} style={{borderBottom:`1px solid ${T.border}22`}}>
-                          <td style={{padding:"12px 14px"}}><div style={{fontWeight:600}}>{co.name}</div><div style={{fontSize:11,color:T.text3}}>{brand.domain}/book/{co.slug}/...</div></td>
+                          <td style={{padding:"12px 14px"}}><div style={{fontWeight:600}}>{co.name}</div><div style={{fontSize:11,color:T.text3}}>calendar360.fr/book/{co.slug}/...</div></td>
                           <td style={{padding:"12px 14px"}}><Badge color={co.plan==="enterprise"?T.purple:co.plan==="pro"?T.accent:T.text3}>{co.plan==="enterprise"?"Entreprise":co.plan==="pro"?"Pro":"Gratuit"}</Badge></td>
                           <td style={{padding:"12px 14px"}}><Badge color={co.active?T.success:T.danger}>{co.active?"Actif":"Inactif"}</Badge></td>
                           <td style={{padding:"12px 14px",fontSize:12,color:T.text2}}>{fmtDate(co.createdAt)}</td>
@@ -10949,7 +10797,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                             <div style={{display:"flex",flexWrap:"wrap",gap:3,marginTop:4}}>
                               <div onClick={()=>{setSelectedContact(ct);setFicheTab("history");}} style={{flex:"1 1 28%",padding:"4px 0",textAlign:"center",borderRadius:6,background:T.accentBg,color:T.accent,fontSize:10,fontWeight:600,cursor:"pointer",transition:"opacity .15s"}} onMouseEnter={e=>e.currentTarget.style.opacity=.7} onMouseLeave={e=>e.currentTarget.style.opacity=1}>Fiche</div>
                               {ct.phone&&<div onClick={()=>{setPortalTab("phone");setTimeout(()=>{if(typeof prefillKeypad==="function")prefillKeypad(ct.phone);},200);}} style={{flex:"1 1 28%",padding:"4px 0",textAlign:"center",borderRadius:6,background:T.bg,color:T.text2,fontSize:10,fontWeight:600,cursor:"pointer",border:`1px solid ${T.border}`}}>Appel</div>}
-                              <div onClick={(e)=>{e.stopPropagation();setPhoneScheduleForm({contactId:ct.id,contactName:ct.name||ct.firstName||'',number:ct.phone||'',date:new Date(Date.now()+86400000).toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true});setPhoneShowScheduleModal(true);}} style={{flex:"1 1 28%",padding:"4px 0",textAlign:"center",borderRadius:6,background:"#F59E0B14",color:"#F59E0B",fontSize:10,fontWeight:600,cursor:"pointer",border:"1px solid #F59E0B30"}}>RDV</div>
+                              <div onClick={(e)=>{e.stopPropagation();setPhoneScheduleForm({contactId:ct.id,contactName:ct.name||ct.firstName||'',number:ct.phone||'',date:new Date(Date.now()+86400000).toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:(cals||[])[0]?.id||'',_bookingMode:true});setPhoneShowScheduleModal(true);}} style={{flex:"1 1 28%",padding:"4px 0",textAlign:"center",borderRadius:6,background:"#F59E0B14",color:"#F59E0B",fontSize:10,fontWeight:600,cursor:"pointer",border:"1px solid #F59E0B30"}}>RDV</div>
                               {ct.email&&<div onClick={()=>window.open("mailto:"+ct.email)} style={{flex:"1 1 28%",padding:"4px 0",textAlign:"center",borderRadius:6,background:T.bg,color:T.text2,fontSize:10,fontWeight:600,cursor:"pointer",border:`1px solid ${T.border}`}}>Email</div>}
                               <div onClick={(e)=>{e.stopPropagation();setSelectedContact(ct);setFicheTab("notes");}} style={{flex:"1 1 28%",padding:"4px 0",textAlign:"center",borderRadius:6,background:T.bg,color:T.text3,fontSize:10,fontWeight:600,cursor:"pointer",border:`1px solid ${T.border}`,display:"flex",alignItems:"center",justifyContent:"center",gap:3}} title="Notes"><I n="edit-3" s={10}/> Notes</div>
                             </div>
@@ -11457,20 +11305,20 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
         })()}
 
         {/* ─── LEADS TAB ─────────────────────────── */}
-        {tab === "leads" && <AdminLeadsScreen collabs={collabs} company={company} contacts={contacts} pushNotification={pushNotification} />}
+        {tab === "leads" && company?.id && <AdminLeadsScreen collabs={collabs} company={company} contacts={contacts} pushNotification={pushNotification} />}
 
 
         {/* ─── OBJECTIFS TAB ─────────────────────────── */}
-        {tab === "objectifs" && <AdminObjectifsScreen collabs={collabs} company={company} pushNotification={pushNotification} />}
+        {tab === "objectifs" && company?.id && <AdminObjectifsScreen collabs={collabs} company={company} pushNotification={pushNotification} />}
 
         {/* ══════ ONGLET AGENTS IA ══════ */}
-        {tab === "ai-agents" && <AdminAiAgentsScreen calendars={calendars} company={company} showNotif={showNotif} />}
+        {tab === "ai-agents" && company?.id && <AdminAiAgentsScreen calendars={cals} company={company} showNotif={showNotif} />}
 
         {/* ══════ ONGLET SIGNALEMENTS ══════ */}
-        {tab === "signalements" && <AdminSignalementsScreen company={company} showNotif={showNotif} />}
+        {tab === "signalements" && company?.id && <AdminSignalementsScreen company={company} showNotif={showNotif} />}
 
         {/* ══════ ONGLET FORMULAIRES D'APPEL ══════ */}
-        {tab === "call-forms" && <AdminCallFormsScreen askConfirm={askConfirm} collabs={collabs} company={company} pushNotification={pushNotification} />}
+        {tab === "call-forms" && company?.id && <AdminCallFormsScreen askConfirm={askConfirm} collabs={collabs} company={company} pushNotification={pushNotification} />}
 
         {/* ═══ SUIVI SMS ═══ */}
         {tab === "sms-monitoring" && (()=>{

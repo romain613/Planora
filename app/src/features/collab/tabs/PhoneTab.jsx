@@ -6,43 +6,28 @@
 
 import React, { useState, useMemo, useEffect, useRef, Fragment } from "react";
 import { T } from "../../../theme";
-import { I, Btn, Card, Avatar, Badge, Modal, Input, ValidatedInput, Stars, Spinner, Stat, EmptyState, HelpTip, HookIsolator, EnvelopeBadge } from "../../../shared/ui";
+import { I, Btn, Card, Avatar, Badge, Modal, Input, ValidatedInput, Stars, Spinner, Stat, EmptyState, HelpTip, HookIsolator, ErrorBoundary } from "../../../shared/ui";
 import { displayPhone, formatPhoneFR } from "../../../shared/utils/phone";
 import { isValidEmail, isValidPhone } from "../../../shared/utils/validators";
-import { fmtDate, DAYS_FR, DAYS_SHORT, MONTHS_FR, getDow } from "../../../shared/utils/dates";
-import { PIPELINE_CARD_COLORS_DEFAULT, RDV_CATEGORIES } from "../../../shared/utils/pipeline";
+import { fmtDate, DAYS_FR, DAYS_SHORT, MONTHS_FR, getDow, formatDateTime, formatDate } from "../../../shared/utils/dates";
+import { PIPELINE_CARD_COLORS_DEFAULT, RDV_CATEGORIES, PIPELINE_LABELS, STATUS_COLORS } from "../../../shared/utils/pipeline";
 import { sendNotification, buildNotifyPayload } from "../../../shared/utils/notifications";
 import { api, recUrl, API_BASE, collectEnv } from "../../../shared/services/api";
 import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";
-import { FicheDocsPanelScreen, PhoneTrainingScreen } from "../screens";
-import { useBrand } from "../../../shared/brand/useBrand";
+import { FicheDocsPanelScreen } from "../screens"; // hotfix 2026-04-23 — Phase 14b missed import propagation
 
 const PhoneTab = () => {
   const ctx = useCollabContext();
-  const brand = useBrand();
   const {
     collab, company, contacts, bookings, collabs, showNotif,
-    envelopeMap,
-    googleEventsProp,
-    fmtDur,
-    togglePhoneLeftPanel,
-    togglePhoneDND,
-    fmtPhone,
-    isModuleOn,
-    handleCollabUpdateContact,
-    handlePipelineStageChange,
-    setPostCallResultModal,
-    setPerduMotifModal,
-    generateCallAnalysis,
     portalTab, setPortalTab, setPortalTabKey,
     selectedCrmContact, setSelectedCrmContact,
     setCollabFicheTab, setRdvPasseModal,
     setShowNewContact, setBookings, setContacts, setContactFieldDefs,
     setVoipCallLogs, voipCallLogs,
-    setPipelineRightContact, setPipelinePopupHistory, setPipelinePopupContact,
+    setPipelineRightContact, setPipelinePopupHistory,
     setPipelineRdvForm, setPipeBulkStage, setPipeBulkModal, setPipeSelectedIds,
-    setScanImageModal,
     setIaHubCollapse,
     setMyGoals, setMyRewards,
     setContactAnalysesHistory, setContactAnalysesHistoryModal,
@@ -72,8 +57,8 @@ const PhoneTab = () => {
     phoneScheduledCalls, setPhoneScheduledCalls,
     schedContactMode, setSchedContactMode, schedSearchQ, setSchedSearchQ,
     phoneCalMonth, setPhoneCalMonth,
-    phoneStatsPeriod, setPhoneStatsPeriod,
-    todayCallCount,
+    phoneStatsPeriod, setPhoneStatsPeriod, phoneStatsOpen, setPhoneStatsOpen,
+    todayCallCount, // wired from context (hotfix 2026-04-23)
     phoneShowCampaignModal, setPhoneShowCampaignModal,
     phoneCampaigns, setPhoneCampaigns, phoneDailyGoal, setPhoneDailyGoal,
     phoneVoicemails, setPhoneVoicemails,
@@ -100,20 +85,19 @@ const PhoneTab = () => {
     phoneCopilotReactionStats, setPhoneCopilotReactionStats,
     phoneCopilotLiveStep, setPhoneCopilotLiveStep,
     phoneRightTab, setPhoneRightTab, phoneRightCollapsed, setPhoneRightCollapsed,
-    contactSaveStatus,
     phoneRightAccordion, setPhoneRightAccordion,
     phoneLeftCollapsed, setPhoneLeftCollapsed,
     phoneDialNumber, setPhoneDialNumber,
     phoneShowScheduleModal, setPhoneShowScheduleModal,
     phoneScheduleForm, setPhoneScheduleForm,
-    voipCallRef,
+    voipDevice, voipCall, voipCallRef,
     voipState, setVoipState,
     voipCurrentCallLogId, setVoipCurrentCallLogId,
     voipCredits, voipConfigured,
     appMyPhoneNumbers, appPhonePlans, appConversations, setAppConversations,
     pdNumbers, setPdNumbers, pdParsedList, setPdParsedList, pdDuplicates, setPdDuplicates,
     pdStatus, setPdStatus, pdCurrentIdx, setPdCurrentIdx, pdResults, setPdResults,
-    pdStageId, pdContactList,
+    pdResult, pdStageId, pdContactList,
     collabCallForms, setCollabCallForms,
     callFormData, setCallFormData, callFormResponses, setCallFormResponses,
     callFormResponseAccordion, setCallFormResponseAccordion,
@@ -121,7 +105,7 @@ const PhoneTab = () => {
     selConvId, setSelConvId, convEvents, setConvEvents,
     convNoteText, setConvNoteText, convSmsText, setConvSmsText,
     convSearch, setConvSearch, convFilter, setConvFilter, convLoading, setConvLoading,
-    selectedLine, setSelectedLine,
+    selectedLine, setSelectedLine, zoom, setZoom,
     cockpitOpen, setCockpitOpen, cockpitMinimized, setCockpitMinimized,
     liveConfig, saveLiveConfig,
     phoneQuickAddName, setPhoneQuickAddName,
@@ -137,75 +121,14 @@ const PhoneTab = () => {
     phoneQuickAddMobile, setPhoneQuickAddMobile,
     phoneQuickAddWebsite, setPhoneQuickAddWebsite,
     pipelineStages, PIPELINE_STAGES, orderedStages,
-    // Phase 4 Templates — badge + readOnly
-    pipelineReadOnly, pipelineTemplateMeta,
-    // Contact Share V1 — partage + RDV inter-collab
-    setContactShareTarget,
-    // ═══ REWIRE 2026-04-20 — destructure complémentaire (64 symboles) ═══
-    CALL_TAGS,
-    PHONE_MODULES,
-    _defaultLiveConfig,
-    _tempColor,
-    _tempEmoji,
-    _tempLabel,
-    acceptCollabIncomingCall,
-    addToBlacklist,
-    autoDialerNext,
-    cScoreColor,
-    cScoreLabel,
-    calendars,
-    collabChatMessages,
-    collabChatOnline,
-    collabNotesTimerRef,
-    collabsProp,
-    contactAnalysesHistory,
-    contactFieldDefs,
-    contactsLocalEditRef,
-    endPhoneCall,
-    fetchCallTranscript,
-    getLeadTemperature,
-    handleCollabDeleteContact,
-    handleColumnDragEnd,
-    handleColumnDragStart,
-    handleColumnDrop,
-    handleQuickAddContact,
-    iaHubCollapse,
-    isAdminView,
-    myGoals,
-    myRewards,
-    openCallDetail,
-    perduMotifModal,
-    phoneTeamChatRef,
-    pipeBulkStage,
-    pipeSelectedIds,
-    pipelinePopupContact,
-    pipelinePopupHistory,
-    pipelineRightContact,
-    playDtmf,
-    postCallResultModal,
-    prefillKeypad,
-    rdvPasseModal,
-    rejectCollabIncomingCall,
-    removeFromBlacklist,
-    removeScheduledCall,
-    saveCallRecording,
-    savePhoneCallRating,
-    savePhoneCallTag,
-    saveScriptsDual,
-    scanImageModal,
-    setPipelineRightTab,
-    setV7TransferModal,
-    setV7TransferTarget,
-    smsCredits,
-    startAutoDialer,
-    stopAutoDialer,
-    toggleModule,
-    togglePhoneAutoRecap,
-    togglePhoneAutoSMS,
-    togglePhoneFav,
-    togglePhoneRecording,
-    togglePhoneRightPanel,
-    v7FollowersMap,
+    // ── Hotfix audit 2026-04-23 — wire missing symbols ──
+  fmtDur, fmtPhone, googleEventsProp, isModuleOn, myGoals, myRewards, openCallDetail, pipeSelectedIds, playDtmf, prefillKeypad, togglePhoneLeftPanel,
+    // ── Hotfix audit 2026-04-23 (v2) — JSX attr handler pattern ──
+  acceptCollabIncomingCall, endPhoneCall, rejectCollabIncomingCall, togglePhoneDND, togglePhoneRecording,
+    // ── Hotfix audit 2026-04-23 (v3) ──
+  cancelBookingAndCascade, handleColumnDragEnd, handleQuickAddContact, phoneTeamChatRef, pipeBulkStage, stopAutoDialer, togglePhoneAutoRecap, togglePhoneAutoSMS, togglePhoneRightPanel,
+  // ── AST audit 2026-04-23 (v7) ──
+  _defaultLiveConfig, _tempColor, _tempEmoji, _tempLabel, addToBlacklist, autoDialerNext, calendars, CALL_TAGS, collabChatMessages, collabChatOnline, collabNotesTimerRef, collabsProp, contactAnalysesHistory, contactFieldDefs, contactsLocalEditRef, cScoreColor, cScoreLabel, fetchCallTranscript, generateCallAnalysis, getLeadTemperature, handleCollabDeleteContact, handleCollabUpdateContact, handleColumnDragStart, handleColumnDrop, handlePipelineStageChange, iaHubCollapse, isAdminView, perduMotifModal, PHONE_MODULES, pipelinePopupContact, pipelinePopupHistory, pipelineRightContact, postCallResultModal, rdvPasseModal, removeFromBlacklist, removeScheduledCall, saveCallRecording, savePhoneCallRating, savePhoneCallTag, saveScriptsDual, scanImageModal, setPerduMotifModal, setPipelinePopupContact, setPipelineRightTab, setPostCallResultModal, setScanImageModal, setV7TransferModal, setV7TransferTarget, smsCredits, startAutoDialer, toggleModule, togglePhoneFav, v7FollowersMap,
   } = ctx;
 
   return (
@@ -238,7 +161,7 @@ const PhoneTab = () => {
         const myBookings = (bookings||[]).filter(b=>b.collaboratorId===collab.id&&b.status!=='cancelled');
         const myGCal = (googleEventsProp||[]).filter(ge=>ge.collaboratorId===collab.id);
         const allEvents = [
-          ...myBookings.map(b=>({title:b.clientName||b.service||'RDV',time:new Date(b.date+(b.time?'T'+b.time:'')),src:'booking'})),
+          ...myBookings.map(b=>{const _ct=b.contactId?(contacts||[]).find(c=>c.id===b.contactId):null;return{title:_ct?.name||b.visitorName||b.service||'RDV',time:new Date(b.date+(b.time?'T'+b.time:'')),src:'booking'};}),
           ...myGCal.map(ge=>({title:ge.summary||ge.title||'Evenement',time:new Date(ge.start||ge.startDate),src:'google'}))
         ].filter(e=>e.time.getTime()>nowMs).sort((a,b)=>a.time-b.time);
         const nextRdv = allEvents[0];
@@ -246,14 +169,18 @@ const PhoneTab = () => {
         let rdvTime = '';
         let rdvTitle = '';
         let rdvDateStr = '';
+        let rdvIsToday = false;
         if(nextRdv) {
           rdvTime = nextRdv.time.toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'});
           rdvTitle = nextRdv.title;
-          rdvDateStr = nextRdv.time.toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
+          rdvDateStr = nextRdv.time.toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'});
+          rdvIsToday = nextRdv.time.toDateString() === new Date().toDateString();
           const diff = nextRdv.time.getTime() - nowMs;
           if(diff>0){
-            const h=Math.floor(diff/3600000); const m=Math.floor((diff%3600000)/60000); const s=Math.floor((diff%60000)/1000);
-            rdvCountdown = h>0 ? h+'h'+String(m).padStart(2,'0')+'m'+String(s).padStart(2,'0')+'s' : m>0 ? m+'m'+String(s).padStart(2,'0')+'s' : s+'s';
+            if(diff >= 86400000){ const d=Math.floor(diff/86400000); const h=Math.floor((diff%86400000)/3600000); const m=Math.floor((diff%3600000)/60000); const sc=Math.floor((diff%60000)/1000); rdvCountdown='Dans '+d+'j '+h+'h'+String(m).padStart(2,'0')+'m'+String(sc).padStart(2,'0')+'s'; }
+            else if(diff >= 3600000){ const h=Math.floor(diff/3600000); const m=Math.floor((diff%3600000)/60000); const sc=Math.floor((diff%60000)/1000); rdvCountdown='Dans '+h+'h'+String(m).padStart(2,'0')+'m'+String(sc).padStart(2,'0')+'s'; }
+            else if(diff >= 60000){ const m=Math.floor(diff/60000); const sc=Math.floor((diff%60000)/1000); rdvCountdown='Dans '+m+'m'+String(sc).padStart(2,'0')+'s'; }
+            else { const sc=Math.floor(diff/1000); rdvCountdown='Dans '+sc+'s'; }
           }
         }
 
@@ -346,11 +273,11 @@ const PhoneTab = () => {
           })()}
           {/* Prochain RDV */}
           {nextRdv && (
-            <div style={{display:'flex',alignItems:'center',gap:5,padding:'5px 10px',borderRadius:10,background:'#0EA5E90A',border:'1px solid #0EA5E918'}}>
+            <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:5,padding:'5px 10px',borderRadius:10,background:'#0EA5E90A',border:'1px solid #0EA5E918'}}>
               <I n={nextRdv.src==='google'?'calendar':'calendar-check'} s={12} style={{color:'#0EA5E9'}}/>
-              <div>
-                <div style={{fontSize:10,fontWeight:700,color:'#0EA5E9',lineHeight:1}}>RDV le {rdvDateStr} a {rdvTime}</div>
-                <div style={{fontSize:9,color:'#0EA5E9',fontWeight:700,lineHeight:1,marginTop:2,fontFamily:'monospace'}}>{rdvCountdown}{nextRdv.src==='google'?' (GCal)':''}</div>
+              <div style={{textAlign:'center'}}>
+                <div style={{fontSize:10,fontWeight:700,color:'#0EA5E9',lineHeight:1.2}}>{rdvTime} {rdvIsToday?'Aujourd\'hui':'· '+rdvDateStr} — {rdvTitle}</div>
+                <div style={{fontSize:9,color:'#0EA5E9',fontWeight:600,lineHeight:1,marginTop:2}}>{rdvCountdown}{nextRdv.src==='google'?' (GCal)':''}</div>
               </div>
             </div>
           )}
@@ -689,7 +616,7 @@ const PhoneTab = () => {
                     const line = selectedLine||((typeof appMyPhoneNumbers!=='undefined'?appMyPhoneNumbers:null)||[]).find(pn=>pn.collaboratorId===collab.id&&pn.status==='assigned')?.phoneNumber||'';
                     const w = window.open('','_blank','width=320,height=520,top=100,left=100,toolbar=no,menubar=no,scrollbars=no,resizable=yes,status=no');
                     if(!w) { showNotif('Popup bloquee — autorisez les popups','danger'); return; }
-                    w.document.title='Clavier - '+brand.name;
+                    w.document.title='Clavier - Calendar360';
                     w.document.body.innerHTML='';
                     w.document.head.innerHTML='<meta charset="utf-8"><style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:-apple-system,system-ui,sans-serif;background:linear-gradient(160deg,#0F172A,#1E293B);color:#fff;height:100vh;display:flex;flex-direction:column;overflow:hidden;user-select:none}.input{padding:12px;text-align:center}.input input{width:100%;padding:10px;border-radius:12px;border:1.5px solid rgba(255,255,255,0.1);background:rgba(255,255,255,0.04);color:#fff;font-size:22px;font-weight:700;font-family:monospace;text-align:center;outline:none;letter-spacing:1.5px}.grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:0 12px}.grid .key{padding:12px 0;border-radius:12px;text-align:center;cursor:pointer;background:rgba(255,255,255,0.04);border:1px solid rgba(255,255,255,0.06);font-size:24px;font-weight:500;color:#fff;transition:all .1s}.grid .key:hover{background:rgba(255,255,255,0.12);transform:scale(1.04)}.actions{display:flex;justify-content:center;gap:16px;padding:14px}.call-btn{width:56px;height:56px;border-radius:28px;background:linear-gradient(135deg,#22C55E,#16A34A);display:flex;align-items:center;justify-content:center;cursor:pointer;box-shadow:0 0 25px rgba(34,197,94,0.35);border:none;color:#fff;font-size:22px;transition:transform .15s}.call-btn:hover{transform:scale(1.08)}.del-btn{width:44px;height:44px;border-radius:22px;background:rgba(255,255,255,0.2);border:1.5px solid rgba(255,255,255,0.3);display:flex;align-items:center;justify-content:center;cursor:pointer;color:#fff;font-size:20px;transition:all .15s}.del-btn:hover{background:rgba(255,255,255,0.3)}.line{text-align:center;padding:8px;font-size:12px;color:#94A3B8;border-top:1px solid rgba(255,255,255,0.06)}.line .dot{display:inline-block;width:6px;height:6px;border-radius:3px;background:#22C55E;margin-right:5px;box-shadow:0 0 6px #22C55E60}</style>';
                     const lineFmt = line ? line.replace(/^\\+33/,"0").replace(/(\\d{2})(?=\\d)/g,"$1 ") : '';
@@ -1612,6 +1539,42 @@ if (n === ph) matched.set(c.id, c);
         {ct.source&&<span style={{padding:'3px 6px',fontWeight:600,borderRight:`1px solid ${T.border}30`}}>{ct.source==='manual'?'Manuel':ct.source==='csv'?'CSV':ct.source==='lead'?'Lead':(ct.source==='booking'||ct.source==='agenda')?'Booking':ct.source}</span>}
         {ct.createdAt&&<span style={{padding:'3px 6px'}}>{new Date(ct.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})}</span>}
       </div>
+      {/* V1.8.14 — Origine du lead (cross-collab) */}
+      {(()=>{
+        const _isOwner = ct.assignedTo === collab.id;
+        const _shared = Array.isArray(ct.shared_with) ? ct.shared_with : [];
+        const _sharedHere = _shared.includes(collab.id) && !_isOwner && ct.assignedTo;
+        const _hasShare = ct.assignedTo && (_shared.length > 0 || _sharedHere);
+        if (!_hasShare) return null;
+        const _capName = (n) => { const s = String(n||'').trim(); return s ? s.charAt(0).toUpperCase() + s.slice(1) : '—'; };
+        const _ownerName = (collabs||[]).find(_c => _c.id === ct.assignedTo)?.name || '';
+        const _firstSharerId = _shared.find(_id => _id && _id !== ct.assignedTo);
+        const _sharerName = _firstSharerId ? ((collabs||[]).find(_c => _c.id === _firstSharerId)?.name || '') : null;
+        const _detach = () => {
+          if (!confirm('Se retirer du suivi de ce contact ? Vous ne le verrez plus dans votre pipeline.')) return;
+          // V1.8.15 — Timeline event AVANT la mutation (pour que le user soit encore en shared_with côté backend)
+          api('/api/data/pipeline-history', { method:'POST', body:{ contactId: ct.id, companyId: company?.id, fromStage: '', toStage: '_xc_detach', userId: collab.id, userName: collab.name, note: (collab.name || 'Quelqu\'un') + ' s\'est retiré(e) du suivi' } }).catch(()=>{});
+          const _next = _shared.filter(_id => _id !== collab.id);
+          if (typeof handleCollabUpdateContact === 'function') {
+            handleCollabUpdateContact(ct.id, { shared_with: _next, _source: 'cross_collab_detach', _origin: 'manual' });
+            if (typeof showNotif === 'function') showNotif('Vous ne suivez plus ce contact', 'success');
+          }
+        };
+        return <div style={{padding:'8px 10px',borderRadius:8,background:'#F8FAFC',border:`1px solid ${T.border}`,marginBottom:8}}>
+          <div style={{fontSize:9,fontWeight:800,color:T.text3,textTransform:'uppercase',letterSpacing:0.5,marginBottom:4}}>Origine du lead</div>
+          {_sharerName && <div style={{fontSize:11,color:T.text2,marginBottom:2,display:'flex',alignItems:'center',gap:6}}>
+            <span>🤝</span> Apporté par <b style={{color:T.text}}>{_capName(_sharerName)}</b>
+          </div>}
+          <div style={{fontSize:11,color:T.text2,display:'flex',alignItems:'center',gap:6}}>
+            <span>🎯</span> Géré par <b style={{color:T.text}}>{_capName(_ownerName)}</b>
+            {_isOwner && <span style={{fontSize:9,color:'#16A34A',fontWeight:700,padding:'1px 5px',borderRadius:4,background:'#22C55E15'}}>Vous</span>}
+          </div>
+          {_sharedHere && <div style={{marginTop:6,display:'flex',alignItems:'center',gap:6}}>
+            <span style={{fontSize:9,color:'#1E40AF',fontWeight:700,padding:'1px 6px',borderRadius:4,background:'#3B82F615'}}>Lecture seule</span>
+            <button type="button" onClick={_detach} title="Vous quittez le suivi — Romea reste owner" style={{marginLeft:'auto',fontSize:10,padding:'3px 8px',borderRadius:6,border:'1px solid #EF444440',background:'#FEF2F2',color:'#B91C1C',cursor:'pointer',fontWeight:600,fontFamily:'inherit'}}>❌ Se retirer du suivi</button>
+          </div>}
+        </div>;
+      })()}
       {/* Bloc coordonnées */}
       <div style={{padding:8,borderRadius:8,background:T.bg,border:`1px solid ${T.border}`,marginBottom:8}}>
       {/* Civilité + Prénom + Nom */}
@@ -1842,7 +1805,7 @@ if (n === ph) matched.set(c.id, c);
             <div style={{display:'flex',alignItems:'center',gap:4}}>
               <span style={{fontSize:9,padding:'2px 6px',borderRadius:4,background:'#22C55E15',color:'#22C55E',fontWeight:600}}>{b.duration||30}min</span>
               <div onClick={()=>{setPhoneScheduleForm({contactId:ct.id,contactName:ct.name,number:ct.phone||'',date:b.date,time:b.time,duration:b.duration||30,notes:'Modification RDV',calendarId:b.calendarId||'',rdv_category:b.rdv_category||'',rdv_subcategory:b.rdv_subcategory||'',_bookingMode:true,_editBookingId:b.id});setPhoneShowScheduleModal(true);}} style={{cursor:'pointer',padding:'2px 4px',borderRadius:4,color:T.text3}} title="Modifier"><I n="edit-2" s={10}/></div>
-              <div onClick={()=>{if(confirm('Annuler ce RDV ?')){setBookings(prev=>{const updated=prev.map(bk=>bk.id===b.id?{...bk,status:'cancelled'}:bk);const remaining=updated.filter(bk=>bk.contactId===ct.id&&bk.status==='confirmed'&&bk.date>=new Date().toISOString().split('T')[0]);if(remaining.length===0&&ct.pipeline_stage==='rdv_programme'){handlePipelineStageChange(ct.id,'contacte','RDV annulé — retour en Contacté');handleCollabUpdateContact(ct.id,{next_rdv_date:'',next_rdv_booking_id:'',rdv_status:''});}else if(remaining.length>0){const nextBk=remaining.sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))[0];handleCollabUpdateContact(ct.id,{next_rdv_date:nextBk.date,next_rdv_booking_id:nextBk.id});}return updated;});api('/api/bookings/'+b.id,{method:'PUT',body:{status:'cancelled'}});showNotif('RDV annulé');}}} style={{cursor:'pointer',padding:'2px 4px',borderRadius:4,color:'#EF4444'}} title="Annuler"><I n="x" s={10}/></div>
+              <div onClick={()=>{if(confirm('Annuler ce RDV ?')){cancelBookingAndCascade(b.id);showNotif('RDV annulé');}}} style={{cursor:'pointer',padding:'2px 4px',borderRadius:4,color:'#EF4444'}} title="Annuler"><I n="x" s={10}/></div>
             </div>
           </div>)}
         </div>}
@@ -1879,53 +1842,6 @@ if (n === ph) matched.set(c.id, c);
         </div>
       </div>;
     })()}
-
-    {/* ── Contact Share V1 — envoyer à un collègue / statut partage / désync ── */}
-    <div style={{display:'flex',alignItems:'center',gap:6,marginTop:8,paddingTop:6,borderTop:`1px solid ${T.border}30`,flexWrap:'wrap'}}>
-      {(() => {
-        const sharedWithId = ct.sharedWithId;
-        const sharedById = ct.sharedById;
-        const isSender = sharedById && sharedById === collab?.id;
-        const isReceiver = sharedWithId && sharedWithId === collab?.id;
-        const otherId = isSender ? sharedWithId : (isReceiver ? sharedById : null);
-        const other = otherId ? (collabs||[]).find(c=>c.id===otherId) : null;
-        if (isSender) {
-          return <>
-            <span style={{fontSize:10,fontWeight:700,color:'#F97316',background:'#F9731615',border:'1px solid #F9731640',borderRadius:5,padding:'2px 7px',display:'inline-flex',alignItems:'center',gap:4}}>
-              <I n="send" s={10}/> Partagé avec {other?.name || 'un collègue'}
-            </span>
-            <Btn small onClick={()=>{
-              if(!confirm(`Se désynchroniser ? ${other?.name || 'Le destinataire'} deviendra le propriétaire unique de ce contact, qui disparaîtra de votre pipeline.`)) return;
-              api(`/api/contact-share/desync/${encodeURIComponent(ct.id)}`,{method:'POST'}).then(r=>{
-                if(r?.error){ showNotif('Erreur : '+r.error,'danger'); return; }
-                showNotif('Contact désynchronisé','success');
-                setContacts(p=>p.filter(c=>c.id!==ct.id));
-                if(typeof setPipelineRightContact==='function') setPipelineRightContact(null);
-              }).catch(e=>showNotif('Erreur : '+e.message,'danger'));
-            }} style={{fontSize:9,background:T.bg,color:T.text2,border:`1px solid ${T.border}`,padding:'2px 6px'}} title="Désynchronisation : le destinataire devient owner unique, le contact disparaît de votre pipeline">
-              <I n="x" s={9}/> Désync
-            </Btn>
-          </>;
-        }
-        if (isReceiver) {
-          return <span style={{fontSize:10,fontWeight:700,color:'#F97316',background:'#F9731615',border:'1px solid #F9731640',borderRadius:5,padding:'2px 7px',display:'inline-flex',alignItems:'center',gap:4}}>
-            <I n="inbox" s={10}/> Envoyé par {other?.name || 'un collègue'}
-            {ct.shareNote ? <span style={{marginLeft:4,fontStyle:'italic',fontWeight:500,color:T.text3}} title={ct.shareNote}>— {ct.shareNote.slice(0,40)}{ct.shareNote.length>40?'…':''}</span> : null}
-          </span>;
-        }
-        // Cas edge : contact déjà partagé entre 2 autres collabs (admin qui voit)
-        if (sharedWithId && !isReceiver && !isSender) {
-          const from = (collabs||[]).find(c=>c.id===sharedById);
-          const to = (collabs||[]).find(c=>c.id===sharedWithId);
-          return <span style={{fontSize:10,fontWeight:700,color:T.text3,background:T.bg,border:`1px solid ${T.border}`,borderRadius:5,padding:'2px 7px',display:'inline-flex',alignItems:'center',gap:4}} title="Ce contact est déjà partagé. Désynchronisez d'abord pour pouvoir le repartager.">
-            <I n="lock" s={10}/> Déjà partagé ({from?.name?.split(' ')[0] || '—'} → {to?.name?.split(' ')[0] || '—'})
-          </span>;
-        }
-        return <Btn small onClick={()=>{ if(typeof setContactShareTarget==='function') setContactShareTarget(ct); }} style={{fontSize:9,background:'#F9731610',color:'#F97316',border:'1px solid #F9731640'}} title="Envoyer ce contact à un collègue avec un RDV">
-          <I n="send" s={10}/> Envoyer à un collègue
-        </Btn>;
-      })()}
-    </div>
 
     {/* ── Note étoiles + Tags — tout en bas ── */}
     <div style={{display:'flex',alignItems:'center',gap:4,marginTop:10,paddingTop:6,borderTop:`1px solid ${T.border}30`,flexWrap:'wrap'}}>
@@ -2084,7 +2000,7 @@ if (n === ph) matched.set(c.id, c);
       </div>
       {callsForNumber.filter(c=>(typeof phoneCallRecordings!=='undefined'?phoneCallRecordings:null)[c.id]).slice(0,5).map(c=>(
         <div key={c.id} style={{padding:'6px 8px',borderRadius:8,background:T.bg,marginBottom:4}}>
-          <div style={{fontSize:10,fontWeight:600,color:T.text,marginBottom:4}}>{new Date(c.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})} · {fmtDur3(c.duration)}</div>
+          <div style={{fontSize:10,fontWeight:600,color:T.text,marginBottom:4}}>{formatDate(c.createdAt)} · {fmtDur3(c.duration)}</div>
           <audio controls src={typeof phoneCallRecordings[c.id]==='string'?phoneCallRecordings[c.id]:phoneCallRecordings[c.id]?.url} style={{width:'100%',height:28,borderRadius:6}}/>
         </div>
       ))}
@@ -2122,7 +2038,7 @@ if (n === ph) matched.set(c.id, c);
             {sms.content}
           </div>
           <div style={{fontSize:8,color:T.text3,marginTop:2,display:'flex',gap:4,alignItems:'center'}}>
-            <span>{new Date(sms.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})} {new Date(sms.createdAt).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</span>
+            <span>{formatDateTime((sms.createdAt||'').split('T')[0], (sms.createdAt||'').split('T')[1]?.slice(0,5))}</span>
             {sms.status && <span style={{padding:'1px 4px',borderRadius:3,background:sms.status==='sent'||sms.status==='delivered'?'#22C55E18':'#F59E0B18',color:sms.status==='sent'||sms.status==='delivered'?'#22C55E':'#F59E0B',fontSize:7,fontWeight:700}}>{sms.status}</span>}
           </div>
         </div>
@@ -2471,6 +2387,25 @@ return(
     <span style={{fontSize:10,fontWeight:700,color:T.text3}}>Parcours ({history.length})</span>
   </div>
   {history.length===0 ? <div style={{fontSize:11,color:T.text3,textAlign:'center',padding:12}}>Aucun historique</div> : history.map((h,i)=>{
+    // V1.8.15 — Detect cross-collab event (toStage prefixed `_xc_`)
+    const _isXC = (h.toStage||'').startsWith('_xc_');
+    if (_isXC) {
+      const _isDetach = h.toStage === '_xc_detach';
+      const _xcColor = _isDetach ? '#EF4444' : '#3B82F6';
+      const _xcEmoji = _isDetach ? '🚪' : '🤝';
+      const _xcLabel = _isDetach ? 'Désengagement' : 'Transfert';
+      return (
+        <div key={i} style={{display:'flex',gap:8,marginBottom:8,position:'relative'}}>
+          {i<history.length-1 && <div style={{position:'absolute',left:11,top:24,bottom:-4,width:2,background:T.border}}/>}
+          <div style={{width:24,height:24,borderRadius:8,background:_xcColor+'15',border:'2px solid '+_xcColor+'35',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,zIndex:1,fontSize:11}}>{_xcEmoji}</div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:10,fontWeight:700,color:_xcColor}}>{_xcLabel}</div>
+            {h.note && <div style={{fontSize:10,color:T.text2,marginTop:2}}>{h.note}</div>}
+            <div style={{fontSize:9,color:T.text3,marginTop:2}}>{h.userName} · {new Date(h.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})} {new Date(h.createdAt).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'})}</div>
+          </div>
+        </div>
+      );
+    }
     const fromStage = ctStages.find(s=>s.id===h.fromStage);
     const toStage = ctStages.find(s=>s.id===h.toStage);
     return(
@@ -4593,7 +4528,7 @@ const pipelineColors = Object.fromEntries(PIPELINE_STAGES.map(s=>[s.id,s.color])
 const pipelineLabels = Object.fromEntries(PIPELINE_STAGES.map(s=>[s.id,s.label]));
 
 const pipelineStats = {};
-allCrmContacts.forEach(c => { const s = c.pipeline_stage || 'nouveau'; pipelineStats[s] = (pipelineStats[s]||0)+1; });
+allCrmContacts.forEach(c => { if(!c) return; const s = c.pipeline_stage || 'nouveau'; pipelineStats[s] = (pipelineStats[s]||0)+1; }); // hotfix 2026-04-23 — null-safe
 
 const activeStageFilter = (typeof convFilter!=='undefined'?convFilter:null) !== 'all' ? (typeof convFilter!=='undefined'?convFilter:null) : null;
 
@@ -5087,23 +5022,12 @@ return(
 <div>
 <div style={{display:'flex',alignItems:'center',gap:8}}>
   <span style={{fontSize:14,fontWeight:800}}>Pipeline</span>
-  {/* Filtre favoris */}
-  <div onClick={()=>{const k='c360-pipe-fav-filter-'+collab.id;const cur=localStorage.getItem(k)==='1';localStorage.setItem(k,cur?'0':'1');setPhoneRightAccordion(p=>({...p,_r:Date.now()}));showNotif(cur?'Tous les contacts':'Favoris uniquement');}} style={{padding:'2px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',gap:3,background:localStorage.getItem('c360-pipe-fav-filter-'+collab.id)==='1'?'#F59E0B15':'transparent',color:localStorage.getItem('c360-pipe-fav-filter-'+collab.id)==='1'?'#F59E0B':T.text3,border:'1px solid '+(localStorage.getItem('c360-pipe-fav-filter-'+collab.id)==='1'?'#F59E0B30':T.border)}} title="Filtrer par favoris">
-    <I n="star" s={10} style={{fill:localStorage.getItem('c360-pipe-fav-filter-'+collab.id)==='1'?'#F59E0B':'none'}}/> Favoris
-  </div>
-  {/* Bouton enregistrement rapide */}
-  <div onClick={()=>{const next=!phoneRecordingEnabled;(typeof setPhoneRecordingEnabled==='function'?setPhoneRecordingEnabled:function(){})(next);showNotif(next?'Enregistrement activé':'Enregistrement désactivé');}} style={{padding:'2px 8px',borderRadius:6,cursor:'pointer',fontSize:10,fontWeight:700,display:'flex',alignItems:'center',gap:3,background:phoneRecordingEnabled?'#EF444415':'transparent',color:phoneRecordingEnabled?'#EF4444':T.text3,border:'1px solid '+(phoneRecordingEnabled?'#EF444430':T.border)}} title="Enregistrement des appels">
-    <I n="mic" s={10}/> REC
-  </div>
 </div>
-<div style={{display:'flex',gap:8,fontSize:11}}>
-  <span style={{fontWeight:700,color:T.text}}>{allCtx.length} contact{allCtx.length>1?'s':''}</span>
-  <span style={{color:T.text3}}>·</span>
-  <span style={{fontWeight:700,color:'#22C55E'}}>{won} gagné{won>1?'s':''}</span>
-  <span style={{color:T.text3}}>·</span>
-  <span style={{fontWeight:700,color:'#EF4444'}}>{lost} perdu{lost>1?'s':''}</span>
-  <span style={{color:T.text3}}>·</span>
-  <span style={{fontWeight:700,color:T.accent}}>{winRate}% taux conv.</span>
+<div style={{display:'flex',alignItems:'center',gap:14,fontSize:11,marginTop:4}}>
+  <span style={{fontWeight:700,color:T.text}}>{allCtx.length} contact{allCtx.length===1?'':'s'}</span>
+  <span style={{fontWeight:700,color:'#22C55E'}}>🟢 {won} gagné{won===1?'':'s'}</span>
+  <span style={{fontWeight:700,color:'#EF4444'}}>🔴 {lost} perdu{lost===1?'':'s'}</span>
+  <span style={{fontWeight:700,color:T.accent}}>⚡ {winRate}% conversion</span>
 </div>
 </div>
       </div>
@@ -5200,13 +5124,26 @@ return(
 <span style={{fontWeight:700,fontSize:12,color:T.accent}}>{(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length} sélectionné{(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length>1?'s':''}</span>
 <select value={pipeBulkStage} onChange={e => (typeof setPipeBulkStage==='function'?setPipeBulkStage:function(){})(e.target.value)} style={{padding:"3px 6px",borderRadius:8,border:`1px solid ${T.border}`,fontSize:11,background:T.surface,color:T.text}}>
 <option value="">Déplacer…</option>
-{STAGES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+{STAGES.map(s => {
+  const _MODAL = ['rdv_programme','client_valide'];
+  const _multiBlock = _MODAL.includes(s.id) && ((typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:[])||[]).length > 1;
+  return <option key={s.id} value={s.id} disabled={_multiBlock}>{s.label}{_multiBlock?' (individuel uniquement)':''}</option>;
+})}
 </select>
 {(typeof pipeBulkStage!=='undefined'?pipeBulkStage:null) && <Btn small primary onClick={() => {
 const MODAL_STAGES = ['rdv_programme','client_valide'];
 const ids = (typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).filter(id => { const c=(contacts||[]).find(x=>x.id===id); return c && c.pipeline_stage !== (typeof pipeBulkStage!=='undefined'?pipeBulkStage:null); });
 if(ids.length===0){showNotif('Aucun contact à déplacer','info');return;}
-if(MODAL_STAGES.includes((typeof pipeBulkStage!=='undefined'?pipeBulkStage:null))){showNotif('Ce stage nécessite une action individuelle','info');return;}
+if(MODAL_STAGES.includes((typeof pipeBulkStage!=='undefined'?pipeBulkStage:null))){
+  if(ids.length === 1){
+    handlePipelineStageChange(ids[0], (typeof pipeBulkStage!=='undefined'?pipeBulkStage:null));
+    (typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})([]);
+    (typeof setPipeBulkStage==='function'?setPipeBulkStage:function(){})('');
+    return;
+  }
+  showNotif('Sélection multiple impossible pour ce stage — action individuelle requise','info');
+  return;
+}
 let note = '';
 if((typeof pipeBulkStage!=='undefined'?pipeBulkStage:null)==='perdu'){note=prompt('Raison de la perte :')||'Classé perdu en masse';}
 if((typeof pipeBulkStage!=='undefined'?pipeBulkStage:null)==='qualifie'){note=prompt('Note de qualification :')||'Qualifié en masse';}
@@ -5237,35 +5174,6 @@ api('/api/data/contacts/bulk-delete',{method:'POST',body:{contactIds:(typeof pip
 <span onClick={() => setPipeSelectedIds([])} style={{marginLeft:"auto",cursor:"pointer",fontSize:11,color:T.text3,fontWeight:600}}>✕ Tout désélectionner</span>
       </Card>
     )}
-    {/* Phase 4 — Badge "Pipeline Équipe" si collab en mode template imposé */}
-    {pipelineTemplateMeta && (
-      <div style={{
-        display:'flex',alignItems:'center',gap:10,
-        padding:'8px 12px',margin:'6px 8px',
-        borderRadius:10,
-        background:(pipelineTemplateMeta.color||'#7C3AED')+'12',
-        border:`1.5px solid ${(pipelineTemplateMeta.color||'#7C3AED')}40`,
-        fontSize:11,color:T.text2
-      }} title="Structure définie par votre administrateur. Contactez-le pour toute modification.">
-        <div style={{
-          width:26,height:26,borderRadius:8,
-          background:(pipelineTemplateMeta.color||'#7C3AED')+'25',
-          color:pipelineTemplateMeta.color||'#7C3AED',
-          display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0
-        }}>
-          <I n="lock" s={13}/>
-        </div>
-        <div style={{flex:1,minWidth:0}}>
-          <div style={{fontSize:12,fontWeight:700,color:T.text}}>
-            Pipeline Équipe : {pipelineTemplateMeta.name}
-            {pipelineTemplateMeta.version ? <span style={{fontSize:10,color:T.text3,marginLeft:6,fontWeight:500}}>v{pipelineTemplateMeta.version}</span> : null}
-          </div>
-          <div style={{fontSize:10,color:T.text3,marginTop:2}}>
-            Structure imposée — édition réservée à votre administrateur
-          </div>
-        </div>
-      </div>
-    )}
     {/* Kanban Columns */}
     <div style={{flex:1,overflow:'auto',padding:'8px 6px',transform:'scale('+((_T.pipeZoom||100)/100)+')',transformOrigin:'top left',width:(10000/(_T.pipeZoom||100))+'%',height:(10000/(_T.pipeZoom||100))+'%'}}>
       <div style={{display:'flex',gap:8,minWidth:STAGES.filter(s=>!(_T.pipeHiddenCols||{})[s.id]).length*190,height:'100%'}}>
@@ -5285,22 +5193,22 @@ return(
     const colId=e.dataTransfer.getData('columnId');
     if(colId){handleColumnDrop(e,stage.id);return;}
     const cid=e.dataTransfer.getData('contactId');
-    if(cid){handlePipelineStageChange(cid,stage.id);if(stage.id!=='rdv_programme'&&stage.id!=='perdu'&&stage.id!=='qualifie')showNotif('Contact → '+stage.label);}
+    if(cid){handlePipelineStageChange(cid,stage.id);if(stage.id!=='rdv_programme'&&stage.id!=='perdu'&&stage.id!=='qualifie')showNotif('Contact → '+(PIPELINE_LABELS[stage.id]||stage.label));}
   }}>
   {/* Column Header */}
   {_isColCollapsed ? (
-    <div onClick={()=>{const h={...(_T.pipeCollapsedCols||{})};h[stage.id]=false;_T.pipeCollapsedCols=h;try{localStorage.setItem('c360-pipe-cols',JSON.stringify(h));}catch{}setPhoneRightAccordion(p=>({...p,_cc:Date.now()}));}} style={{padding:'8px 4px',borderRadius:'12px 12px 0 0',background:stage.color+'14',borderBottom:`2.5px solid ${stage.color}`,cursor:'pointer',textAlign:'center',transition:'background .15s'}} onMouseEnter={e=>e.currentTarget.style.background=stage.color+'25'} onMouseLeave={e=>e.currentTarget.style.background=stage.color+'14'} title={'Ouvrir '+stage.label}>
-      <span style={{fontSize:9,fontWeight:700,color:stage.color,writingMode:'vertical-rl'}}>{stage.label.substring(0,4)}</span>
+    <div onClick={()=>{const h={...(_T.pipeCollapsedCols||{})};h[stage.id]=false;_T.pipeCollapsedCols=h;try{localStorage.setItem('c360-pipe-cols',JSON.stringify(h));}catch{}setPhoneRightAccordion(p=>({...p,_cc:Date.now()}));}} style={{padding:'8px 4px',borderRadius:'12px 12px 0 0',background:(STATUS_COLORS[stage.id]||stage.color)+'14',borderBottom:`2.5px solid ${STATUS_COLORS[stage.id]||stage.color}`,cursor:'pointer',textAlign:'center',transition:'background .15s'}} onMouseEnter={e=>e.currentTarget.style.background=(STATUS_COLORS[stage.id]||stage.color)+'25'} onMouseLeave={e=>e.currentTarget.style.background=(STATUS_COLORS[stage.id]||stage.color)+'14'} title={'Ouvrir '+(PIPELINE_LABELS[stage.id]||stage.label)}>
+      <span style={{fontSize:9,fontWeight:700,color:STATUS_COLORS[stage.id]||stage.color,writingMode:'vertical-rl'}}>{(PIPELINE_LABELS[stage.id]||stage.label).substring(0,4)}</span>
     </div>
   ) : (
-    <div draggable={!pipelineReadOnly} onDragStart={pipelineReadOnly ? undefined : e=>handleColumnDragStart(e,stage.id)} onDragEnd={pipelineReadOnly ? undefined : handleColumnDragEnd} style={{padding:'8px 10px',borderRadius:'12px 12px 0 0',background:isDialingThis?stage.color+'25':stage.color+'14',borderBottom:`2.5px solid ${stage.color}`,transition:'background .3s',cursor:pipelineReadOnly?'default':'grab'}}>
+    <div draggable onDragStart={e=>handleColumnDragStart(e,stage.id)} onDragEnd={handleColumnDragEnd} style={{padding:'8px 10px',borderRadius:'12px 12px 0 0',background:isDialingThis?stage.color+'25':stage.color+'14',borderBottom:`2.5px solid ${stage.color}`,transition:'background .3s',cursor:'grab'}}>
       <div style={{display:'flex',justifyContent:'space-between',alignItems:'center'}}>
         <div style={{display:'flex',alignItems:'center',gap:5}}>
-          {!pipelineReadOnly && (<div style={{display:'flex',flexDirection:'column',gap:1,opacity:0.3,flexShrink:0}} title="Réorganiser">
+          <div style={{display:'flex',flexDirection:'column',gap:1,opacity:0.3,flexShrink:0}} title="Réorganiser">
             <div style={{display:'flex',gap:1}}><div style={{width:2,height:2,borderRadius:'50%',background:stage.color}}/><div style={{width:2,height:2,borderRadius:'50%',background:stage.color}}/></div>
             <div style={{display:'flex',gap:1}}><div style={{width:2,height:2,borderRadius:'50%',background:stage.color}}/><div style={{width:2,height:2,borderRadius:'50%',background:stage.color}}/></div>
-          </div>)}
-          <span onClick={e=>{e.stopPropagation();const h={...(_T.pipeCollapsedCols||{})};h[stage.id]=true;_T.pipeCollapsedCols=h;try{localStorage.setItem('c360-pipe-cols',JSON.stringify(h));}catch{}setPhoneRightAccordion(p=>({...p,_cc:Date.now()}));}} style={{fontSize:11,fontWeight:700,color:stage.color,cursor:'pointer'}} title="Clic = réduire la colonne">{stage.label}</span>
+          </div>
+          <span onClick={e=>{e.stopPropagation();const h={...(_T.pipeCollapsedCols||{})};h[stage.id]=true;_T.pipeCollapsedCols=h;try{localStorage.setItem('c360-pipe-cols',JSON.stringify(h));}catch{}setPhoneRightAccordion(p=>({...p,_cc:Date.now()}));}} style={{fontSize:11,fontWeight:700,color:STATUS_COLORS[stage.id]||stage.color,cursor:'pointer'}} title="Clic = réduire la colonne">{PIPELINE_LABELS[stage.id]||stage.label}</span>
         </div>
         <div style={{display:'flex',alignItems:'center',gap:4}}>
           {stage.id==='nouveau'&&<div onClick={(e)=>{e.stopPropagation();setShowNewContact(true);}} style={{width:20,height:20,borderRadius:5,display:"flex",alignItems:"center",justifyContent:"center",cursor:"pointer",background:"#22C55E",color:"#fff",flexShrink:0,boxShadow:"0 1px 3px #22C55E40",transition:"transform .15s"}} onMouseEnter={e=>e.currentTarget.style.transform='scale(1.15)'} onMouseLeave={e=>e.currentTarget.style.transform='scale(1)'} title="Ajouter un nouveau contact"><I n="user-plus" s={11}/></div>}
@@ -5311,7 +5219,7 @@ return(
           )}
           {isDialingThis&&<div style={{fontSize:8,fontWeight:700,color:'#fff',background:stage.color,borderRadius:8,padding:'1px 5px',animation:'pulse 1.5s infinite'}}>EN COURS</div>}
           <span style={{fontSize:11,fontWeight:800,color:T.text,background:T.surface,borderRadius:20,padding:'1px 7px',minWidth:18,textAlign:'center'}}>{stageContacts.length}</span>
-          {stageContacts.length>0&&<input type="checkbox" checked={stageContacts.every(c=>(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).includes(c.id))} onChange={e=>{e.stopPropagation();if(e.target.checked){(typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})(p=>[...new Set([...p,...stageContacts.map(c=>c.id)])]);}else{const stIds=new Set(stageContacts.map(c=>c.id));(typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})(p=>p.filter(id=>!stIds.has(id)));}}} onClick={e=>e.stopPropagation()} title={`Sélectionner tout ${stage.label}`} style={{cursor:'pointer',accentColor:stage.color,width:13,height:13,flexShrink:0}}/>}
+          {stageContacts.length>0&&<input type="checkbox" checked={stageContacts.every(c=>(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).includes(c.id))} onChange={e=>{e.stopPropagation();if(e.target.checked){(typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})(p=>[...new Set([...p,...stageContacts.map(c=>c.id)])]);}else{const stIds=new Set(stageContacts.map(c=>c.id));(typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})(p=>p.filter(id=>!stIds.has(id)));}}} onClick={e=>e.stopPropagation()} title={`Sélectionner tout ${PIPELINE_LABELS[stage.id]||stage.label}`} style={{cursor:'pointer',accentColor:stage.color,width:13,height:13,flexShrink:0}}/>}
         </div>
       </div>
     </div>
@@ -5319,9 +5227,9 @@ return(
 
   {/* Contact Cards — hidden when collapsed */}
   {_isColCollapsed ? (
-    <div onClick={e=>{e.stopPropagation();const h={...(_T.pipeCollapsedCols||{})};h[stage.id]=false;_T.pipeCollapsedCols=h;try{localStorage.setItem('c360-pipe-cols',JSON.stringify(h));}catch{}setPhoneRightAccordion(p=>({...p,_cc:Date.now()}));}} style={{flex:1,background:T.bg,borderRadius:'0 0 12px 12px',border:`1px solid ${T.border}`,borderTop:'none',display:'flex',flexDirection:'column',alignItems:'center',padding:'10px 4px',gap:6,cursor:'pointer',transition:'background .15s'}} onMouseEnter={e=>e.currentTarget.style.background=stage.color+'08'} onMouseLeave={e=>e.currentTarget.style.background=T.bg} title={'Ouvrir '+stage.label}>
+    <div onClick={e=>{e.stopPropagation();const h={...(_T.pipeCollapsedCols||{})};h[stage.id]=false;_T.pipeCollapsedCols=h;try{localStorage.setItem('c360-pipe-cols',JSON.stringify(h));}catch{}setPhoneRightAccordion(p=>({...p,_cc:Date.now()}));}} style={{flex:1,background:T.bg,borderRadius:'0 0 12px 12px',border:`1px solid ${T.border}`,borderTop:'none',display:'flex',flexDirection:'column',alignItems:'center',padding:'10px 4px',gap:6,cursor:'pointer',transition:'background .15s'}} onMouseEnter={e=>e.currentTarget.style.background=stage.color+'08'} onMouseLeave={e=>e.currentTarget.style.background=T.bg} title={'Ouvrir '+(PIPELINE_LABELS[stage.id]||stage.label)}>
       <div style={{width:22,height:22,borderRadius:11,background:stage.color,display:'flex',alignItems:'center',justifyContent:'center'}}><span style={{fontSize:10,fontWeight:800,color:'#fff'}}>{stageContacts.length}</span></div>
-      <span style={{fontSize:9,fontWeight:700,color:stage.color,writingMode:'vertical-rl',textOrientation:'mixed',letterSpacing:1}}>{stage.label}</span>
+      <span style={{fontSize:9,fontWeight:700,color:STATUS_COLORS[stage.id]||stage.color,writingMode:'vertical-rl',textOrientation:'mixed',letterSpacing:1}}>{PIPELINE_LABELS[stage.id]||stage.label}</span>
       <I n="chevron-right" s={12} style={{color:stage.color,marginTop:'auto'}}/>
     </div>
   ) : (
@@ -5333,8 +5241,6 @@ return(
       const isAutoDialing=(typeof pdStatus!=='undefined'?pdStatus:null)!=='idle'&&(typeof pdContactList!=='undefined'?pdContactList:null)[pdCurrentIdx]?.id===ct.id;
       const pdResult=(typeof pdResults!=='undefined'?pdResults:null)[ct.id];
       const _ccHas=!!ct.card_color;
-      // Contact Share V1 — borderLeft orange si contact partagé avec ou par ce collab
-      const _isShared = !!(ct.sharedWithId && collab?.id && (ct.sharedWithId === collab.id || ct.sharedById === collab.id));
       const _ccBorder=_ccHas?`2.5px solid ${ct.card_color}`:isAutoDialing?'2px solid #7C3AED':pdResult?`2px solid ${pdResult==='contacted'?'#22C55E':'#EF4444'}`:`1px solid ${T.border}`;
       const _ccBg=_ccHas?`linear-gradient(135deg, ${ct.card_color}30 0%, ${ct.card_color}08 60%, transparent 100%)`:isAutoDialing?'#7C3AED12':T.surface;
       const _ccShadow=_ccHas?`0 3px 12px ${ct.card_color}30`:isAutoDialing?'0 0 16px #7C3AED30':'none';
@@ -5348,7 +5254,12 @@ return(
         return rdvD2&&new Date(rdvD2).getTime()<nowMs2;
       })();
       return(
-      <div key={ct.id} draggable onDragStart={e=>{e.dataTransfer.setData('contactId',ct.id);e.target.style.opacity='0.5';}} onDragEnd={e=>{e.target.style.opacity='1';}}
+      <div key={ct.id} draggable={!(ct.assignedTo && ct.assignedTo !== collab.id && !(collab?.role === 'admin' || collab?.role === 'supra' || isAdminView))} onDragStart={e=>{
+        // V1.8.14 — Bloquer le drag pour shared (non-owner, non-admin)
+        const _isAdminBp = collab?.role === 'admin' || collab?.role === 'supra' || isAdminView;
+        if (ct.assignedTo && ct.assignedTo !== collab.id && !_isAdminBp) { e.preventDefault(); return; }
+        e.dataTransfer.setData('contactId',ct.id);e.target.style.opacity='0.5';
+      }} onDragEnd={e=>{e.target.style.opacity='1';}}
         onClick={()=>{
           if(_isRdvPasse2){
             const liveRdv3=(bookings||[]).find(b=>b.contactId===ct.id&&b.status==='confirmed');
@@ -5357,27 +5268,44 @@ return(
           }
           setPipelineRightContact(ct);setPhoneRightTab('fiche');if(phoneRightCollapsed){(typeof setPhoneRightCollapsed==='function'?setPhoneRightCollapsed:function(){})(false);try{localStorage.setItem('c360-phone-right-collapsed-'+collab.id,'0');}catch{}}api('/api/data/pipeline-history?contactId='+ct.id).then(h=>setPipelinePopupHistory(h||[])).catch(()=>setPipelinePopupHistory([]));
         }}
-        style={{padding:'8px 10px',borderRadius:10,background:_isRdvPasse2?'linear-gradient(135deg, #F9731612 0%, #F9731604 60%, transparent 100%)':_isSelected?T.accent+'08':_isPipeSel?T.accentBg:_ccBg,border:_isRdvPasse2?'2px solid #F97316':_isSelected?`2.5px solid ${T.accent}`:_isPipeSel?`2px solid ${T.accent}`:_ccBorder,borderLeft:_isRdvPasse2?'5px solid #F97316':_isSelected?`5px solid ${T.accent}`:_ccHas?`6px solid ${ct.card_color}`:_isShared?'5px solid #F97316':undefined,cursor:'pointer',transition:'all .3s',boxShadow:_isRdvPasse2?'0 3px 12px #F9731625':_isSelected?`0 4px 16px ${T.accent}25`:_ccShadow,position:'relative'}}
+        style={{padding:'8px 10px',borderRadius:10,background:_isRdvPasse2?'linear-gradient(135deg, #F9731612 0%, #F9731604 60%, transparent 100%)':_isSelected?T.accent+'08':_isPipeSel?T.accentBg:_ccBg,border:_isRdvPasse2?'2px solid #F97316':_isSelected?`2.5px solid ${T.accent}`:_isPipeSel?`2px solid ${T.accent}`:_ccBorder,borderLeft:_isRdvPasse2?'5px solid #F97316':_isSelected?`5px solid ${T.accent}`:_ccHas?`6px solid ${ct.card_color}`:undefined,cursor:'pointer',transition:'all .3s',boxShadow:_isRdvPasse2?'0 3px 12px #F9731625':_isSelected?`0 4px 16px ${T.accent}25`:_ccShadow,position:'relative'}}
         onMouseEnter={e=>{if(!isAutoDialing&&!_ccHas)e.currentTarget.style.boxShadow='0 4px 12px rgba(0,0,0,0.08)';}}
         onMouseLeave={e=>{e.currentTarget.style.boxShadow=_ccShadow;}}>
         {/* Auto-dialer badge */}
         {isAutoDialing&&<div style={{position:'absolute',top:-6,right:-6,width:20,height:20,borderRadius:10,background:'#7C3AED',display:'flex',alignItems:'center',justifyContent:'center',animation:'pulse 1.5s infinite',zIndex:2}}><I n="phone" s={10} style={{color:'#fff'}}/></div>}
         {pdResult&&!isAutoDialing&&<div style={{position:'absolute',top:-4,right:20,fontSize:7,fontWeight:800,color:'#fff',background:pdResult==='contacted'?'#22C55E':'#EF4444',borderRadius:8,padding:'1px 5px',zIndex:2}}>{pdResult==='contacted'?'OK':'NRP'}</div>}
-        {/* L3 — badge enveloppe identité (visuel uniquement, aucun impact fonctionnel) */}
-        {ct.envelopeId && (typeof envelopeMap!=='undefined'?envelopeMap:{})[ct.envelopeId] && <div style={{position:'absolute',top:3,right:3,zIndex:1}}><EnvelopeBadge envelope={envelopeMap[ct.envelopeId]} size={14}/></div>}
-        {/* S2 P0 Patch D + S3.1 — indicateur save status discret top-left
-            saving=bleu, saved=vert, external_update=violet (update cross-tab), error=rouge */}
-        {contactSaveStatus?.[ct.id] && <div style={{position:'absolute',top:3,left:3,width:7,height:7,borderRadius:'50%',background:contactSaveStatus[ct.id]==='saving'?'#3B82F6':contactSaveStatus[ct.id]==='saved'?'#22C55E':contactSaveStatus[ct.id]==='external_update'?'#A855F7':'#EF4444',boxShadow:contactSaveStatus[ct.id]==='saving'?'0 0 6px #3B82F680':contactSaveStatus[ct.id]==='external_update'?'0 0 5px #A855F780':'none',zIndex:3,transition:'all .2s'}} title={contactSaveStatus[ct.id]==='saving'?'Sauvegarde en cours':contactSaveStatus[ct.id]==='saved'?'Sauvegardé':contactSaveStatus[ct.id]==='external_update'?'Mis à jour par un autre onglet':'Erreur de sauvegarde'}/>}
         {/* ── V6: Nom + température + checkbox ── */}
         {(()=>{const _t=getLeadTemperature(ct);ct._temp=_t;return null;})()}
+        {/* V1.8.14 — Cross-collab badge (kanban card) */}
+        {(()=>{
+          const _isOwner = ct.assignedTo === collab.id;
+          const _shared = Array.isArray(ct.shared_with) ? ct.shared_with : [];
+          const _sharedHere = _shared.includes(collab.id) && !_isOwner && ct.assignedTo;
+          const _capName = (n) => { const s = String(n||'').trim(); return s ? s.charAt(0).toUpperCase() + s.slice(1) : '—'; };
+          if (_sharedHere) {
+            const _ownerName = (collabs||[]).find(_c => _c.id === ct.assignedTo)?.name || '';
+            return <div title={'Apporté à ' + (_ownerName ? _capName(_ownerName) : 'autre collaborateur') + ' — lecture seule'} style={{display:'inline-flex',alignItems:'center',gap:3,padding:'1px 5px',borderRadius:4,background:'#3B82F614',border:'1px solid #3B82F635',color:'#1E40AF',fontSize:8,fontWeight:700,marginBottom:2,maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+              🤝 Apporté à {_capName(_ownerName)}
+            </div>;
+          }
+          if (_isOwner && _shared.filter(_id => _id && _id !== collab.id).length > 0) {
+            const _firstSharerId = _shared.find(_id => _id && _id !== collab.id);
+            const _sharerName = (collabs||[]).find(_c => _c.id === _firstSharerId)?.name || '';
+            const _extra = _shared.filter(_id => _id && _id !== collab.id).length - 1;
+            return <div title={'Transmis par ' + (_sharerName ? _capName(_sharerName) : 'un collaborateur') + (_extra > 0 ? ' (+' + _extra + ')' : '')} style={{display:'inline-flex',alignItems:'center',gap:3,padding:'1px 5px',borderRadius:4,background:'#F9731614',border:'1px solid #F9731635',color:'#9A3412',fontSize:8,fontWeight:700,marginBottom:2,maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+              🤝 Transmis par {_capName(_sharerName)}{_extra > 0 ? ' +' + _extra : ''}
+            </div>;
+          }
+          return null;
+        })()}
         <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}>
           <div style={{flex:1,minWidth:0,fontSize:12,fontWeight:700,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ct.firstname||ct.lastname?(ct.civility&&!ct.name.startsWith(ct.civility)?ct.civility+' ':'')+(ct.firstname?ct.firstname+' ':'')+(ct.lastname||''):ct.name}{ct.contact_type==='btb'?' 🏢':''}</div>
           <input type="checkbox" checked={_isPipeSel} onChange={e=>{e.stopPropagation();setPipeSelectedIds(p=>e.target.checked?[...p,ct.id]:p.filter(x=>x!==ct.id));}} onClick={e=>e.stopPropagation()} style={{cursor:'pointer',accentColor:T.accent,width:13,height:13,flexShrink:0}}/>
         </div>
         {/* ── V6: Statut + température ── */}
         <div style={{marginBottom:3,display:'flex',alignItems:'center',gap:4}}>
-          <select value={ct.pipeline_stage||'nouveau'} onClick={e=>e.stopPropagation()} onChange={e=>{e.stopPropagation();const ns=e.target.value;if(ns===(ct.pipeline_stage||'nouveau'))return;handlePipelineStageChange(ct.id,ns);}} style={{padding:'1px 4px',borderRadius:4,fontSize:8,fontWeight:700,border:'1px solid '+(STAGES.find(s=>s.id===(ct.pipeline_stage||'nouveau'))?.color||T.border)+'80',background:(STAGES.find(s=>s.id===(ct.pipeline_stage||'nouveau'))?.color||'#ccc')+'12',color:STAGES.find(s=>s.id===(ct.pipeline_stage||'nouveau'))?.color||T.text,cursor:'pointer',fontFamily:'inherit',outline:'none'}}>
-            {STAGES.map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
+          <select value={ct.pipeline_stage||'nouveau'} onClick={e=>e.stopPropagation()} disabled={ct.assignedTo && ct.assignedTo !== collab.id && !(collab?.role === 'admin' || collab?.role === 'supra' || isAdminView)} title={(ct.assignedTo && ct.assignedTo !== collab.id && !(collab?.role === 'admin' || collab?.role === 'supra' || isAdminView)) ? ('Géré par ' + ((collabs||[]).find(_c=>_c.id===ct.assignedTo)?.name || 'le propriétaire') + ' — lecture seule') : undefined} onChange={e=>{e.stopPropagation();const ns=e.target.value;if(ns===(ct.pipeline_stage||'nouveau'))return;handlePipelineStageChange(ct.id,ns);}} style={{padding:'1px 4px',borderRadius:4,fontSize:8,fontWeight:700,border:'1px solid '+(STAGES.find(s=>s.id===(ct.pipeline_stage||'nouveau'))?.color||T.border)+'80',background:(STAGES.find(s=>s.id===(ct.pipeline_stage||'nouveau'))?.color||'#ccc')+'12',color:STAGES.find(s=>s.id===(ct.pipeline_stage||'nouveau'))?.color||T.text,cursor:(ct.assignedTo && ct.assignedTo !== collab.id && !(collab?.role === 'admin' || collab?.role === 'supra' || isAdminView))?'not-allowed':'pointer',opacity:(ct.assignedTo && ct.assignedTo !== collab.id && !(collab?.role === 'admin' || collab?.role === 'supra' || isAdminView))?0.6:1,fontFamily:'inherit',outline:'none'}}>
+            {STAGES.map(s=><option key={s.id} value={s.id}>{PIPELINE_LABELS[s.id]||s.label}</option>)}
           </select>
           <span style={{fontSize:7,fontWeight:800,padding:'1px 5px',borderRadius:4,background:_tempColor(ct._temp?.temp)+'18',color:_tempColor(ct._temp?.temp),flexShrink:0,letterSpacing:0.5}} title={'Score '+ct._temp?.conversion+'% — Engagement '+ct._temp?.engagement+'% · Réactivité '+ct._temp?.responsiveness+'% · Opportunité '+ct._temp?.opportunity+'% · Urgence '+ct._temp?.urgency+'% · Fatigue '+ct._temp?.fatigue+'%'}>{_tempEmoji(ct._temp?.temp)} {_tempLabel(ct._temp?.temp)}</span>
           {ct.pipeline_stage==='nrp'&&(()=>{try{const n=JSON.parse(ct.nrp_followups_json||'[]').filter(f=>f.done).length;return n>0?<span style={{fontSize:7,fontWeight:800,color:'#fff',padding:'1px 4px',borderRadius:3,background:'#EF4444'}}>x{n}</span>:null;}catch{return null;}})()}
@@ -5417,7 +5345,7 @@ return(
         {/* ── V5: Alerte contextuelle (1 seule, la plus urgente) ── */}
         {_isRdvPasse2?<div style={{fontSize:8,fontWeight:800,padding:'2px 6px',borderRadius:4,background:'linear-gradient(135deg,#F97316,#EF4444)',color:'#fff',marginBottom:2}}>⚠️ RDV passé — Statuer</div>
         :ct.pipeline_stage==='nrp'&&ct.nrp_next_relance&&ct.nrp_next_relance<=new Date().toISOString().split('T')[0]?<div style={{fontSize:8,fontWeight:700,padding:'2px 6px',borderRadius:4,background:'#EF444410',color:'#EF4444',marginBottom:2}}>📞 Relancer</div>
-        :!_isRdvPasse2&&ct.pipeline_stage==='rdv_programme'?(()=>{const bk=(bookings||[]).filter(b=>b.contactId===ct.id&&b.status==='confirmed').sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))[0];if(!bk)return null;const diff=Math.round((new Date(bk.date+'T'+(bk.time||'00:00')).getTime()-Date.now())/60000);return diff>=0?<div style={{fontSize:8,fontWeight:700,padding:'2px 6px',borderRadius:4,background:diff<=60?'#F59E0B10':'#0EA5E910',color:diff<=60?'#F59E0B':'#0EA5E9',marginBottom:2}}>📅 {diff<60?diff+'min':diff<1440?Math.floor(diff/60)+'h':new Date(bk.date).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})} {bk.time}</div>:null;})()
+        :!_isRdvPasse2&&ct.pipeline_stage==='rdv_programme'?(()=>{const bk=(bookings||[]).filter(b=>b.contactId===ct.id&&b.status==='confirmed').sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))[0];if(!bk)return null;const diff=Math.round((new Date(bk.date+'T'+(bk.time||'00:00')).getTime()-Date.now())/60000);return diff>=0?<div style={{fontSize:8,fontWeight:700,padding:'2px 6px',borderRadius:4,background:diff<=60?'#F59E0B10':'#0EA5E910',color:diff<=60?'#F59E0B':'#0EA5E9',marginBottom:2}}>📅 {formatDateTime(bk.date, bk.time)}</div>:null;})()
         :daysSince>=14?<div style={{fontSize:8,fontWeight:700,padding:'2px 6px',borderRadius:4,background:daysSince>=30?'#EF4444':'#F59E0B',color:'#fff',marginBottom:2}}>⏰ {daysSince}j</div>
         :null}
         {/* ── V5: Note (1 ligne) ── */}
@@ -8772,6 +8700,7 @@ setPostCallResultModal(null);
 {/* ═══════════════════════════════════════════════════════════════════
     PHONE TEAM CHAT BUBBLE — Messagerie inter-collaborateurs
     ═══════════════════════════════════════════════════════════════════ */}
+<ErrorBoundary fallback={null}>
 {(()=>{
   const allCollabs = collabs.length ? collabs : (company?.collaborators || []);
   const teammates = allCollabs.filter(c=>c.id!==collab.id);
@@ -8785,7 +8714,7 @@ setPostCallResultModal(null);
   }).slice(-30);
 
   const sendTeamMsg = () => {
-    const msg = (typeof phoneTeamChatMsg!=='undefined'?phoneTeamChatMsg:{}).trim();
+    const msg = ((phoneTeamChatMsg??'')+'').trim();
     if (!msg) return;
     const body = { companyId: company.id, senderId: collab.id, senderName: collab.name, message: msg, type: (typeof phoneTeamChatTab!=='undefined'?phoneTeamChatTab:null) === 'group' ? 'group' : 'dm' };
     if ((typeof phoneTeamChatTab!=='undefined'?phoneTeamChatTab:null) !== 'group') body.recipientId = (typeof phoneTeamChatTab!=='undefined'?phoneTeamChatTab:null);
@@ -8911,8 +8840,8 @@ setPostCallResultModal(null);
 {/* Input */}
 <div style={{display:'flex',gap:6,padding:'8px 10px',borderTop:`1px solid ${T.border}`,flexShrink:0,background:T.bg}}>
 <input value={phoneTeamChatMsg} onChange={e=>(typeof setPhoneTeamChatMsg==='function'?setPhoneTeamChatMsg:function(){})(e.target.value)} onKeyDown={e=>{if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendTeamMsg();}}} placeholder={phoneTeamChatTab==='group'?'Message au groupe...':'Message privé...'} style={{flex:1,padding:'8px 12px',borderRadius:10,border:`1px solid ${T.border}`,background:T.surface,fontSize:12,fontFamily:'inherit',color:T.text,outline:'none'}}/>
-<div onClick={sendTeamMsg} style={{width:34,height:34,borderRadius:10,background:(typeof phoneTeamChatMsg!=='undefined'?phoneTeamChatMsg:{}).trim()?'linear-gradient(135deg,#7C3AED,#2563EB)':T.border,display:'flex',alignItems:'center',justifyContent:'center',cursor:(typeof phoneTeamChatMsg!=='undefined'?phoneTeamChatMsg:{}).trim()?'pointer':'default',transition:'all .2s',flexShrink:0}}>
-  <I n="send" s={14} style={{color:(typeof phoneTeamChatMsg!=='undefined'?phoneTeamChatMsg:{}).trim()?'#fff':T.text3}}/>
+<div onClick={sendTeamMsg} style={{width:34,height:34,borderRadius:10,background:((phoneTeamChatMsg??'')+'').trim()?'linear-gradient(135deg,#7C3AED,#2563EB)':T.border,display:'flex',alignItems:'center',justifyContent:'center',cursor:((phoneTeamChatMsg??'')+'').trim()?'pointer':'default',transition:'all .2s',flexShrink:0}}>
+  <I n="send" s={14} style={{color:((phoneTeamChatMsg??'')+'').trim()?'#fff':T.text3}}/>
 </div>
 </div>
       </div>
@@ -8920,6 +8849,7 @@ setPostCallResultModal(null);
   </div>
   );
 })()}
+</ErrorBoundary>
 
 </div>
 {/* ═══ END 3-COLUMN CONTAINER (modals now inside) ═══ */}
