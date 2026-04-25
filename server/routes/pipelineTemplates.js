@@ -97,6 +97,38 @@ router.get('/', requireAuth, requireAdmin, enforceCompany, (req, res) => {
   }
 });
 
+// GET /api/admin/pipeline-templates/preflight?collaboratorId=X&templateId=Y
+// Analyse l'impact d'un changement de mode/template AVANT exécution.
+// templateId peut être vide/null pour simuler un retour en mode libre.
+router.get('/preflight', requireAuth, requireAdmin, enforceCompany, (req, res) => {
+  try {
+    const { collaboratorId } = req.query;
+    const templateId = req.query.templateId && req.query.templateId !== 'null' ? req.query.templateId : null;
+    if (!collaboratorId) return res.status(400).json({ error: 'collaboratorId required' });
+
+    // Vérif appartenance company
+    const collab = db.prepare('SELECT companyId FROM collaborators WHERE id = ?').get(collaboratorId);
+    if (!collab) return res.status(404).json({ error: 'collaborator not found' });
+    if (!req.auth.isSupra && collab.companyId !== req.auth.companyId)
+      return res.status(403).json({ error: 'forbidden' });
+
+    const pf = computePreflight(db, { collaboratorId, templateId });
+    res.json(pf);
+  } catch (err) {
+    console.error('[PIPELINE_TEMPLATES PREFLIGHT]', err);
+    const map = {
+      COLLABORATOR_NOT_FOUND: 404,
+      TEMPLATE_NOT_FOUND: 404,
+      TEMPLATE_WRONG_COMPANY: 403,
+      TEMPLATE_ARCHIVED: 400,
+      TEMPLATE_NOT_PUBLISHED: 400,
+      TEMPLATE_NO_SNAPSHOT: 400,
+      SNAPSHOT_INVALID_JSON: 500,
+    };
+    res.status(map[err.message] || 500).json({ error: err.message });
+  }
+});
+
 // ─── READ — GET /api/admin/pipeline-templates/:id ─────────────────────────
 router.get('/:id', requireAuth, requireAdmin, enforceCompany, (req, res) => {
   try {
@@ -306,38 +338,6 @@ router.put('/collaborators/:collabId/pipeline', requireAuth, requireAdmin, enfor
 });
 
 // ─── PRE-FLIGHT CHECK (Phase 3) ──────────────────────────────────────────
-// GET /api/admin/pipeline-templates/preflight?collaboratorId=X&templateId=Y
-// Analyse l'impact d'un changement de mode/template AVANT exécution.
-// templateId peut être vide/null pour simuler un retour en mode libre.
-router.get('/preflight', requireAuth, requireAdmin, enforceCompany, (req, res) => {
-  try {
-    const { collaboratorId } = req.query;
-    const templateId = req.query.templateId && req.query.templateId !== 'null' ? req.query.templateId : null;
-    if (!collaboratorId) return res.status(400).json({ error: 'collaboratorId required' });
-
-    // Vérif appartenance company
-    const collab = db.prepare('SELECT companyId FROM collaborators WHERE id = ?').get(collaboratorId);
-    if (!collab) return res.status(404).json({ error: 'collaborator not found' });
-    if (!req.auth.isSupra && collab.companyId !== req.auth.companyId)
-      return res.status(403).json({ error: 'forbidden' });
-
-    const pf = computePreflight(db, { collaboratorId, templateId });
-    res.json(pf);
-  } catch (err) {
-    console.error('[PIPELINE_TEMPLATES PREFLIGHT]', err);
-    const map = {
-      COLLABORATOR_NOT_FOUND: 404,
-      TEMPLATE_NOT_FOUND: 404,
-      TEMPLATE_WRONG_COMPANY: 403,
-      TEMPLATE_ARCHIVED: 400,
-      TEMPLATE_NOT_PUBLISHED: 400,
-      TEMPLATE_NO_SNAPSHOT: 400,
-      SNAPSHOT_INVALID_JSON: 500,
-    };
-    res.status(map[err.message] || 500).json({ error: err.message });
-  }
-});
-
 // ─── MIGRATE & ASSIGN (Phase 3) ──────────────────────────────────────────
 // POST /api/admin/pipeline-templates/collaborators/:collabId/migrate
 // Body: { templateId: string|null, fallbackStage: string|null }
