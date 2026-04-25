@@ -34,6 +34,8 @@ import {
 
 // Phase 10+11 — context + extracted tabs
 import { CollabProvider } from "./context/CollabContext";
+// V1.8.19 — Phase 4 enforcement runtime : résoudre les stages selon le template assigné au collab
+import { usePipelineResolved } from "./hooks/usePipelineResolved";
 
 // hotfix 2026-04-23 — TAB_ID declared in App.jsx not exported, used bare in CollabPortal.jsx L2689
 const TAB_ID = crypto.randomUUID ? crypto.randomUUID() : "tab-" + Date.now() + "-" + Math.random().toString(36).slice(2, 8);
@@ -2289,7 +2291,16 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     { id:"client_valide", label:"Client Validé", color:"#22C55E", isDefault:1, isCore:true },
     { id:"perdu", label:"Perdu", color:"#64748B", isDefault:1, isCore:true },
   ];
-  const PIPELINE_STAGES = [...DEFAULT_STAGES, ...((typeof pipelineStages!=='undefined'?pipelineStages:null)||[]).map(s => ({...s, isDefault:0}))];
+  // V1.8.19 — Phase 4 résolution : si le collab a un template assigné, ses stages
+  // proviennent du snapshot figé (et non plus de la table pipeline_stages company).
+  // Sinon (mode free, défaut) : DEFAULT_STAGES + customs company comme avant.
+  const _pipeResolved = usePipelineResolved({ companyId: company?.id, collaboratorId: collab?.id });
+  const _pipelineMode = _pipeResolved?.resolved?.mode || 'free';
+  const _pipelineReadOnly = !!_pipeResolved?.resolved?.readOnly;
+  const _pipelineTemplateMeta = _pipeResolved?.resolved?.templateMeta || null;
+  const PIPELINE_STAGES = (_pipelineMode === 'template' && Array.isArray(_pipeResolved?.resolved?.stages))
+    ? _pipeResolved.resolved.stages.map(s => ({ ...s, isDefault: s.isDefault || 0 }))
+    : [...DEFAULT_STAGES, ...((typeof pipelineStages!=='undefined'?pipelineStages:null)||[]).map(s => ({...s, isDefault:0}))];
 
   // ── Column order: drag & drop reordering with localStorage persistence ──
   const [columnOrder, setColumnOrder] = useState(() => {
@@ -3510,6 +3521,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       dragOverStage, setDragOverStage,
       dragColumnId, setDragColumnId,
       pipelineStages, setPipelineStages,
+      // V1.8.19 — exposer le mode résolu + flags pour les sous-composants pipeline-aware
+      _pipelineMode, _pipelineReadOnly, _pipelineTemplateMeta, _pipeResolved,
       contactFieldDefs, setContactFieldDefs,
       pipelinePopupContact, setPipelinePopupContact,
       pipelinePopupHistory, setPipelinePopupHistory,
