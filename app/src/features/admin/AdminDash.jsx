@@ -38,7 +38,8 @@ import {
 import { NewCollabForm, NewCompanyForm, PlacesAutocomplete, TemplateEditorPopup, NewCalForm } from "./forms";
 
 // V1.8.15 — Pipeline Templates Admin UI (rebrancher feature dormante)
-import { TemplatesSection } from "./templates";
+// V1.8.16 — Phase 3 : assignation template par collaborateur via AssignTemplateModal
+import { TemplatesSection, AssignTemplateModal } from "./templates";
 
 const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, setBookings, avails, setAvails, collabs, setCollabs, cals, setCals, darkMode, setDarkMode, blackouts, setBlackouts, vacations, setVacations, isSupraAdmin, allCompanies, setAllCompanies, allUsers, setAllUsers, allCalendars, setAllCalendars, allBookings, setAllBookings, allContacts, setAllContacts, activityLog, setActivityLog, smsCredits, setSmsCredits, smsHistory, setSmsHistory, voipCredits, setVoipCredits, voipCallLogs, setVoipCallLogs, voipConfigured, setVoipConfigured, appPhonePlans, setAppPhonePlans, appMyPhoneNumbers, setAppMyPhoneNumbers, appAvailableNumbers, setAppAvailableNumbers, contacts, setContacts, onSwitchCompany, pipelineStages, setPipelineStages, contactFieldDefs, setContactFieldDefs }) => {
   const [tab, _setTab] = useState(() => { try { return localStorage.getItem("c360-tab") || "home"; } catch { return "home"; } });
@@ -415,6 +416,8 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [navCatsOpen, setNavCatsOpen] = useState(() => { try { const s = localStorage.getItem("c360-nav-cats"); return s ? JSON.parse(s) : { planification:true, equipeCrm:true, leadsMgmt:true, communication:true, automatisation:false, contenu:false, systeme:false }; } catch { return { planification:true, equipeCrm:true, leadsMgmt:true, communication:true, automatisation:false, contenu:false, systeme:false }; } });
   const toggleNavCat = (cat) => setNavCatsOpen(prev => { const n = { ...prev, [cat]: !prev[cat] }; try { localStorage.setItem("c360-nav-cats", JSON.stringify(n)); } catch {} return n; });
+  // V1.8.16 — Phase 3 : modal assignation template à un collaborateur
+  const [assignTemplateCollab, setAssignTemplateCollab] = useState(null);
   // Backup + Security dashboard
   const [backups, setBackups] = useState([]);
   const [backupLoading, setBackupLoading] = useState(false);
@@ -3233,6 +3236,9 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                       <Btn small primary onClick={() => onCollabPortal(c)}>
                         <I n="eye" s={12}/> Espace collab
                       </Btn>
+                      <Btn small onClick={() => setAssignTemplateCollab(c)} style={{background:'#7C3AED10',color:'#7C3AED',border:'1px solid #7C3AED25'}}>
+                        <I n="layers" s={12}/> Pipeline{c.pipelineMode === 'template' ? <span style={{fontSize:9,marginLeft:5,padding:'1px 5px',borderRadius:4,background:'#7C3AED25',color:'#fff'}}>imposé</span> : null}
+                      </Btn>
                       {c.ai_copilot_enabled && <Btn small onClick={()=>setEditCollabForm(p=>({...p,_auditCollabId:p._auditCollabId===c.id?null:c.id,_auditData:null}))} style={{background:'#0EA5E910',color:'#0EA5E9',border:'1px solid #0EA5E925'}}>
                         <I n="activity" s={12}/> Audit IA
                       </Btn>}
@@ -4473,6 +4479,25 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
         {/* ── AI KNOWLEDGE BASE ── */}
         {tab === "knowledge-base" && company?.id && <AdminKnowledgeBaseScreen company={company} showNotif={showNotif} />}
         {tab === "pipeline-templates" && company?.id && <TemplatesSection company={company} showNotif={showNotif} />}
+        {/* V1.8.16 — Phase 3 : modal assignation template par collaborateur */}
+        {assignTemplateCollab && (
+          <AssignTemplateModal
+            isOpen={!!assignTemplateCollab}
+            onClose={() => setAssignTemplateCollab(null)}
+            collaborator={assignTemplateCollab}
+            companyId={company?.id}
+            showNotif={showNotif}
+            onSuccess={(result) => {
+              // Reflète localement le nouveau pipelineMode du collab après migration
+              if (result && Array.isArray(setCollabs ? null : null) === false) {
+                setCollabs(prev => prev.map(c => c.id === assignTemplateCollab.id
+                  ? { ...c, pipelineMode: result.targetMode || (result.templateId ? 'template' : 'free'), pipelineSnapshotId: result.snapshotId || null }
+                  : c
+                ));
+              }
+            }}
+          />
+        )}
 
         {/* ── SETTINGS ── */}
         {tab === "settings" && (
