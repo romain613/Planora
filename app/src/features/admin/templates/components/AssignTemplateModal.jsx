@@ -68,14 +68,27 @@ export default function AssignTemplateModal({
     }
   }, [companyId, showNotif]);
 
-  // Pre-flight recalcul auto à chaque changement de cible
+  // V1.8.17 — guard : un templateId est "réel" s'il pointe sur un vrai template publié.
+  // null / "" / "null" / "free" → mode libre, pas de preflight.
+  const isRealTemplateId = (id) =>
+    typeof id === "string" && id.length > 0 && id !== "null" && id !== "free";
+
+  // Pre-flight recalcul auto à chaque changement de cible — uniquement si template réel
   useEffect(() => {
     if (!isOpen || !collaborator?.id) return;
+    // V1.8.17 fix : aucun appel preflight tant qu'un template réel n'est pas sélectionné.
+    // Backend route /preflight retournait 404 sur templateId=null → erreur "Pre-flight : not found".
+    if (!isRealTemplateId(selectedTemplateId)) {
+      setLoadingPf(false);
+      setPreflight(null);
+      setFallbackStage("");
+      return;
+    }
     setLoadingPf(true);
     setPreflight(null);
     setFallbackStage("");
     const ctrlId = encodeURIComponent(collaborator.id);
-    const tid = selectedTemplateId ? encodeURIComponent(selectedTemplateId) : "null";
+    const tid = encodeURIComponent(selectedTemplateId);
     api(`/api/admin/pipeline-templates/preflight?collaboratorId=${ctrlId}&templateId=${tid}`)
       .then((r) => {
         if (r?.error) {
@@ -184,10 +197,17 @@ export default function AssignTemplateModal({
           )}
           {templates.length === 0 && !loadingList && (
             <div style={{ fontSize: 11, color: T.text3, marginTop: 5, fontStyle: "italic" }}>
-              Aucun template publié dans votre company. Créez-en un depuis l'onglet Templates Pipeline Live.
+              Aucun template publié disponible. Créez-en un depuis l'onglet Templates Pipeline Live.
             </div>
           )}
         </div>
+
+        {/* V1.8.17 — message Mode libre sélectionné (pas de preflight nécessaire) */}
+        {!loadingList && !isRealTemplateId(selectedTemplateId) && templates.length > 0 && (
+          <div style={{ padding: 10, borderRadius: 8, background: T.surface, border: `1px dashed ${T.border}`, fontSize: 12, color: T.text3, fontStyle: "italic", display: "flex", alignItems: "center", gap: 6 }}>
+            <I n="info" s={13} /> Mode libre sélectionné — aucun preflight nécessaire. Choisissez un template publié pour analyser l'impact.
+          </div>
+        )}
 
         {/* Pre-flight result */}
         {loadingPf && (
@@ -285,9 +305,11 @@ export default function AssignTemplateModal({
             disabled={
               migrating ||
               loadingPf ||
+              !isRealTemplateId(selectedTemplateId) ||
               !preflight ||
               (preflight.incompatibleCount > 0 && !fallbackStage)
             }
+            title={!isRealTemplateId(selectedTemplateId) ? "Sélectionnez un template publié pour pouvoir migrer" : undefined}
           >
             {migrating ? <><Spinner /> Migration…</> : <><I n="check" s={12} /> Confirmer et migrer</>}
           </Btn>
