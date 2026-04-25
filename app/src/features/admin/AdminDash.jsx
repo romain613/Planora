@@ -1922,7 +1922,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
             }
             // Category with sub-items
             const cat = entry;
-            const isOpen = navCatsOpen[cat.key] ?? false;
+            const isOpen = navCatsOpen[cat.key] ?? (cat.items.length === 1);
             const hasActiveChild = cat.items.some(it => it.id === tab);
             const activeCount = cat.items.length;
             return (
