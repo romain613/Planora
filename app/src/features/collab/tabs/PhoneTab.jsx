@@ -1571,7 +1571,7 @@ if (n === ph) matched.set(c.id, c);
           </div>
           {_sharedHere && <div style={{marginTop:6,display:'flex',alignItems:'center',gap:6}}>
             <span style={{fontSize:9,color:'#1E40AF',fontWeight:700,padding:'1px 6px',borderRadius:4,background:'#3B82F615'}}>Lecture seule</span>
-            <button type="button" onClick={_detach} title="Vous quittez le suivi — Romea reste owner" style={{marginLeft:'auto',fontSize:10,padding:'3px 8px',borderRadius:6,border:'1px solid #EF444440',background:'#FEF2F2',color:'#B91C1C',cursor:'pointer',fontWeight:600,fontFamily:'inherit'}}>❌ Se retirer du suivi</button>
+            <button type="button" onClick={_detach} title="Vous quittez le suivi — l'owner reste assigné au contact" style={{marginLeft:'auto',fontSize:10,padding:'3px 8px',borderRadius:6,border:'1px solid #EF444440',background:'#FEF2F2',color:'#B91C1C',cursor:'pointer',fontWeight:600,fontFamily:'inherit'}}>❌ Se retirer du suivi</button>
           </div>}
         </div>;
       })()}
