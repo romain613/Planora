@@ -425,14 +425,14 @@ const PhoneTab = () => {
       overflow:'hidden',transition:'width .25s ease',
     }}>
     {(typeof phoneLeftCollapsed!=='undefined'?phoneLeftCollapsed:null) ? (
-      /* ── COLLAPSED STRIP ── */
-      <div style={{display:'flex',flexDirection:'column',alignItems:'center',height:'100%',padding:'8px 0',gap:4}}>
-        <div onClick={togglePhoneLeftPanel} style={{width:34,height:34,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:T.bg,border:`1px solid ${T.border}`}} title="Ouvrir le panneau"><I n="chevron-right" s={15} style={{color:T.text3}}/></div>
-        <div onClick={()=>{togglePhoneLeftPanel();setPhoneDialerMinimized(false);}} style={{width:34,height:34,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#22C55E12',border:'1px solid #22C55E30'}} title="Clavier"><I n="phone" s={15} style={{color:'#22C55E'}}/></div>
-        <div onClick={togglePhoneLeftPanel} style={{width:34,height:34,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:T.bg,border:`1px solid ${T.border}`}} title="Conversations"><I n="message-circle" s={15} style={{color:T.text3}}/></div>
-        <div onClick={()=>setPhoneSubTab('contacts')} style={{width:34,height:34,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:T.bg,border:`1px solid ${T.border}`}} title="Contacts"><I n="users" s={15} style={{color:T.text3}}/></div>
+      /* ── COLLAPSED STRIP — V1.8.26.1 entièrement cliquable ── */
+      <div onClick={togglePhoneLeftPanel} style={{display:'flex',flexDirection:'column',alignItems:'center',height:'100%',padding:'8px 0',gap:4,cursor:'pointer'}} title="Ouvrir le panneau">
+        <div onClick={(e)=>{e.stopPropagation();togglePhoneLeftPanel();}} style={{width:34,height:34,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:T.bg,border:`1px solid ${T.border}`}} title="Ouvrir le panneau"><I n="chevron-right" s={15} style={{color:T.text3}}/></div>
+        <div onClick={(e)=>{e.stopPropagation();togglePhoneLeftPanel();setPhoneDialerMinimized(false);}} style={{width:34,height:34,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#22C55E12',border:'1px solid #22C55E30'}} title="Clavier"><I n="phone" s={15} style={{color:'#22C55E'}}/></div>
+        <div onClick={(e)=>{e.stopPropagation();togglePhoneLeftPanel();}} style={{width:34,height:34,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:T.bg,border:`1px solid ${T.border}`}} title="Conversations"><I n="message-circle" s={15} style={{color:T.text3}}/></div>
+        <div onClick={(e)=>{e.stopPropagation();setPhoneSubTab('contacts');togglePhoneLeftPanel();}} style={{width:34,height:34,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:T.bg,border:`1px solid ${T.border}`}} title="Contacts"><I n="users" s={15} style={{color:T.text3}}/></div>
         <div style={{flex:1}}/>
-        <div style={{fontSize:8,color:T.text3,writingMode:'vertical-rl',transform:'rotate(180deg)',letterSpacing:1,fontWeight:600}}>CONV</div>
+        <div style={{fontSize:8,color:T.text3,writingMode:'vertical-rl',transform:'rotate(180deg)',letterSpacing:1,fontWeight:600,pointerEvents:'none'}}>CONV</div>
       </div>
     ) : (
     <>
@@ -1282,15 +1282,15 @@ return <div key={ev.id} style={{fontSize:11,color:T.text3,textAlign:'center',pad
 <div style={{width:(typeof phoneRightCollapsed!=='undefined'?phoneRightCollapsed:null)?48:340,flexShrink:0,borderLeft:`1px solid ${T.border}`,display:'flex',flexDirection:'column',overflow:'hidden',background:T.surface,transition:'width .25s ease'}}>
 
   {(typeof phoneRightCollapsed!=='undefined'?phoneRightCollapsed:null) ? (
-    /* ── COLLAPSED STRIP ── */
-    <div style={{display:'flex',flexDirection:'column',alignItems:'center',height:'100%',padding:'8px 0',gap:4}}>
-      <div onClick={togglePhoneRightPanel} style={{width:34,height:34,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:T.bg,border:`1px solid ${T.border}`}} title="Ouvrir le Copilot"><I n="chevron-left" s={15} style={{color:T.text3}}/></div>
-      <div onClick={togglePhoneRightPanel} style={{position:'relative',width:34,height:34,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)?'linear-gradient(135deg,#7C3AED,#2563EB)':collab.ai_copilot_enabled?'#7C3AED12':T.bg,border:(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)?'none':`1px solid ${collab.ai_copilot_enabled?'#7C3AED30':T.border}`}} title={(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)?'Copilot LIVE':'AI Copilot'}>
+    /* ── COLLAPSED STRIP — V1.8.26.1 entièrement cliquable ── */
+    <div onClick={togglePhoneRightPanel} style={{display:'flex',flexDirection:'column',alignItems:'center',height:'100%',padding:'8px 0',gap:4,cursor:'pointer'}} title="Ouvrir le panneau">
+      <div onClick={(e)=>{e.stopPropagation();togglePhoneRightPanel();}} style={{width:34,height:34,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:T.bg,border:`1px solid ${T.border}`}} title="Ouvrir le Copilot"><I n="chevron-left" s={15} style={{color:T.text3}}/></div>
+      <div onClick={(e)=>{e.stopPropagation();togglePhoneRightPanel();}} style={{position:'relative',width:34,height:34,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)?'linear-gradient(135deg,#7C3AED,#2563EB)':collab.ai_copilot_enabled?'#7C3AED12':T.bg,border:(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)?'none':`1px solid ${collab.ai_copilot_enabled?'#7C3AED30':T.border}`}} title={(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)?'Copilot LIVE':'AI Copilot'}>
 <I n="cpu" s={15} style={{color:(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)?'#fff':collab.ai_copilot_enabled?'#7C3AED':T.text3}}/>
 {(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null) && <span style={{position:'absolute',top:2,right:2,width:7,height:7,borderRadius:4,background:'#22C55E',boxShadow:'0 0 6px #22C55E80'}}/>}
       </div>
       <div style={{flex:1}}/>
-      <div style={{fontSize:8,color:T.text3,writingMode:'vertical-rl',transform:'rotate(180deg)',letterSpacing:1,fontWeight:600}}>{(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)?'LIVE':'COPILOT'}</div>
+      <div style={{fontSize:8,color:T.text3,writingMode:'vertical-rl',transform:'rotate(180deg)',letterSpacing:1,fontWeight:600,pointerEvents:'none'}}>{(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)?'LIVE':'COPILOT'}</div>
     </div>
   ) : (
   <>

@@ -1586,22 +1586,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     return () => document.removeEventListener('mousedown', handler);
   }, [pipelineRightContact, _pipeLiveActive]);
 
-  useEffect(() => {
-    if (phoneLeftCollapsed) return; // déjà fermée
-    if (!_pipeLiveActive) return;
-    const handler = (e) => {
-      const t = e.target;
-      if (!t || typeof t.closest !== 'function') return;
-      if (t.closest('[data-pipe-left-panel]')) return;
-      if (t.closest('[data-pipe-keep]')) return;
-      if (t.closest('button, input, select, textarea, a, [role="button"]')) return;
-      if (t.closest('[role="dialog"]') || t.closest('.modal') || t.closest('[data-modal]')) return;
-      setPhoneLeftCollapsed(true);
-      try { localStorage.setItem('c360-phone-left-collapsed-' + collab.id, '1'); } catch {}
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, [phoneLeftCollapsed, _pipeLiveActive, collab?.id]);
+  // V1.8.26.1 — Auto-close sidebar gauche RETIRÉ (MH feedback) :
+  // la sidebar gauche reste contrôlée uniquement par son toggle/barrette dédiée.
+  // Le clic vide ne ferme QUE le panneau droit, jamais la sidebar gauche.
 
   // V1.8.22 Phase B — Refresh global après succès booking (contacts + bookings depuis DB)
   // V1.8.25 — Resync aussi pipelineRightContact + selectedCrmContact pour éviter désync
