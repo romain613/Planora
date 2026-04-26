@@ -3225,23 +3225,25 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                         <div style={{ fontSize:18, fontWeight:700 }}>{bookings.filter(b=>b.collaboratorId===c.id&&b.status==='confirmed'&&b.date>=new Date().toISOString().split('T')[0]).length}</div>
                         <div style={{ fontSize:10, color:T.text3 }}>RDV</div>
                       </div>
-                      <div style={{ display:"flex", gap:6 }}>
-                        <Btn small onClick={() => handleStartEditCollab(c)} style={{ background:T.accentBg, color:T.accent, border:`1px solid ${T.accentBorder}` }}>
+                      <div style={{ display:"flex", gap:6, alignItems:"center", flexShrink:0 }}>
+                        <Btn small onClick={() => handleStartEditCollab(c)} style={{ background:T.accentBg, color:T.accent, border:`1px solid ${T.accentBorder}`, flexShrink:0 }}>
                           <I n="edit-2" s={12}/> Modifier
                         </Btn>
-                        <Btn small onClick={() => setConfirmDeleteCollab(c)} style={{ background:"#FEE2E2", color:"#DC2626", border:"1px solid #FECACA" }}>
+                        <Btn small onClick={() => setConfirmDeleteCollab(c)} style={{ background:"#FEE2E2", color:"#DC2626", border:"1px solid #FECACA", flexShrink:0 }}>
                           <I n="trash-2" s={12}/>
                         </Btn>
+                        <Btn small primary onClick={() => onCollabPortal(c)} style={{ flexShrink:0 }}>
+                          <I n="eye" s={12}/> Espace collab
+                        </Btn>
+                        <Btn small onClick={() => setAssignTemplateCollab(c)} title={c.pipelineMode === 'template' ? 'Template imposé — clic pour changer' : 'Mode libre — clic pour assigner un template'} style={{background:'#7C3AED10',color:'#7C3AED',border:'1px solid #7C3AED25', flexShrink:0}}>
+                          <I n="layers" s={12}/> Pipeline
+                          {/* V1.8.20 — slot lock à largeur réservée : icône visible si template imposé, invisible (mais slot conservé) sinon */}
+                          <I n="lock" s={11} style={{ marginLeft:5, opacity: c.pipelineMode === 'template' ? 1 : 0, transition:'opacity .15s' }}/>
+                        </Btn>
+                        {c.ai_copilot_enabled && <Btn small onClick={()=>setEditCollabForm(p=>({...p,_auditCollabId:p._auditCollabId===c.id?null:c.id,_auditData:null}))} style={{background:'#0EA5E910',color:'#0EA5E9',border:'1px solid #0EA5E925', flexShrink:0}}>
+                          <I n="activity" s={12}/> Audit IA
+                        </Btn>}
                       </div>
-                      <Btn small primary onClick={() => onCollabPortal(c)}>
-                        <I n="eye" s={12}/> Espace collab
-                      </Btn>
-                      <Btn small onClick={() => setAssignTemplateCollab(c)} style={{background:'#7C3AED10',color:'#7C3AED',border:'1px solid #7C3AED25'}}>
-                        <I n="layers" s={12}/> Pipeline{c.pipelineMode === 'template' ? <span style={{fontSize:9,marginLeft:5,padding:'1px 5px',borderRadius:4,background:'#7C3AED25',color:'#fff'}}>imposé</span> : null}
-                      </Btn>
-                      {c.ai_copilot_enabled && <Btn small onClick={()=>setEditCollabForm(p=>({...p,_auditCollabId:p._auditCollabId===c.id?null:c.id,_auditData:null}))} style={{background:'#0EA5E910',color:'#0EA5E9',border:'1px solid #0EA5E925'}}>
-                        <I n="activity" s={12}/> Audit IA
-                      </Btn>}
                     </div>
                     {/* ── Behavior Audit Inline Panel ── */}
                     {(typeof editCollabForm!=='undefined'?editCollabForm:{})._auditCollabId===c.id && (()=>{
