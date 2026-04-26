@@ -1562,6 +1562,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   };
 
   // V1.8.22 Phase B — Refresh global après succès booking (contacts + bookings depuis DB)
+  // V1.8.25 — Resync aussi pipelineRightContact + selectedCrmContact pour éviter désync
+  // panneau droit après refresh (la référence locale pointait sur l'ancien objet contact).
   // Source unique = backend, pas d'état optimiste seul. Idempotent, fail-safe.
   const _scheduleGlobalRefresh = async () => {
     try {
@@ -1569,7 +1571,24 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
         api('/api/data/contacts'),
         api('/api/bookings'),
       ]);
-      if (Array.isArray(_c)) setContacts(_c);
+      if (Array.isArray(_c)) {
+        setContacts(_c);
+        // V1.8.25 — Resync les pointeurs UI critiques avec la version backend fraîche
+        if (typeof setPipelineRightContact === 'function') {
+          setPipelineRightContact(prev => {
+            if (!prev?.id) return prev;
+            const fresh = _c.find(x => x.id === prev.id);
+            return fresh || prev;
+          });
+        }
+        if (typeof setSelectedCrmContact === 'function') {
+          setSelectedCrmContact(prev => {
+            if (!prev?.id) return prev;
+            const fresh = _c.find(x => x.id === prev.id);
+            return fresh || prev;
+          });
+        }
+      }
       if (Array.isArray(_b)) setBookings(_b);
     } catch (e) {
       console.warn('[GLOBAL REFRESH] failed:', e?.message || e);
@@ -2972,10 +2991,13 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       if (activeBookings.length > 0) {
         const choice = confirm('Ce contact a ' + activeBookings.length + ' RDV programmé(s).\n\nOK = Annuler les RDV et changer de statut\nAnnuler = Changer de statut sans toucher aux RDV');
         if (choice) {
-          activeBookings.forEach(b => {
+          // V1.8.25 — Promise.all + refresh global après pour resync DB (cf. P1 V1.8.25)
+          Promise.all(activeBookings.map(b => {
             setBookings(prev => prev.map(bk => bk.id === b.id ? {...bk, status:'cancelled'} : bk));
-            api('/api/bookings/' + b.id, { method:'PUT', body:{ status:'cancelled' } });
-          });
+            return api('/api/bookings/' + b.id, { method:'PUT', body:{ status:'cancelled' } });
+          })).then(() => {
+            if (typeof _scheduleGlobalRefresh === 'function') _scheduleGlobalRefresh();
+          }).catch(() => {});
           showNotif(activeBookings.length + ' RDV annulé(s), créneaux libérés');
         }
         // Dans les deux cas, le changement de statut continue (pas de return)

@@ -68,7 +68,9 @@ function repairRdvStatusDrift() {
 }
 
 function repairNextRdvDateDrift() {
-  // Recalcul depuis bookings réels
+  // V1.8.25 — Ne UPDATE que si la valeur change réellement (sinon SQLite compte
+  // les UPDATE no-op dans changes() et le log devient trompeur — on voyait
+  // "next_rdv_date_repaired=6" à chaque boot run alors que la DB était clean).
   const r1 = db.prepare(`
     UPDATE contacts
     SET next_rdv_date = (
@@ -78,6 +80,12 @@ function repairNextRdvDateDrift() {
         AND b.date >= date('now')
     )
     WHERE next_rdv_date IS NOT NULL AND next_rdv_date != ''
+      AND COALESCE(next_rdv_date, '') != COALESCE((
+        SELECT MIN(b.date) FROM bookings b
+        WHERE b.contactId = contacts.id
+          AND b.status = 'confirmed'
+          AND b.date >= date('now')
+      ), '')
   `).run();
   // Mise à NULL pour ceux qui n'ont vraiment plus rien
   const r2 = db.prepare(`
