@@ -3235,7 +3235,14 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                         <Btn small primary onClick={() => onCollabPortal(c)} style={{ flexShrink:0 }}>
                           <I n="eye" s={12}/> Espace collab
                         </Btn>
-                        <Btn small onClick={() => setAssignTemplateCollab(c)} title={c.pipelineMode === 'template' ? 'Template imposé — clic pour changer' : 'Mode libre — clic pour assigner un template'} style={{background:'#7C3AED10',color:'#7C3AED',border:'1px solid #7C3AED25', flexShrink:0}}>
+                        <Btn small onClick={() => setAssignTemplateCollab(c)} title={c.pipelineMode === 'template' ? 'Template imposé — clic pour changer' : 'Mode libre — clic pour assigner un template'} style={{
+                          // V1.8.21 — palette dynamique : vert si template imposé, violet sinon. Largeur reste constante via le slot lock.
+                          background: c.pipelineMode === 'template' ? '#22C55E14' : '#7C3AED10',
+                          color: c.pipelineMode === 'template' ? '#15803D' : '#7C3AED',
+                          border: '1px solid ' + (c.pipelineMode === 'template' ? '#22C55E40' : '#7C3AED25'),
+                          flexShrink: 0,
+                          transition: 'background .15s, color .15s, border-color .15s',
+                        }}>
                           <I n="layers" s={12}/> Pipeline
                           {/* V1.8.20 — slot lock à largeur réservée : icône visible si template imposé, invisible (mais slot conservé) sinon */}
                           <I n="lock" s={11} style={{ marginLeft:5, opacity: c.pipelineMode === 'template' ? 1 : 0, transition:'opacity .15s' }}/>
