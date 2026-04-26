@@ -1697,6 +1697,11 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       api('/api/bookings',{method:'POST',body:bk}).then(r => {
         if(r && r.error) throw new Error(r.error);
         console.log('[BOOKING OK]', bk.id, f.date, f.time);
+        // V1.8.24.4 — Consommer directement booking + contact retournés (cf. audit §4.10).
+        // Plus de refetch séparé race-prone : le backend retourne le contact post-side-effects
+        // (autoPipelineAdvance, totalBookings, next_rdv_date) dans la réponse POST.
+        if (r?.booking?.id) setBookings(p => p.map(b => b.id === r.booking.id ? { ...b, ...r.booking } : b));
+        if (r?.contact?.id) setContacts(p => p.map(c => c.id === r.contact.id ? r.contact : c));
         // V1.8.1 — envoi confirmation email au visiteur si case cochée et email présent
         if ((f._sendConfirmation !== false) && (ct?.email || f._newEmail)) {
           const _notifBk = { ...bk, visitorEmail: ct?.email || f._newEmail || '' };
@@ -1707,10 +1712,6 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
             })
             .catch(() => showNotif("RDV créé, mais l'email de confirmation n'a pas pu être envoyé", 'warning'));
         }
-        // V3: refetch contact individuel — le backend a exécuté autoPipelineAdvance
-        api(`/api/data/contacts/${f.contactId}`).then(fresh => {
-          if (fresh?.id) { setContacts(p => p.map(c => c.id === fresh.id ? fresh : c)); }
-        }).catch(() => {});
       }).catch((err)=>{
         console.error('[BOOKING FAIL]', err);
         showNotif('Erreur création RDV : '+(err?.message||'échec serveur')+' — annulation en cours','danger');
@@ -2219,11 +2220,17 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   };
 
   // V3: updateBooking avec rollback en cas d'echec
+  // V1.8.24.4 — Consume booking + contact retournés par PUT + refresh global (audit §4.10)
   const updateBooking = (id, updates) => {
     const prev = bookings.find(b => b.id === id);
     setBookings(p => p.map(b => b.id === id ? {...b, ...updates} : b));
     api(`/api/bookings/${id}`, { method:"PUT", body:updates })
-      .then(r => { if (r?.error) throw new Error(r.error); })
+      .then(r => {
+        if (r?.error) throw new Error(r.error);
+        if (r?.booking?.id) setBookings(p => p.map(b => b.id === r.booking.id ? r.booking : b));
+        if (r?.contact?.id) setContacts(p => p.map(c => c.id === r.contact.id ? r.contact : c));
+        if (typeof _scheduleGlobalRefresh === 'function') _scheduleGlobalRefresh();
+      })
       .catch(() => { if (prev) setBookings(p => p.map(b => b.id === id ? prev : b)); showNotif('Erreur: modification RDV non sauvegardée', 'danger'); });
   };
   // V1.6 — cascade cancel booking → contact pipeline stage + next_rdv clear

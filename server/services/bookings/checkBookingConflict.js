@@ -47,9 +47,41 @@ function checkBookingConflict(db, {
     if (exStart == null) continue;
     const exEnd = exStart + (Number(existing.duration) || 30);
     if (newStart < exEnd && newEnd > exStart) {
-      return { conflict: true, existingBooking: existing };
+      return { conflict: true, existingBooking: existing, source: 'booking' };
     }
   }
+
+  // V1.8.24.2 Phase 3.1 — Étendre la défense aux events Google Calendar synchronisés.
+  // La table google_events est peuplée par cron syncEventsFromGoogle (cron/reminders.js
+  // toutes les 5min). Détecte les conflits avec les events créés directement dans GCal
+  // qui ne passent pas par l'app (vecteur double-booking documenté audit 2026-04-26 §4.1).
+  // All-day events ignorés (ne bloquent pas un créneau précis).
+  try {
+    const gcalRows = db.prepare(
+      "SELECT id, summary, startTime, endTime, allDay FROM google_events WHERE collaboratorId = ? AND startTime IS NOT NULL"
+    ).all(collaboratorId);
+
+    const dayBase = new Date(date + 'T00:00:00');
+    const newStartMs = dayBase.getTime() + newStart * 60000;
+    const newEndMs = dayBase.getTime() + newEnd * 60000;
+
+    for (const ge of gcalRows) {
+      if (ge.allDay) continue;
+      const gsMs = new Date(ge.startTime).getTime();
+      const geMs = ge.endTime ? new Date(ge.endTime).getTime() : (gsMs + 30 * 60000);
+      if (Number.isNaN(gsMs) || Number.isNaN(geMs) || geMs <= gsMs) continue;
+      if (newStartMs < geMs && newEndMs > gsMs) {
+        return {
+          conflict: true,
+          existingBooking: { id: ge.id, time: '(Google)', visitorName: ge.summary || 'Évent Google' },
+          source: 'google',
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('[CONFLICT CHECK] google_events scan skip:', e?.message || e);
+  }
+
   return { conflict: false };
 }
 

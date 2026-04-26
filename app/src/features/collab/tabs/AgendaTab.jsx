@@ -42,6 +42,21 @@ const AgendaTab = () => {
   basePreset, dayBookings, dayDate, exportICS, googleConnected, gridTheme, hours, isAvailableSlot, monthMonth, monthYear, myGoogleEvents, syncGoogle, today, todayStr, weekDates, ZOOM_LEVELS,
   } = useCollabContext();
 
+  // V1.8.24.5 — agendaFilter branché sur les 4 vues (Jour/Semaine/Mois/Liste)
+  // Source : _T.agendaFilter (state global tabState) — lu via les boutons compteur du composant.
+  // Si 'all' : comportement actuel (cancelled exclus de Jour/Semaine, mois respecte ≠cancelled).
+  // Si 'confirmed'|'pending'|'cancelled' : recalcul depuis myBookings (source non filtrée).
+  const _agFilter = _T.agendaFilter || 'all';
+  const _filteredMyBookings = _agFilter === 'all'
+    ? myBookings
+    : (myBookings || []).filter(b => b.status === _agFilter);
+  const _dayBkF = _agFilter === 'all'
+    ? dayBookings
+    : (() => { const seen = new Set(); return _filteredMyBookings.filter(b => { if(seen.has(b.id)) return false; seen.add(b.id); return b.date === dayDate; }).sort((a,b) => (a.time||'').localeCompare(b.time||'')); })();
+  const _weekBkF = _agFilter === 'all'
+    ? null
+    : _filteredMyBookings.filter(b => weekDates.includes(b.date));
+
   return (
 <div>
   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
@@ -241,7 +256,7 @@ const AgendaTab = () => {
     <div>
       <div style={{ textAlign:"center", marginBottom:12 }}>
         <div style={{ fontSize:16, fontWeight:700, color:T.accent }}>{DAYS_FR[getDow(dayDate)]} {new Date(dayDate).getDate()} {MONTHS_FR[new Date(dayDate).getMonth()]} {new Date(dayDate).getFullYear()}</div>
-        <div style={{ fontSize:12, color:T.text3, marginTop:4 }}>{dayBookings.length} RDV · {myGoogleEvents.filter(ge => ge.startTime.slice(0,10) === dayDate).length} événements Google</div>
+        <div style={{ fontSize:12, color:T.text3, marginTop:4 }}>{_dayBkF.length} RDV{_agFilter!=='all'?` (filtre: ${_agFilter})`:''} · {myGoogleEvents.filter(ge => ge.startTime.slice(0,10) === dayDate).length} événements Google</div>
       </div>
       <Card style={{ padding:0, overflow:"hidden", borderRadius:12 }}>
         <div ref={el => { if (el && isDayToday && !agendaScrolledRef.current) { agendaScrolledRef.current = true; const scrollTo = Math.max(0, (nowH - (agendaWorkHours?7:0) - 2) * agendaZoom * 2); setTimeout(() => el.scrollTop = scrollTo, 100); } }} style={{ maxHeight:600, overflowY:"auto", overflowX:"hidden" }}>
@@ -251,7 +266,7 @@ const AgendaTab = () => {
             const slotMin = parseInt(hour)*60+parseInt(minutePart);
             const slotH = agendaZoom;
             // Bookings qui COMMENCENT dans ce slot de 30min
-            const hBookings = dayBookings.filter(b => { const [bH,bM] = (b.time||'0:0').split(':').map(Number); const bMin = bH*60+(bM||0); return bMin >= slotMin && bMin < slotMin + 30; });
+            const hBookings = _dayBkF.filter(b => { const [bH,bM] = (b.time||'0:0').split(':').map(Number); const bMin = bH*60+(bM||0); return bMin >= slotMin && bMin < slotMin + 30; });
             const hGoogleEvents = getGoogleEventAt(dayDate, hour).filter(ge => { if (ge.allDay) return hour === hours[0]; const geMin = parseInt(ge.startTime.slice(11,13))*60+parseInt(ge.startTime.slice(14,16)); return geMin >= slotMin && geMin < slotMin + 30; });
             const isAvail = isAvailableSlot(dayDate, hour);
             const isFreeSlot = isAvail && hBookings.length === 0;
@@ -324,7 +339,7 @@ const AgendaTab = () => {
         {weekDates.map((ds,i) => {
           const d = new Date(ds);
           const isToday = ds === todayStr;
-          const dayBks = myBookings.filter(b => b.date === ds && b.status !== "cancelled");
+          const dayBks = (_agFilter==='all'?myBookings:_filteredMyBookings).filter(b => b.date === ds && (_agFilter==='all'?b.status !== "cancelled":true));
           const dayBkCount = dayBks.length;
           const dayTotalMin = dayBks.reduce((sum,b) => sum + (b.duration||30), 0);
           const dayTotalH = Math.floor(dayTotalMin/60);
@@ -437,7 +452,7 @@ const AgendaTab = () => {
             if (!ds) return <div key={"e"+i} style={{ minHeight:80, borderBottom:`1px solid ${T.border}08`, borderRight:`1px solid ${T.border}08` }}/>;
             const d = new Date(ds);
             const isToday = ds === todayStr;
-            const dayBk = myBookings.filter(b => b.date === ds && b.status !== "cancelled");
+            const dayBk = (_agFilter==='all'?myBookings:_filteredMyBookings).filter(b => b.date === ds && (_agFilter==='all'?b.status !== "cancelled":true));
             const dayGe = myGoogleEvents.filter(ge => { if (ge.allDay) return ds >= ge.startTime.slice(0,10) && ds < ge.endTime.slice(0,10); return ge.startTime.slice(0,10) === ds; });
             const totalItems = dayBk.length + dayGe.length;
             return (
@@ -807,7 +822,14 @@ const AgendaTab = () => {
 
   {/* ── MES RENDEZ-VOUS (liste intégrée) ── */}
   {(()=>{
-    const filteredBookings = (typeof mrStatusFilter!=='undefined'?mrStatusFilter:null) === 'all' ? myBookings : myBookings.filter(b => b.status === (typeof mrStatusFilter!=='undefined'?mrStatusFilter:null));
+    // V1.8.24.5 — Liste view : intersection mrStatusFilter (filtre interne stat) ET _agFilter (filtre agenda global)
+    const _mrFilter = (typeof mrStatusFilter!=='undefined'?mrStatusFilter:null);
+    const filteredBookings = (() => {
+      let base = myBookings;
+      if (_agFilter !== 'all') base = base.filter(b => b.status === _agFilter);
+      if (_mrFilter && _mrFilter !== 'all') base = base.filter(b => b.status === _mrFilter);
+      return base;
+    })();
     return <div style={{ marginTop:24 }}>
     <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
       <h2 style={{ fontSize:16, fontWeight:700, color:T.text, display:'flex', alignItems:'center', gap:8 }}>
