@@ -1470,6 +1470,32 @@ if (n === ph) matched.set(c.id, c);
 ))}
       </div>
 
+      {/* V1.9 UX — MiniCopilotLiveStatus sticky : reste visible dans tous les tabs pendant un appel actif (évite doublon dans 'ia' qui a déjà le bloc détaillé) */}
+      {(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null) && phoneRightTab !== 'ia' && (
+        <div style={{padding:'6px 10px',borderBottom:'1px solid '+T.border,background:'linear-gradient(135deg,#F9731608,#F59E0B04)',flexShrink:0}}>
+          {/* Suggestion IA (lit phraseToSay || nextSuggestion || suggestion backend GPT) */}
+          {((typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.phraseToSay || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.nextSuggestion || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.suggestion) ? (
+            <div style={{marginBottom:5}}>
+              <div style={{fontSize:7,fontWeight:800,color:'#22C55E',marginBottom:2,textTransform:'uppercase',letterSpacing:0.4}}>💬 Suggestion IA</div>
+              <div style={{fontSize:10,fontWeight:600,color:T.text,lineHeight:1.35,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>"{(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.phraseToSay || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.nextSuggestion || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.suggestion}"</div>
+            </div>
+          ) : (
+            <div style={{fontSize:8,color:T.text3,fontStyle:'italic',textAlign:'center',marginBottom:5}}>🤖 L'IA analyse l'appel…</div>
+          )}
+          {/* Voice activity compact Vous/Client (1 row) */}
+          <div style={{display:'flex',gap:4}}>
+            <div style={{flex:1,padding:'3px 6px',borderRadius:6,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent+'12':T.bg,border:'1px solid '+((typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent+'40':T.border+'50'),transition:'all .3s',display:'flex',alignItems:'center',gap:4}}>
+              <div style={{width:5,height:5,borderRadius:3,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent:'#D1D5DB',transition:'all .3s',boxShadow:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?'0 0 6px '+T.accent+'60':'none'}}/>
+              <span style={{fontSize:7,fontWeight:700,color:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent:T.text3}}>{(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?'Vous parlez…':'Vous'}</span>
+            </div>
+            <div style={{flex:1,padding:'3px 6px',borderRadius:6,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'#22C55E12':T.bg,border:'1px solid '+((typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'#22C55E40':T.border+'50'),transition:'all .3s',display:'flex',alignItems:'center',gap:4}}>
+              <div style={{width:5,height:5,borderRadius:3,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'#22C55E':'#D1D5DB',transition:'all .3s',boxShadow:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'0 0 6px #22C55E60':'none'}}/>
+              <span style={{fontSize:7,fontWeight:700,color:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'#22C55E':T.text3}}>{(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'Client parle…':'Client'}</span>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Tab content */}
       <div style={{flex:1,overflow:'auto',padding:'8px 10px'}}>
 
@@ -2208,7 +2234,12 @@ return(
                 <div key={i} style={{flex:1,borderRadius:1,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent:'#E5E7EB',height:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?(h*16)+'px':'3px',transition:'height .15s ease',opacity:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?0.6+Math.random()*0.4:0.3,animation:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?`pulse ${0.3+i*0.1}s ease infinite alternate`:'none'}}/>
               ))}
             </div>
-            {(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).meText && <div style={{fontSize:8,color:T.accent,marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',opacity:0.7,fontStyle:'italic'}}>{(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).meText.slice(0,40)}...</div>}
+            {/* V1.9 UX — Toujours afficher état lisible (texte interim si dispo, sinon état explicite) */}
+            <div style={{fontSize:8,marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',opacity:0.7,fontStyle:'italic',color:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).meText?T.accent:T.text3}}>
+              {(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).meText
+                ? (typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).meText.slice(0,40)+'...'
+                : ((typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me ? 'Vous avez parlé récemment' : 'En écoute...')}
+            </div>
           </div>
           {/* Contact */}
           <div style={{flex:1,padding:'6px 8px',borderRadius:8,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'linear-gradient(135deg,#22C55E15,#22C55E08)':T.bg,border:'1px solid '+((typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'#22C55E40':T.border),transition:'all .3s'}}>
@@ -2221,10 +2252,24 @@ return(
                 <div key={i} style={{flex:1,borderRadius:1,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'#22C55E':'#E5E7EB',height:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?(h*16)+'px':'3px',transition:'height .15s ease',opacity:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?0.6+Math.random()*0.4:0.3,animation:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?`pulse ${0.3+i*0.1}s ease infinite alternate`:'none'}}/>
               ))}
             </div>
-            {(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contactText && <div style={{fontSize:8,color:'#22C55E',marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',opacity:0.7,fontStyle:'italic'}}>{(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contactText.slice(0,40)}...</div>}
+            {/* V1.9 UX — Toujours afficher état lisible (texte interim si dispo, sinon état explicite) */}
+            <div style={{fontSize:8,marginTop:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',opacity:0.7,fontStyle:'italic',color:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contactText?'#22C55E':T.text3}}>
+              {(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contactText
+                ? (typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contactText.slice(0,40)+'...'
+                : ((typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact ? 'Client a parlé récemment' : 'En écoute...')}
+            </div>
           </div>
         </div>
       )}
+    </div>
+  )}
+
+  {/* V1.9 UX — Fallback empty state (toujours visible pendant appel actif si 0 suggestion pending) */}
+  {(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null) && (typeof phoneLiveSuggestions!=='undefined'?phoneLiveSuggestions:{}).filter(s=>s.status==='pending').length === 0 && (
+    <div style={{marginTop:10,padding:'8px 10px',borderRadius:8,background:T.bg,border:'1px dashed '+T.border,display:'flex',alignItems:'center',gap:6}}>
+      <I n="zap" s={11} style={{color:T.text3}}/>
+      <span style={{fontSize:10,fontWeight:700,color:T.text2}}>Suggestions IA</span>
+      <span style={{fontSize:9,color:T.text3,fontStyle:'italic',marginLeft:'auto'}}>Aucune suggestion pour le moment — l'IA continue d'analyser…</span>
     </div>
   )}
 
@@ -2831,14 +2876,16 @@ return <div style={{flex:1,overflowY:'auto',padding:10}}>
       <div style={{maxHeight:(typeof iaHubCollapse!=='undefined'?iaHubCollapse:{})._coachingOpen===false?0:'1000px',overflow:'hidden',transition:'max-height .3s ease'}}>
       <div style={{padding:'8px 10px',display:'flex',flexDirection:'column',gap:6}}>
         {/* Phrase à dire — LA PLUS GROSSE */}
-        {((typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.phraseToSay || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.nextSuggestion) ? (
+        {/* V1.9 UX FIX — backend GPT pousse analysis.suggestion (et non phraseToSay/nextSuggestion). Lire les 3 champs. */}
+        {((typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.phraseToSay || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.nextSuggestion || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.suggestion) ? (
           <div style={{padding:'10px 12px',borderRadius:8,background:'linear-gradient(135deg,#22C55E10,#22C55E06)',border:'1.5px solid #22C55E35',position:'relative'}}>
-            <div style={{fontSize:8,fontWeight:800,color:'#22C55E',marginBottom:4,textTransform:'uppercase',letterSpacing:0.5}}>💬 Dites maintenant</div>
-            <div style={{fontSize:13,fontWeight:700,color:T.text,lineHeight:1.5}}>"{(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.phraseToSay || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.nextSuggestion}"</div>
+            <div style={{fontSize:8,fontWeight:800,color:'#22C55E',marginBottom:4,textTransform:'uppercase',letterSpacing:0.5}}>💬 Suggestion IA</div>
+            <div style={{fontSize:13,fontWeight:700,color:T.text,lineHeight:1.5}}>"{(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.phraseToSay || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.nextSuggestion || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.suggestion}"</div>
+            {(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.step && <div style={{fontSize:8,color:T.text3,marginTop:3,fontStyle:'italic'}}>Étape : {phoneLiveAnalysis.step}</div>}
           </div>
         ) : (
           <div style={{padding:'8px 10px',borderRadius:8,background:T.bg,border:'1px dashed '+T.border,textAlign:'center'}}>
-            <div style={{fontSize:9,color:T.text3}}>Analyse en cours... les suggestions arrivent après 10s</div>
+            <div style={{fontSize:9,color:T.text3}}>🤖 L'IA analyse l'appel… les suggestions arrivent dans quelques secondes</div>
           </div>
         )}
         {/* Question ouverte */}
@@ -2881,19 +2928,33 @@ return <div style={{flex:1,overflowY:'auto',padding:10}}>
       <div style={{display:'flex',gap:4,padding:'4px 8px',borderBottom:'1px solid '+T.border+'50'}}>
         <div style={{flex:1,padding:'4px 6px',borderRadius:6,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent+'12':T.bg,border:'1px solid '+((typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent+'40':T.border+'50'),transition:'all .3s',display:'flex',alignItems:'center',gap:4}}>
           <div style={{width:5,height:5,borderRadius:3,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent:'#D1D5DB',transition:'all .3s',boxShadow:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?'0 0 6px '+T.accent+'60':'none'}}/>
-          <span style={{fontSize:7,fontWeight:700,color:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent:T.text3}}>Vous</span>
+          <span style={{fontSize:7,fontWeight:700,color:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent:T.text3}}>{(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?'Vous parlez…':'Vous (en écoute)'}</span>
           <div style={{display:'flex',gap:1,flex:1,alignItems:'center',height:12}}>
             {[0,1,2,3].map(i=><div key={i} style={{flex:1,borderRadius:1,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent:'#E5E7EB',height:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?(3+Math.random()*9)+'px':'3px',transition:'height .15s ease',opacity:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?0.5+Math.random()*0.5:0.3}}/>)}
           </div>
         </div>
         <div style={{flex:1,padding:'4px 6px',borderRadius:6,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'#22C55E12':T.bg,border:'1px solid '+((typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'#22C55E40':T.border+'50'),transition:'all .3s',display:'flex',alignItems:'center',gap:4}}>
           <div style={{width:5,height:5,borderRadius:3,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'#22C55E':'#D1D5DB',transition:'all .3s',boxShadow:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'0 0 6px #22C55E60':'none'}}/>
-          <span style={{fontSize:7,fontWeight:700,color:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'#22C55E':T.text3}}>Contact</span>
+          <span style={{fontSize:7,fontWeight:700,color:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'#22C55E':T.text3}}>{(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'Client parle…':'Client (en écoute)'}</span>
           <div style={{display:'flex',gap:1,flex:1,alignItems:'center',height:12}}>
             {[0,1,2,3].map(i=><div key={i} style={{flex:1,borderRadius:1,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'#22C55E':'#E5E7EB',height:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?(3+Math.random()*9)+'px':'3px',transition:'height .15s ease',opacity:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?0.5+Math.random()*0.5:0.3}}/>)}
           </div>
         </div>
       </div>
+      {/* V1.9 UX — Mini bloc Coaching IA dans panel droit (avant transcription) — lit analysis.suggestion */}
+      {(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null) && (
+        <div style={{padding:'5px 8px',borderBottom:'1px solid '+T.border+'50',background:'linear-gradient(135deg,#F9731606,#F59E0B03)'}}>
+          {((typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.phraseToSay || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.nextSuggestion || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.suggestion) ? (
+            <div>
+              <div style={{fontSize:7,fontWeight:800,color:'#22C55E',marginBottom:2,textTransform:'uppercase',letterSpacing:0.4}}>💬 Suggestion IA</div>
+              <div style={{fontSize:10,fontWeight:600,color:T.text,lineHeight:1.35}}>"{(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.phraseToSay || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.nextSuggestion || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.suggestion}"</div>
+              {(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.step && <div style={{fontSize:7,color:T.text3,marginTop:2,fontStyle:'italic'}}>Étape : {phoneLiveAnalysis.step}</div>}
+            </div>
+          ) : (
+            <div style={{fontSize:8,color:T.text3,fontStyle:'italic',textAlign:'center'}}>🤖 L'IA analyse l'appel…</div>
+          )}
+        </div>
+      )}
       <div style={{maxHeight:(typeof iaHubCollapse!=='undefined'?iaHubCollapse:{})._transcriptExpanded?500:150,overflow:'auto',padding:6,display:'flex',flexDirection:'column',gap:3,transition:'max-height .3s ease'}} ref={el=>{if(el&&!(typeof iaHubCollapse!=='undefined'?iaHubCollapse:{})._transcriptExpanded)el.scrollTop=el.scrollHeight;}}>
         {(typeof phoneLiveTranscript!=='undefined'?phoneLiveTranscript:{}).length===0 && <div style={{textAlign:'center',padding:12,color:T.text3,fontSize:9}}>En attente...</div>}
         {(typeof phoneLiveTranscript!=='undefined'?phoneLiveTranscript:{}).map((t,i)=>(
@@ -2908,6 +2969,14 @@ return <div style={{flex:1,overflowY:'auto',padding:10}}>
       </div>
     </div>
     {/* Coaching statique supprimé — remplacé par coaching commercial LIVE ci-dessus */}
+    {/* V1.9 UX — Fallback mini panel : empty state suggestions */}
+    {(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null) && (typeof phoneLiveSuggestions!=='undefined'?phoneLiveSuggestions:{}).filter(s=>s.status==='pending').length === 0 && (
+      <div style={{marginTop:6,padding:'5px 8px',borderRadius:8,background:T.bg,border:'1px dashed '+T.border,display:'flex',alignItems:'center',gap:5}}>
+        <I n="zap" s={10} style={{color:T.text3}}/>
+        <span style={{fontSize:9,fontWeight:700,color:T.text2}}>Suggestions IA</span>
+        <span style={{fontSize:8,color:T.text3,fontStyle:'italic',marginLeft:'auto'}}>Aucune pour le moment…</span>
+      </div>
+    )}
     {/* Live suggestions from keyword detection — full display */}
     {(typeof phoneLiveSuggestions!=='undefined'?phoneLiveSuggestions:{}).filter(s=>s.status==='pending').length > 0 && (
       <div style={{marginTop:6}}>

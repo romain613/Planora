@@ -869,9 +869,11 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                 const seg = JSON.parse(e.data);
                 const spk = seg.speaker === 'collab' ? 'me' : 'contact';
                 setPhoneLiveTranscript(prev => [...prev, { speaker: spk, text: seg.text }]);
-                // Flash voice activity on final transcript
-                setPhoneLiveVoiceActivity(prev => ({ ...prev, [spk]: true, [spk+'Text']: '' }));
-                setTimeout(() => setPhoneLiveVoiceActivity(prev => ({ ...prev, [spk]: false })), 800);
+                // V1.9 UX — Persistance voiceActivity : 3000ms (au lieu de 800ms) pour visibilité.
+                // Reset cumulé via window['_vaTimeout_'+spk] pour éviter empilage de timers.
+                setPhoneLiveVoiceActivity(prev => ({ ...prev, [spk]: true, [spk+'Text']: seg.text || prev[spk+'Text'] || '' }));
+                clearTimeout(window['_vaTimeout_'+spk]);
+                window['_vaTimeout_'+spk] = setTimeout(() => setPhoneLiveVoiceActivity(prev => ({ ...prev, [spk]: false })), 3000);
                 // ── V1.5: MOTEUR DE DÉTECTION GÉNÉRIQUE ──
                 const _now = Date.now();
                 const txt = (seg.text || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
