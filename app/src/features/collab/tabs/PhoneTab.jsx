@@ -134,6 +134,9 @@ const PhoneTab = () => {
   // V1.8.22.3 — Toggle visibilité ID contact dans footer panneau droit
   const [showContactId, setShowContactId] = useState(false);
 
+  // V1.8.27 — Recording = setting company-wide (admin only). Toggles grisés pour members.
+  const _isAdminPhone = collab?.role === 'admin' || collab?.role === 'supra' || isAdminView;
+
   return (
     <>
 <div style={{display:'flex',flexDirection:'column',margin:'-24px -28px',height:'calc(100vh - 0px)',background:T.bg,overflow:'hidden'}}>
@@ -5914,7 +5917,7 @@ return (
     <div style={{display:'flex',alignItems:'center',gap:10}}>
       <span style={{fontSize:13,fontWeight:600,color:T.text2}}>{recArr.length} enregistrement{recArr.length>1?'s':''}</span>
     </div>
-    <div onClick={togglePhoneRecording} style={{padding:'8px 14px',borderRadius:10,cursor:'pointer',fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:6,background:(typeof phoneRecordingEnabled!=='undefined'?phoneRecordingEnabled:null)?'#EF444410':'transparent',border:`1px solid ${phoneRecordingEnabled?'#EF444430':T.border}`,color:(typeof phoneRecordingEnabled!=='undefined'?phoneRecordingEnabled:null)?'#EF4444':T.text3}}>
+    <div onClick={_isAdminPhone ? togglePhoneRecording : undefined} title={_isAdminPhone ? '' : "Réservé à l'administrateur"} style={{padding:'8px 14px',borderRadius:10,cursor:_isAdminPhone?'pointer':'not-allowed',opacity:_isAdminPhone?1:0.5,fontSize:12,fontWeight:600,display:'flex',alignItems:'center',gap:6,background:(typeof phoneRecordingEnabled!=='undefined'?phoneRecordingEnabled:null)?'#EF444410':'transparent',border:`1px solid ${phoneRecordingEnabled?'#EF444430':T.border}`,color:(typeof phoneRecordingEnabled!=='undefined'?phoneRecordingEnabled:null)?'#EF4444':T.text3}}>
       <div style={{width:8,height:8,borderRadius:4,background:(typeof phoneRecordingEnabled!=='undefined'?phoneRecordingEnabled:null)?'#EF4444':T.border2,animation:(typeof phoneRecordingEnabled!=='undefined'?phoneRecordingEnabled:null)?'pulse 1.5s infinite':'none'}}/>
       Enregistrement auto {(typeof phoneRecordingEnabled!=='undefined'?phoneRecordingEnabled:null)?'ON':'OFF'}
     </div>
@@ -6999,7 +7002,7 @@ return (
         <I n="mic" s={18} style={{color:(typeof phoneRecordingEnabled!=='undefined'?phoneRecordingEnabled:null)?'#EF4444':T.text3}}/>
         <span style={{fontWeight:700,fontSize:14}}>Enregistrement auto</span>
       </div>
-      <div onClick={()=>{const v=!phoneRecordingEnabled;(typeof setPhoneRecordingEnabled==='function'?setPhoneRecordingEnabled:function(){})(v);try{localStorage.setItem('c360-phone-record-'+collab.id,v?"1":"0")}catch(e){}}} style={{width:44,height:24,borderRadius:12,background:phoneRecordingEnabled?'#EF4444':'#CBD5E1',cursor:'pointer',position:'relative',transition:'all .3s'}}>
+      <div onClick={_isAdminPhone ? (()=>{const v=!phoneRecordingEnabled;(typeof setPhoneRecordingEnabled==='function'?setPhoneRecordingEnabled:function(){})(v);try{localStorage.setItem('c360-phone-record-'+collab.id,v?"1":"0")}catch(e){}}) : (()=>showNotif("Réservé à l'administrateur","danger"))} title={_isAdminPhone ? '' : "Réservé à l'administrateur"} style={{width:44,height:24,borderRadius:12,background:phoneRecordingEnabled?'#EF4444':'#CBD5E1',cursor:_isAdminPhone?'pointer':'not-allowed',opacity:_isAdminPhone?1:0.5,position:'relative',transition:'all .3s'}}>
         <div style={{width:20,height:20,borderRadius:10,background:'#fff',position:'absolute',top:2,left:(typeof phoneRecordingEnabled!=='undefined'?phoneRecordingEnabled:null)?22:2,transition:'all .3s',boxShadow:'0 1px 3px rgba(0,0,0,.2)'}}/>
       </div>
     </div>

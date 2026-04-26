@@ -411,6 +411,13 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const [phoneCalMonth, setPhoneCalMonth] = useState(()=>{ const d=new Date(); return {y:d.getFullYear(),m:d.getMonth()}; });
 
   const togglePhoneRecording = () => {
+    // V1.8.27 — recordingEnabled est un setting company-wide (voip_settings keyed by companyId).
+    // Backend route PUT /api/voip/settings exige requireAdmin → fix 403 silencieux pour members.
+    const _isAdmin = collab?.role === 'admin' || collab?.role === 'supra' || isAdminView;
+    if (!_isAdmin) {
+      showNotif("Réservé à l'administrateur", "danger");
+      return;
+    }
     const next = !phoneRecordingEnabled;
     setPhoneRecordingEnabled(next);
     localStorage.setItem("c360-phone-record-"+collab.id, next?"1":"0");
