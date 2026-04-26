@@ -1339,6 +1339,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const [phoneScheduledCalls, setPhoneScheduledCalls] = useState(() => { try { return JSON.parse(localStorage.getItem("c360-phone-scheduled-"+collab.id)||"[]"); } catch { return []; } });
   const [phoneShowScheduleModal, setPhoneShowScheduleModal] = useState(false);
   const [phoneScheduleForm, setPhoneScheduleForm] = useState({contactId:'',number:'',date:'',time:'',notes:'',collaboratorId:collab.id});
+  // V1.8.22 Phase B — Modal de résolution de doublons (single/conflict/multi + multi-collab)
+  const [duplicateResolverData, setDuplicateResolverData] = useState(null);
   // V1.8.2 — collab cible du RDV (default = moi). Si != moi, on filtre l'agenda et on prend les dispos de l'autre.
   const _scheduleTargetCollabId = (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).collaboratorId || collab.id;
   const _scheduleTargetCollab = (collabs||[]).find(c => c.id === _scheduleTargetCollabId) || collab;
@@ -1559,8 +1561,42 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     setPhoneDispositions(prev => { const n={...prev,[callId]:code}; localStorage.setItem("c360-phone-dispositions-"+collab.id,JSON.stringify(n)); return n; });
   };
 
+  // V1.8.22 Phase B — Refresh global après succès booking (contacts + bookings depuis DB)
+  // Source unique = backend, pas d'état optimiste seul. Idempotent, fail-safe.
+  const _scheduleGlobalRefresh = async () => {
+    try {
+      const [_c, _b] = await Promise.all([
+        api('/api/data/contacts'),
+        api('/api/bookings'),
+      ]);
+      if (Array.isArray(_c)) setContacts(_c);
+      if (Array.isArray(_b)) setBookings(_b);
+    } catch (e) {
+      console.warn('[GLOBAL REFRESH] failed:', e?.message || e);
+    }
+  };
+
   const addScheduledCall = () => {
     if(!phoneScheduleForm.number&&!phoneScheduleForm.contactId) return false;
+
+    // V1.8.22.1 — Garde-fou anti-temp-ID : refuser tout contactId qui ne matche pas
+    // le pattern backend `ct_<ts>_<random>`. Empêche définitivement les bookings
+    // orphelins liés à un ID frontend temporaire (race condition historique).
+    if (phoneScheduleForm.contactId) {
+      const _id = phoneScheduleForm.contactId;
+      const _isBackendId = /^ct_\d+_[a-z0-9]+$/i.test(_id);
+      const _isLegacyId = /^c\d{10,}$/i.test(_id) || /^ct\d{10,}/.test(_id);
+      // Backend pattern OK. Legacy patterns (anciens contacts) acceptés s'ils existent en state.
+      if (!_isBackendId && _isLegacyId) {
+        const _exists = (contacts||[]).some(c => c.id === _id);
+        if (!_exists) {
+          console.error('[BOOKING GUARD] contactId temp ou inconnu — refus création RDV:', _id);
+          showNotif('Contact non synchronisé avec la base — fermez puis rouvrez la modal', 'danger');
+          setPhoneScheduleForm(p=>({...p,_submitting:false,_error:'Contact non synchronisé — réessayez'}));
+          return false;
+        }
+      }
+    }
 
     // Mode booking : creer un vrai RDV + deplacer en rdv_programme
     if(phoneScheduleForm._bookingMode) {
@@ -5809,17 +5845,66 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                   if(!f.date || !f.time) { setErr('Choisissez date et heure'); return; }
                   setPhoneScheduleForm(p=>({...p,_submitting:true,_error:''}));
                   try {
-                    const newContactId = 'ct'+Date.now()+Math.random().toString(36).slice(2,6);
                     const newName = (f._newFirstName+' '+f._newLastName).trim();
-                    const newContact = {id:newContactId, name:newName, firstName:f._newFirstName, lastName:f._newLastName, email:f._newEmail||'', phone:f.number||'', address:f._newAddress||'', companyId:company.id, pipeline_stage:'nouveau', assignedTo:collab.id};
-                    await api('/api/data/contacts', {method:'POST', body:newContact});
-                    setContacts(p=>[...p, {...newContact, tags:[], notes:'', totalBookings:0, rating:0, createdAt:new Date().toISOString()}]);
-                    setPhoneScheduleForm(p=>({...p, contactId:newContactId, contactName:newName}));
+                    const _emailFirst = (f._newEmail||'').trim();
+                    const _phoneFirst = (f.number||'').trim();
+
+                    // V1.8.22 Phase B — Pré-check doublon (sauf si user a déjà choisi via résolveur)
+                    if (!f._skipDuplicateCheck) {
+                      const checkRes = await api('/api/data/contacts/check-duplicate-single', {
+                        method:'POST',
+                        body:{ email:_emailFirst, phone:_phoneFirst }
+                      });
+                      if (checkRes && checkRes.exists) {
+                        setDuplicateResolverData({
+                          matches: checkRes.matches || [],
+                          conflict: !!checkRes.conflict,
+                          pendingNewContact: {
+                            firstName: f._newFirstName, lastName: f._newLastName,
+                            email: _emailFirst, phone: _phoneFirst,
+                            address: f._newAddress||'', name: newName,
+                          },
+                        });
+                        setPhoneScheduleForm(p=>({...p,_submitting:false}));
+                        return;
+                      }
+                    }
+
+                    // V1.8.22 Phase B — Créer le contact + récupérer ID backend RÉEL
+                    // V1.8.22.1 — Tag provenance agenda (source/origin) pour traçabilité CRM/Pipeline
+                    // V1.8.22.2 — Casing DB lowercase: firstname/lastname (était camelCase = ignoré par backend)
+                    const newContactBody = {
+                      name: newName,
+                      firstname: f._newFirstName, lastname: f._newLastName,
+                      email: _emailFirst, phone: _phoneFirst,
+                      address: f._newAddress||'',
+                      companyId: company.id,
+                      pipeline_stage: 'nouveau',
+                      assignedTo: collab.id,
+                      source: 'agenda',
+                      _origin: 'agenda_rdv_creation',
+                    };
+                    const createRes = await api('/api/data/contacts', { method:'POST', body:newContactBody });
+                    if (!createRes || createRes.error) {
+                      setErr('Erreur création contact : ' + (createRes?.error || 'inconnue'));
+                      setPhoneScheduleForm(p=>({...p,_submitting:false}));
+                      return;
+                    }
+                    // _duplicate:true géré silencieusement — l'id retourné est l'existant
+                    const realContactId = createRes.id;
+
+                    setContacts(p => {
+                      if (p.some(c => c.id === realContactId)) return p;
+                      return [...p, { id: realContactId, ...newContactBody, tags:[], notes:'', totalBookings:0, rating:0, createdAt:new Date().toISOString() }];
+                    });
+                    setPhoneScheduleForm(p=>({...p, contactId:realContactId, contactName:newName, _skipDuplicateCheck:false}));
                     setTimeout(()=>{
-                      (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).contactId = newContactId;
+                      // Pattern setTimeout préservé (intouchabilité addScheduledCall) — mais avec ID backend RÉEL
+                      (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).contactId = realContactId;
                       (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).contactName = newName;
                       const result = addScheduledCall();
                       if(!result) setPhoneScheduleForm(p=>({...p,_submitting:false}));
+                      else _scheduleGlobalRefresh();
                     }, 50);
                   } catch(err) {
                     setErr('Erreur création contact : '+(err.message||''));
@@ -5882,6 +5967,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                   setPhoneScheduleForm(p=>({...p,_submitting:true,_error:''}));
                   const result = addScheduledCall();
                   if(!result) setPhoneScheduleForm(p=>({...p,_submitting:false}));
+                  else _scheduleGlobalRefresh(); // V1.8.22 Phase B — refresh global après succès booking (path contact existant)
                 } else {
                   setErr('Remplissez tous les champs requis');
                 }
@@ -5889,6 +5975,157 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
             </div>
           </div>
         </div>
+        );
+      })()}
+
+      {/* V1.8.22 Phase B — DUPLICATE RESOLVER MODAL ──────────────────────────
+          Ouverte quand check-duplicate-single retourne exists=true.
+          3 modes selon shape (single/conflict/multi) + cas multi-collab orthogonal.
+          Actions :
+            - Utiliser existant (re-injecte contactId dans phoneScheduleForm + relance addScheduledCall)
+            - Utiliser + me partager (PUT /share avant booking — préserve assignedTo)
+            - Créer nouveau (bypass check via _skipDuplicateCheck)
+            - Annuler (ferme tout, conserve modal RDV ouverte)
+      */}
+      {duplicateResolverData && (()=>{
+        const { matches = [], conflict = false, pendingNewContact = {} } = duplicateResolverData;
+        const _close = () => setDuplicateResolverData(null);
+        const _setSubmitting = (v) => setPhoneScheduleForm(p=>({...p,_submitting:!!v}));
+
+        // Lance addScheduledCall avec un contactId existant (utilisé par "Utiliser" et "Utiliser+partager")
+        const _useContactAndBook = (contactId, contactName) => {
+          setPhoneScheduleForm(p=>({...p, contactId, contactName: contactName||p.contactName||'', _skipDuplicateCheck:false}));
+          _close();
+          setTimeout(()=>{
+            (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).contactId = contactId;
+            (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).contactName = contactName||'';
+            const result = addScheduledCall();
+            if (!result) _setSubmitting(false);
+            else _scheduleGlobalRefresh();
+          }, 50);
+        };
+
+        // Partage le contact avec le collab courant PUIS book
+        const _shareAndBook = async (contactId, contactName) => {
+          _setSubmitting(true);
+          try {
+            const r = await api(`/api/data/contacts/${contactId}/share`, {
+              method:'PUT',
+              body:{ collaboratorId: collab.id, mode:'add' }
+            });
+            if (!r || r.error) {
+              showNotif('Impossible de partager le contact : ' + (r?.error || 'erreur'), 'danger');
+              _setSubmitting(false);
+              return;
+            }
+            showNotif('Contact partagé avec vous', 'success');
+          } catch (e) {
+            showNotif('Erreur lors du partage', 'danger');
+            _setSubmitting(false);
+            return;
+          }
+          _useContactAndBook(contactId, contactName);
+        };
+
+        // Bypass check : crée le contact malgré le doublon (cas "créer nouveau")
+        const _forceCreateAndBook = () => {
+          setPhoneScheduleForm(p=>({...p, _skipDuplicateCheck:true}));
+          _close();
+          // Relance le submit après que le state ait été appliqué (le user reclique "Programmer")
+          showNotif('Cliquez à nouveau sur "Programmer" pour créer un nouveau contact', 'info');
+          _setSubmitting(false);
+        };
+
+        // Détecte si le contact match appartient à un autre collab et n'est pas partagé
+        const _isOtherCollab = (m) => {
+          if (!m.assignedTo) return false;
+          if (m.assignedTo === collab.id) return false;
+          const sw = Array.isArray(m.sharedWith) ? m.sharedWith : [];
+          if (sw.includes(collab.id)) return false;
+          return true;
+        };
+
+        // Action principale par match : selon ownership
+        const _renderMatchActions = (m) => {
+          const otherCollab = _isOtherCollab(m);
+          if (otherCollab) {
+            return (
+              <div style={{display:'flex',flexDirection:'column',gap:6,marginTop:8}}>
+                <div style={{fontSize:12,color:'#7C3AED',fontWeight:600,padding:'6px 10px',background:'#7C3AED10',borderRadius:8,display:'flex',alignItems:'center',gap:6}}>
+                  <span>👥</span> Ce contact est actuellement suivi par <b>{m.assignedName || m.assignedTo}</b>
+                </div>
+                <div style={{display:'flex',gap:6,flexWrap:'wrap'}}>
+                  <Btn small primary onClick={()=>_shareAndBook(m.id, m.name)}>Utiliser + me partager</Btn>
+                  <Btn small onClick={_forceCreateAndBook}>Dupliquer</Btn>
+                </div>
+              </div>
+            );
+          }
+          return (
+            <div style={{display:'flex',gap:6,marginTop:8,flexWrap:'wrap'}}>
+              <Btn small primary onClick={()=>_useContactAndBook(m.id, m.name)}>Utiliser ce contact</Btn>
+            </div>
+          );
+        };
+
+        const _matchedByLabel = (m) => m.matchedBy === 'email' ? '📧 Email' : m.matchedBy === 'phone' ? '📞 Téléphone' : '';
+
+        return (
+          <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.55)',backdropFilter:'blur(4px)',zIndex:10000,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={_close}>
+            <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:20,padding:24,maxWidth:520,width:'92%',boxShadow:'0 25px 50px rgba(0,0,0,0.25)',maxHeight:'88vh',overflowY:'auto'}}>
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:14}}>
+                <div style={{width:40,height:40,borderRadius:12,background:conflict?'linear-gradient(135deg,#F59E0B,#D97706)':'linear-gradient(135deg,#3B82F6,#2563EB)',display:'flex',alignItems:'center',justifyContent:'center',fontSize:20}}>
+                  {conflict ? '⚠️' : '👥'}
+                </div>
+                <div style={{flex:1}}>
+                  <h3 style={{fontSize:16,fontWeight:700,margin:0,color:'#111'}}>
+                    {conflict ? 'Conflit détecté' : (matches.length > 1 ? 'Plusieurs contacts existent' : 'Contact déjà existant')}
+                  </h3>
+                  <div style={{fontSize:12,color:'#6b7280',marginTop:2}}>
+                    {conflict
+                      ? 'L\'email correspond à un contact, le téléphone à un autre.'
+                      : 'Que souhaitez-vous faire ?'}
+                  </div>
+                </div>
+                <span onClick={_close} style={{cursor:'pointer',color:'#9ca3af',padding:6}}><I n="x" s={18}/></span>
+              </div>
+
+              {/* Données du nouveau contact (rappel) */}
+              <div style={{padding:'10px 12px',borderRadius:10,background:'#F9FAFB',border:'1px solid #E5E7EB',marginBottom:12}}>
+                <div style={{fontSize:10,fontWeight:700,color:'#6B7280',textTransform:'uppercase',letterSpacing:0.5,marginBottom:4}}>Vous saisissez</div>
+                <div style={{fontSize:13,fontWeight:600,color:'#111'}}>{pendingNewContact.name}</div>
+                <div style={{fontSize:11,color:'#6B7280',marginTop:2}}>
+                  {pendingNewContact.email && <span>📧 {pendingNewContact.email}</span>}
+                  {pendingNewContact.email && pendingNewContact.phone && <span style={{margin:'0 6px'}}>·</span>}
+                  {pendingNewContact.phone && <span>📞 {pendingNewContact.phone}</span>}
+                </div>
+              </div>
+
+              {/* Liste des matches */}
+              <div style={{display:'flex',flexDirection:'column',gap:10,marginBottom:14}}>
+                {matches.map(m => (
+                  <div key={m.id} style={{padding:12,borderRadius:10,border:'1px solid #E5E7EB',background:'#fff'}}>
+                    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',gap:8,marginBottom:4}}>
+                      <div style={{fontSize:13,fontWeight:700,color:'#111'}}>{m.name}</div>
+                      <span style={{fontSize:10,fontWeight:600,padding:'2px 8px',borderRadius:6,background:'#EFF6FF',color:'#2563EB'}}>{_matchedByLabel(m)}</span>
+                    </div>
+                    <div style={{fontSize:11,color:'#6B7280',display:'flex',gap:8,flexWrap:'wrap'}}>
+                      {m.email && <span>📧 {m.email}</span>}
+                      {m.phone && <span>📞 {m.phone}</span>}
+                      {m.pipelineStage && <span style={{color:'#7C3AED'}}>· {m.pipelineStage}</span>}
+                    </div>
+                    {_renderMatchActions(m)}
+                  </div>
+                ))}
+              </div>
+
+              {/* Actions globales */}
+              <div style={{display:'flex',gap:8,paddingTop:12,borderTop:'1px solid #F3F4F6'}}>
+                <Btn small style={{flex:1,justifyContent:'center'}} onClick={_close}>Annuler</Btn>
+                <Btn small style={{flex:1,justifyContent:'center'}} onClick={_forceCreateAndBook}>Créer un nouveau contact</Btn>
+              </div>
+            </div>
+          </div>
         );
       })()}
 

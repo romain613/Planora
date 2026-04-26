@@ -131,6 +131,9 @@ const PhoneTab = () => {
   _defaultLiveConfig, _tempColor, _tempEmoji, _tempLabel, addToBlacklist, autoDialerNext, calendars, CALL_TAGS, collabChatMessages, collabChatOnline, collabNotesTimerRef, collabsProp, contactAnalysesHistory, contactFieldDefs, contactsLocalEditRef, cScoreColor, cScoreLabel, fetchCallTranscript, generateCallAnalysis, getLeadTemperature, handleCollabDeleteContact, handleCollabUpdateContact, handleColumnDragStart, handleColumnDrop, handlePipelineStageChange, iaHubCollapse, isAdminView, perduMotifModal, PHONE_MODULES, pipelinePopupContact, pipelinePopupHistory, pipelineRightContact, postCallResultModal, rdvPasseModal, removeFromBlacklist, removeScheduledCall, saveCallRecording, savePhoneCallRating, savePhoneCallTag, saveScriptsDual, scanImageModal, setPerduMotifModal, setPipelinePopupContact, setPipelineRightTab, setPostCallResultModal, setScanImageModal, setV7TransferModal, setV7TransferTarget, smsCredits, startAutoDialer, toggleModule, togglePhoneFav, v7FollowersMap,
   } = ctx;
 
+  // V1.8.22.3 — Toggle visibilité ID contact dans footer panneau droit
+  const [showContactId, setShowContactId] = useState(false);
+
   return (
     <>
 <div style={{display:'flex',flexDirection:'column',margin:'-24px -28px',height:'calc(100vh - 0px)',background:T.bg,overflow:'hidden'}}>
@@ -1577,12 +1580,35 @@ if (n === ph) matched.set(c.id, c);
       })()}
       {/* Bloc coordonnées */}
       <div style={{padding:8,borderRadius:8,background:T.bg,border:`1px solid ${T.border}`,marginBottom:8}}>
-      {/* Civilité + Prénom + Nom */}
-      <div style={{display:'flex',gap:4,alignItems:'center',marginBottom:6}}>
-        <select value={ct.civility||''} onChange={e=>_upd('civility',e.target.value)} style={{fontSize:10,fontWeight:700,border:`1px solid ${T.border}40`,borderRadius:6,padding:'3px 4px',background:T.card,color:ct.civility?T.text:T.text3,fontFamily:'inherit',outline:'none',cursor:'pointer',minWidth:48,textAlign:'center'}}><option value="">Civ.</option><option value="M">M.</option><option value="Mme">Mme</option></select>
-        <input value={ct.firstname||''} onChange={e=>_upd('firstname',e.target.value)} onBlur={()=>{const full=(ct.civility?ct.civility+' ':'')+(ct.firstname||'')+' '+(ct.lastname||'');api(`/api/data/contacts/${ct.id}`,{method:'PUT',body:{firstname:ct.firstname,name:full.trim(),companyId:company?.id}});}} placeholder="Prénom" style={{fontSize:12,fontWeight:700,border:`1px solid ${T.border}40`,borderRadius:6,padding:'3px 6px',background:T.card,color:ct.firstname?T.text:'#CBD5E1',fontFamily:'inherit',outline:'none',flex:1,minWidth:0}} onFocus={e=>e.target.style.borderColor=T.accent}/>
-        <input value={ct.lastname||''} onChange={e=>_upd('lastname',e.target.value)} onBlur={()=>{const full=(ct.civility?ct.civility+' ':'')+(ct.firstname||'')+' '+(ct.lastname||'');api(`/api/data/contacts/${ct.id}`,{method:'PUT',body:{lastname:ct.lastname,name:full.trim(),companyId:company?.id}});}} placeholder="Nom" style={{fontSize:12,fontWeight:700,border:`1px solid ${T.border}40`,borderRadius:6,padding:'3px 6px',background:T.card,color:ct.lastname?T.text:'#CBD5E1',fontFamily:'inherit',outline:'none',flex:1.3,minWidth:0}} onFocus={e=>e.target.style.borderColor=T.accent}/>
-      </div>
+      {/* Civilité + Prénom + Nom — V1.8.22.2 split fallback depuis ct.name si firstname/lastname vides */}
+      {(()=>{
+        const _splitFirst = ((ct.name||'').trim().split(/\s+/)[0]) || '';
+        const _splitLast  = ((ct.name||'').trim().split(/\s+/).slice(1).join(' ')) || '';
+        const _displayFirst = ct.firstname || _splitFirst;
+        const _displayLast  = ct.lastname || _splitLast;
+        const _hasSplitFallback = (!ct.firstname && _splitFirst) || (!ct.lastname && _splitLast);
+        // Auto-backfill DB silencieux (one-shot) : si fallback détecté, persister le split
+        // pour que les prochaines lectures soient cohérentes (CRM/Pipeline/Agenda).
+        if (_hasSplitFallback && ct.id && !ct._splitBackfilled) {
+          ct._splitBackfilled = true; // mémo objet pour éviter répétition au re-render
+          const _bfBody = { companyId: company?.id };
+          if (!ct.firstname && _splitFirst) _bfBody.firstname = _splitFirst;
+          if (!ct.lastname && _splitLast)   _bfBody.lastname  = _splitLast;
+          api(`/api/data/contacts/${ct.id}`, { method:'PUT', body:_bfBody })
+            .then(()=>{
+              if (_bfBody.firstname) _upd('firstname', _bfBody.firstname);
+              if (_bfBody.lastname)  _upd('lastname',  _bfBody.lastname);
+            })
+            .catch(()=>{});
+        }
+        return (
+        <div style={{display:'flex',gap:4,alignItems:'center',marginBottom:6}}>
+          <select value={ct.civility||''} onChange={e=>_upd('civility',e.target.value)} style={{fontSize:10,fontWeight:700,border:`1px solid ${T.border}40`,borderRadius:6,padding:'3px 4px',background:T.card,color:ct.civility?T.text:T.text3,fontFamily:'inherit',outline:'none',cursor:'pointer',minWidth:48,textAlign:'center'}}><option value="">Civ.</option><option value="M">M.</option><option value="Mme">Mme</option></select>
+          <input value={_displayFirst} onChange={e=>_upd('firstname',e.target.value)} onBlur={()=>{const full=(ct.civility?ct.civility+' ':'')+(ct.firstname||_displayFirst)+' '+(ct.lastname||_displayLast);api(`/api/data/contacts/${ct.id}`,{method:'PUT',body:{firstname:ct.firstname||_displayFirst,name:full.trim(),companyId:company?.id}});}} placeholder="Prénom" style={{fontSize:12,fontWeight:700,border:`1px solid ${T.border}40`,borderRadius:6,padding:'3px 6px',background:T.card,color:_displayFirst?T.text:'#CBD5E1',fontFamily:'inherit',outline:'none',flex:1,minWidth:0}} onFocus={e=>e.target.style.borderColor=T.accent}/>
+          <input value={_displayLast} onChange={e=>_upd('lastname',e.target.value)} onBlur={()=>{const full=(ct.civility?ct.civility+' ':'')+(ct.firstname||_displayFirst)+' '+(ct.lastname||_displayLast);api(`/api/data/contacts/${ct.id}`,{method:'PUT',body:{lastname:ct.lastname||_displayLast,name:full.trim(),companyId:company?.id}});}} placeholder="Nom" style={{fontSize:12,fontWeight:700,border:`1px solid ${T.border}40`,borderRadius:6,padding:'3px 6px',background:T.card,color:_displayLast?T.text:'#CBD5E1',fontFamily:'inherit',outline:'none',flex:1.3,minWidth:0}} onFocus={e=>e.target.style.borderColor=T.accent}/>
+        </div>
+        );
+      })()}
       {/* Grille coordonnées — adaptée selon type */}
       <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:3}}>
         {_fld('phone','phone','Téléphone',{full:true})}
@@ -1854,6 +1880,30 @@ if (n === ph) matched.set(c.id, c);
     </div>
 
   </div>}
+
+  {/* V1.8.22.3 — Footer discret : ID contact masquable + copie */}
+  {ct.id && (()=>{
+    const _maskId = (id) => {
+      if (!id) return '';
+      // ct_<13digits>_<random> → ct_<4digits>***********
+      const _m = String(id).match(/^(ct_?\d{1,4})(.*)$/i);
+      if (_m) return _m[1] + '*'.repeat(Math.max(8, _m[2].length));
+      return String(id).slice(0,4) + '*'.repeat(Math.max(8, String(id).length - 4));
+    };
+    const _displayId = showContactId ? ct.id : _maskId(ct.id);
+    const _copy = async () => {
+      try { await navigator.clipboard.writeText(ct.id); showNotif('ID copié','success'); }
+      catch { showNotif('Impossible de copier','danger'); }
+    };
+    return (
+      <div style={{marginTop:14,paddingTop:10,borderTop:`1px solid ${T.border}40`,display:'flex',alignItems:'center',gap:6,fontSize:10,color:T.text3,fontFamily:'monospace'}}>
+        <span style={{flexShrink:0}}>ID contact&nbsp;:</span>
+        <span style={{flex:1,minWidth:0,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',userSelect:showContactId?'all':'none'}} title={showContactId?ct.id:'Masqué — cliquer sur l\'œil pour afficher'}>{_displayId}</span>
+        <span onClick={()=>setShowContactId(s=>!s)} style={{cursor:'pointer',padding:'2px 5px',borderRadius:4,fontSize:11,color:showContactId?T.accent:T.text3,userSelect:'none',transition:'color .12s'}} title={showContactId?'Masquer':'Afficher'}>{showContactId?'👁️‍🗨️':'👁️'}</span>
+        {showContactId && <span onClick={_copy} style={{cursor:'pointer',padding:'2px 5px',borderRadius:4,fontSize:11,color:T.text3,userSelect:'none'}} title="Copier l'ID complet">📋</span>}
+      </div>
+    );
+  })()}
 </div>
 )}
 
