@@ -419,7 +419,7 @@ const PhoneTab = () => {
     {/* ═══════════════════════════════════════════════════════ */}
     {/* LEFT COLUMN — Conversations Panel (collapsible)       */}
     {/* ═══════════════════════════════════════════════════════ */}
-    <div style={{
+    <div data-pipe-left-panel="1" style={{
       width:(typeof phoneLeftCollapsed!=='undefined'?phoneLeftCollapsed:null)?48:280,flexShrink:0,display:'flex',flexDirection:'column',
       borderRight:`1px solid ${T.border}`,background:T.surface,
       overflow:'hidden',transition:'width .25s ease',
@@ -1421,7 +1421,7 @@ if (n === ph) matched.set(c.id, c);
     const fmtDur3=fmtDur; // alias — uses shared fmtDur
     const analysis = cl ? (typeof phoneCallAnalyses!=='undefined'?phoneCallAnalyses:null)[cl.id] : null;
     return(
-    <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
+    <div data-pipe-right-panel="1" style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
       {/* Header */}
       <div style={{padding:'12px 14px',borderBottom:'1px solid '+T.border,flexShrink:0,background:ctStage.color+'08'}}>
 <div style={{display:'flex',alignItems:'center',gap:10}}>
@@ -5066,7 +5066,7 @@ return(
       </div>
     </div>}
     {/* Header */}
-    <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
+    <div data-pipe-keep="1" style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
       <div style={{display:'flex',alignItems:'center',gap:10}}>
 <div style={{width:32,height:32,borderRadius:8,background:'linear-gradient(135deg,#7C3AED,#2563EB)',display:'flex',alignItems:'center',justifyContent:'center'}}><I n="trello" s={16} style={{color:'#fff'}}/></div>
 <div>
@@ -5318,6 +5318,7 @@ return(
           }
           setPipelineRightContact(ct);setPhoneRightTab('fiche');if(phoneRightCollapsed){(typeof setPhoneRightCollapsed==='function'?setPhoneRightCollapsed:function(){})(false);try{localStorage.setItem('c360-phone-right-collapsed-'+collab.id,'0');}catch{}}api('/api/data/pipeline-history?contactId='+ct.id).then(h=>setPipelinePopupHistory(h||[])).catch(()=>setPipelinePopupHistory([]));
         }}
+        data-pipe-card="1"
         style={{padding:'8px 10px',borderRadius:10,background:_isRdvPasse2?'linear-gradient(135deg, #F9731612 0%, #F9731604 60%, transparent 100%)':_isSelected?T.accent+'08':_isPipeSel?T.accentBg:_ccBg,border:_isRdvPasse2?'2px solid #F97316':_isSelected?`2.5px solid ${T.accent}`:_isPipeSel?`2px solid ${T.accent}`:_ccBorder,borderLeft:_isRdvPasse2?'5px solid #F97316':_isSelected?`5px solid ${T.accent}`:_ccHas?`6px solid ${ct.card_color}`:undefined,cursor:'pointer',transition:'all .3s',boxShadow:_isRdvPasse2?'0 3px 12px #F9731625':_isSelected?`0 4px 16px ${T.accent}25`:_ccShadow,position:'relative'}}
         onMouseEnter={e=>{if(!isAutoDialing&&!_ccHas)e.currentTarget.style.boxShadow='0 4px 12px rgba(0,0,0,0.08)';}}
         onMouseLeave={e=>{e.currentTarget.style.boxShadow=_ccShadow;}}>
