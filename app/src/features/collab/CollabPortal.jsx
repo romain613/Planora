@@ -48,6 +48,7 @@ import HomeTab from "./tabs/HomeTab";
 import AgendaTab from "./tabs/AgendaTab";
 import CrmTab from "./tabs/CrmTab";
 import PhoneTab from "./tabs/PhoneTab";
+import RdvReportingTab from "./tabs/RdvReportingTab";
 
 const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCalendars, avails, setAvails, vacations, setVacations, contacts, setContacts, onBack, voipCredits, voipCallLogs, setVoipCallLogs, voipConfigured, appMyPhoneNumbers, appPhonePlans, appConversations, setAppConversations, pipelineStages, setPipelineStages, contactFieldDefs, setContactFieldDefs, collabs: collabsProp, googleEvents: googleEventsProp, setGoogleEvents, isAdminView, smsCredits }) => {
   // collabs = list of all collaborators in the company (for chat DM, etc.)
@@ -3681,6 +3682,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     ...(((typeof voipConfigured!=='undefined'?voipConfigured:null) || collab.sms_enabled) ? [{ id:"phone", icon:"zap", label:"Pipeline Live" }] : []),
     { id:"agenda", icon:"calendar", label:"Agenda" },
     { id:"crm", icon:"user", label:"Mon CRM" },
+    // V1.10.3 — Reporting collab RDV
+    { id:"rdv-reporting", icon:"bar-chart-3", label:"Reporting RDV" },
     { id:"settings", icon:"settings", label:"Paramètres", badge: (typeof collabAlertCount!=='undefined'?collabAlertCount:null) > 0 ? (typeof collabAlertCount!=='undefined'?collabAlertCount:null) : null, badgeColor:'#EF4444' },
   ];
 
@@ -4387,6 +4390,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
 
         {/* ── AGENDA GRID ── */}
         {portalTab === "agenda" && <AgendaTab/>}
+
+        {/* ── V1.10.3 — Reporting collab RDV ── */}
+        {portalTab === "rdv-reporting" && <RdvReportingTab/>}
 
         {/* ── MON CRM ── */}
         {portalTab === "crm" && <CrmTab/>}
