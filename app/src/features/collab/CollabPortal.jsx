@@ -1831,11 +1831,12 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     // Calling hours: SAV/service calls are allowed anytime (no restriction)
     // Find contact object for VoIP call logging
     const ct = contacts.find(c => c.id === contactId) || null;
-    // Auto-ouvrir la fiche contact dans le panneau droit + onglet IA Copilot
+    // V1.9 UX FIX bug 1 — Toujours déplier le panneau droit dès qu'un appel commence (dialer manuel inclus)
+    if (phoneRightCollapsed) { setPhoneRightCollapsed(false); try { localStorage.setItem("c360-phone-right-collapsed-"+collab.id,"0"); } catch {} }
+    // Auto-ouvrir la fiche contact dans le panneau droit + onglet IA Copilot (uniquement si contact lié)
     if (ct) {
       setPipelineRightContact(ct);
       setPhoneRightTab('ia');
-      if (phoneRightCollapsed) { setPhoneRightCollapsed(false); try { localStorage.setItem("c360-phone-right-collapsed-"+collab.id,"0"); } catch {} }
       api('/api/data/pipeline-history?contactId='+ct.id).then(h=>setPipelinePopupHistory(h||[])).catch(()=>setPipelinePopupHistory([]));
     }
     setPhoneDialNumber(number);
@@ -1989,6 +1990,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       setPhoneCopilotLiveData(null);
       setPhoneCopilotLiveLoading(false);
       setPhoneCopilotChecklist({});
+      // V1.9 UX FIX — Reset Cockpit states pour éviter qu'ils restent "bloqués" sur les appels suivants
+      setCockpitOpen(false);
+      setCockpitMinimized(false);
     }
   };
 
@@ -6383,15 +6387,76 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
         </div>
       )}
 
-{/* ═══ COCKPIT — Bouton flottant + Fenêtre tour de contrôle appel ═══ */}
+{/* ═══ COCKPIT — Bouton flottant ouvre BANNIÈRE FLOTTANTE BASSE (fullscreen désactivé) ═══ */}
+{/* V1.9 UX FIX bug 2 — Bouton Cockpit RÉACTIVÉ, pointe désormais sur bannière flottante basse (overlay non-bloquant). Fullscreen conservé en code mais rendu désactivé (false &&). Ne jamais rouvrir le fullscreen. */}
     {voipState === 'in-call' && (typeof phoneActiveCall!=='undefined'?phoneActiveCall:null) && !(typeof cockpitOpen!=='undefined'?cockpitOpen:null) && (
-      <div onClick={()=>setCockpitOpen(true)} style={{position:'fixed',bottom:24,right:24,zIndex:10002,padding:'10px 18px',borderRadius:14,background:'linear-gradient(135deg,#7C3AED,#2563EB)',color:'#fff',fontSize:13,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',gap:8,boxShadow:'0 4px 20px rgba(124,58,237,.4)',animation:'pulse 2s infinite',border:'2px solid rgba(255,255,255,.3)'}}>
-        <I n="monitor" s={18}/> Cockpit
+      <div onClick={()=>setCockpitOpen(true)} style={{position:'fixed',bottom:24,right:24,zIndex:10002,padding:'10px 18px',borderRadius:14,background:'linear-gradient(135deg,#7C3AED,#2563EB)',color:'#fff',fontSize:13,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',gap:8,boxShadow:'0 4px 20px rgba(124,58,237,.4)',animation:'pulse 2s infinite',border:'2px solid rgba(255,255,255,.3)'}} title="Ouvrir le Copilot (bannière flottante)">
+        <I n="cpu" s={18}/> Copilot
         <span style={{fontSize:11,opacity:.8}}>{Math.floor((typeof phoneCallTimer!=='undefined'?phoneCallTimer:null)/60).toString().padStart(2,'0')}:{((typeof phoneCallTimer!=='undefined'?phoneCallTimer:null)%60).toString().padStart(2,'0')}</span>
       </div>
     )}
 
-    {(typeof cockpitOpen!=='undefined'?cockpitOpen:null) && (typeof voipState!=='undefined'?voipState:null) === 'in-call' && (typeof phoneActiveCall!=='undefined'?phoneActiveCall:null) && !(typeof cockpitMinimized!=='undefined'?cockpitMinimized:null) && (()=>{
+    {/* V1.9 UX FIX bug 2 — BANNIÈRE FLOTTANTE BASSE — overlay non-bloquant (n'occulte pas la colonne droite). Suggestion IA principale + actions Accepter/RDV/SMS/Email + timer + statut IA. PAS de transcription (reste colonne droite). */}
+    {(typeof cockpitOpen!=='undefined'?cockpitOpen:null) && voipState === 'in-call' && (typeof phoneActiveCall!=='undefined'?phoneActiveCall:null) && (()=>{
+      const pac = (typeof phoneActiveCall!=='undefined'?phoneActiveCall:null) || {};
+      const ana = (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null) || {};
+      const sentiment = (typeof phoneLiveSentiment!=='undefined'?phoneLiveSentiment:null) || 'neutral';
+      const sentEmoji = sentiment==='positive'?'😊':sentiment==='negative'?'😟':'😐';
+      const sentColor = sentiment==='positive'?'#22C55E':sentiment==='negative'?'#EF4444':'#F59E0B';
+      const ctFromActive = pac.contactId ? contacts.find(c=>c.id===pac.contactId) : null;
+      const ctFromNumber = (()=>{ const ph = (pac.number||'').replace(/[^\d]/g,'').slice(-9); if (ph.length<9) return null; return contacts.find(c=>{const cp=(c.phone||c.mobile||'').replace(/[^\d]/g,'').slice(-9);return cp&&cp===ph;}); })();
+      const ct = (typeof pipelineRightContact!=='undefined'?pipelineRightContact:null) || ctFromActive || ctFromNumber || { name: 'Contact inconnu', phone: pac.number||'' };
+      const ctName = ct.name || 'Contact inconnu';
+      const ctPhone = ct.phone || ct.mobile || pac.number || '';
+      const suggestionText = ana.phraseToSay || ana.nextSuggestion || ana.suggestion || '';
+      const actionText = ana.actionToDo || ana.keyInsight || '';
+      const timer = (typeof phoneCallTimer!=='undefined'?phoneCallTimer:0) || 0;
+      const timerStr = `${Math.floor(timer/60).toString().padStart(2,'0')}:${(timer%60).toString().padStart(2,'0')}`;
+      const sseConnected = !!(typeof phoneLiveTranscript!=='undefined'&&phoneLiveTranscript&&phoneLiveTranscript.length>=0); // proxy: state initialisé = écoute active
+      return (
+        <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:10001,background:'linear-gradient(180deg,rgba(255,255,255,0.97),rgba(255,255,255,1))',borderTop:'2px solid #7C3AED',boxShadow:'0 -8px 32px rgba(124,58,237,0.18)',padding:'12px 20px',display:'flex',alignItems:'center',gap:14,backdropFilter:'blur(8px)',pointerEvents:'auto'}}>
+          {/* Bloc gauche : statut IA + timer + contact */}
+          <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:180,flexShrink:0,borderRight:'1px solid #E5E7EB',paddingRight:14}}>
+            <div style={{display:'flex',alignItems:'center',gap:6}}>
+              <I n="cpu" s={16} style={{color:'#7C3AED'}}/>
+              <span style={{fontSize:12,fontWeight:800,color:'#7C3AED'}}>Copilot LIVE</span>
+              <span style={{width:7,height:7,borderRadius:4,background:sseConnected?'#22C55E':'#9CA3AF',boxShadow:sseConnected?'0 0 6px #22C55E80':'none',animation:sseConnected?'pulse 2s infinite':'none'}}/>
+            </div>
+            <div style={{display:'flex',alignItems:'center',gap:8}}>
+              <span style={{fontSize:18,fontWeight:800,fontFamily:'monospace',color:'#1F2937'}}>{timerStr}</span>
+              <span style={{fontSize:14}}>{sentEmoji}</span>
+              <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:4,background:sentColor+'15',color:sentColor}}>{sentiment==='positive'?'Positif':sentiment==='negative'?'Négatif':'Neutre'}</span>
+            </div>
+            <div style={{fontSize:10,color:'#6B7280',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ctName} · {ctPhone}</div>
+          </div>
+
+          {/* Bloc centre : suggestion IA principale + action recommandée */}
+          <div style={{flex:1,display:'flex',flexDirection:'column',gap:4,minWidth:0}}>
+            {suggestionText ? (
+              <>
+                <div style={{fontSize:9,fontWeight:800,color:'#22C55E',textTransform:'uppercase',letterSpacing:0.5}}>💬 Suggestion IA</div>
+                <div style={{fontSize:14,fontWeight:700,color:'#1F2937',lineHeight:1.4,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>"{suggestionText}"</div>
+                {actionText && <div style={{fontSize:11,color:'#F59E0B',fontWeight:600,display:'flex',alignItems:'center',gap:4}}><I n="zap" s={11}/> {actionText}</div>}
+              </>
+            ) : (
+              <div style={{fontSize:12,color:'#6B7280',fontStyle:'italic',textAlign:'center',padding:'8px 0'}}>🤖 L'IA analyse l'appel… les suggestions arrivent dans quelques secondes</div>
+            )}
+          </div>
+
+          {/* Bloc droit : actions larges + fermer */}
+          <div style={{display:'flex',gap:6,flexShrink:0}}>
+            <div onClick={()=>{ if(suggestionText){ try{ setPhoneCopilotReactions(p=>({...(p||{}),[(ana.id||'live')]:true})); }catch{} } setCockpitOpen(false); showNotif('Suggestion acceptée','success'); }} style={{padding:'10px 14px',borderRadius:10,background:'linear-gradient(135deg,#22C55E,#16A34A)',color:'#fff',fontSize:11,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(34,197,94,0.3)'}} title="Marquer la suggestion comme acceptée"><I n="check" s={13}/> Accepter</div>
+            <div onClick={()=>{ if(ct.id && ct.id!=='__dialer_unknown__'){ setPhoneScheduleForm({contactId:ct.id,contactName:ctName,number:ctPhone,date:new Date(Date.now()+86400000).toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true}); setPhoneShowScheduleModal(true); } else { showNotif('Créez le contact avant de programmer un RDV','info'); } }} style={{padding:'10px 14px',borderRadius:10,background:'linear-gradient(135deg,#F59E0B,#F97316)',color:'#fff',fontSize:11,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(245,158,11,0.3)'}} title="Planifier un RDV avec ce contact"><I n="calendar-plus" s={13}/> RDV</div>
+            <div onClick={()=>{ setPhoneDialNumber(ctPhone||''); setPhoneRightTab('sms'); if(typeof setPhoneRightCollapsed==='function')setPhoneRightCollapsed(false); }} style={{padding:'10px 14px',borderRadius:10,background:'linear-gradient(135deg,#0EA5E9,#0284C7)',color:'#fff',fontSize:11,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(14,165,233,0.3)'}} title="Envoyer un SMS"><I n="message-square" s={13}/> SMS</div>
+            <div onClick={()=>{ const email = ct.email||''; if(email){ window.open('mailto:'+email); } else { showNotif("Pas d'email pour ce contact",'info'); } }} style={{padding:'10px 14px',borderRadius:10,background:'linear-gradient(135deg,#6366F1,#4F46E5)',color:'#fff',fontSize:11,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(99,102,241,0.3)'}} title="Envoyer un email"><I n="mail" s={13}/> Email</div>
+            <div onClick={()=>setCockpitOpen(false)} style={{width:34,height:34,borderRadius:10,background:'#F3F4F6',color:'#6B7280',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',marginLeft:4,border:'1px solid #E5E7EB'}} title="Fermer la bannière"><I n="x" s={15}/></div>
+          </div>
+        </div>
+      );
+    })()}
+
+    {/* V1.9 UX FIX bug 2 — Fullscreen Cockpit DÉSACTIVÉ (false &&) — code conservé pour archive. Ne jamais réactiver — utiliser bannière flottante basse ci-dessus. */}
+    {false && (typeof cockpitOpen!=='undefined'?cockpitOpen:null) && (typeof voipState!=='undefined'?voipState:null) === 'in-call' && (typeof phoneActiveCall!=='undefined'?phoneActiveCall:null) && !(typeof cockpitMinimized!=='undefined'?cockpitMinimized:null) && (()=>{
       const ct = (typeof pipelineRightContact!=='undefined'?pipelineRightContact:null) || contacts.find(c=>c.id===(typeof phoneActiveCall!=='undefined'?phoneActiveCall:{}).contactId) || {};
       const ctBookings = (bookings||[]).filter(b=>b.contactId===ct.id&&b.status!=='cancelled').sort((a,b)=>new Date(a.date+'T'+(a.time||'00:00'))-new Date(b.date+'T'+(b.time||'00:00')));
       const futureBookings = ctBookings.filter(b=>new Date(b.date+'T'+(b.time||'00:00'))>new Date());

@@ -1512,7 +1512,26 @@ const CrmTab = () => {
               const hasRec = (typeof phoneCallRecordings!=='undefined'?phoneCallRecordings:null)[cl.id] || cl.recordingUrl;
               return (
               <div key={cl.id} style={{borderBottom:`1px solid ${T.border}`}}>
-                <div onClick={()=>setIaHubCollapse(p=>({...p,['ficheCall_'+cl.id]:!p['ficheCall_'+cl.id]}))} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 4px',cursor:'pointer',background:isExp?T.bg:'transparent',borderLeft:isExp?'3px solid '+T.accent:'3px solid transparent',transition:'background .15s'}} onMouseEnter={e=>{if(!isExp)e.currentTarget.style.background=T.bg;}} onMouseLeave={e=>{if(!isExp)e.currentTarget.style.background='transparent';}}>
+                <div onClick={()=>{
+                  const willExpand = !iaHubCollapse?.['ficheCall_'+cl.id];
+                  setIaHubCollapse(p=>({...p,['ficheCall_'+cl.id]:willExpand}));
+                  // V1.9 UX — Auto-load transcript when expanding (no manual click required)
+                  if(willExpand) {
+                    if(!_T.iaCallTranscripts?.[cl.id]) {
+                      api('/api/voip/transcript/'+cl.id).then(d=>{
+                        if(!_T.iaCallTranscripts)_T.iaCallTranscripts={};
+                        _T.iaCallTranscripts[cl.id]=d||(hasRec?{_empty:true}:{_noRec:true});
+                        setIaHubCollapse(p=>({...p,['ficheTr_'+cl.id]:true}));
+                      }).catch(()=>{
+                        if(!_T.iaCallTranscripts)_T.iaCallTranscripts={};
+                        _T.iaCallTranscripts[cl.id]=hasRec?{_empty:true}:{_noRec:true};
+                        setIaHubCollapse(p=>({...p,['ficheTr_'+cl.id]:true}));
+                      });
+                    } else {
+                      setIaHubCollapse(p=>({...p,['ficheTr_'+cl.id]:true}));
+                    }
+                  }
+                }} style={{display:'flex',alignItems:'center',gap:10,padding:'10px 4px',cursor:'pointer',background:isExp?T.bg:'transparent',borderLeft:isExp?'3px solid '+T.accent:'3px solid transparent',transition:'background .15s'}} onMouseEnter={e=>{if(!isExp)e.currentTarget.style.background=T.bg;}} onMouseLeave={e=>{if(!isExp)e.currentTarget.style.background='transparent';}}>
                   <div style={{width:32,height:32,borderRadius:8,background:cl.direction==='outbound'?'#2563EB12':'#22C55E12',display:'flex',alignItems:'center',justifyContent:'center'}}>
                     <I n={cl.direction==='outbound'?'phone-outgoing':'phone-incoming'} s={14} style={{color:cl.direction==='outbound'?'#2563EB':'#22C55E'}}/>
                   </div>

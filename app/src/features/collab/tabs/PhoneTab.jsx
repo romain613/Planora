@@ -1300,6 +1300,32 @@ return <div key={ev.id} style={{fontSize:11,color:T.text3,textAlign:'center',pad
   {/* ── COLLAPSE BUTTON ── */}
   <div onClick={togglePhoneRightPanel} style={{display:'flex',alignItems:'center',justifyContent:'center',padding:'4px 0',cursor:'pointer',borderBottom:`1px solid ${T.border}`,flexShrink:0}} title="Replier le panneau"><I n="chevron-right" s={14} style={{color:T.text3}}/></div>
 
+  {/* V1.9 UX — MiniCopilotLiveStatus PERSISTANT — toujours visible en haut de la colonne droite pendant un appel actif (V1.9-cockpitfix : retiré garde phoneRightTab !== 'ia' qui rendait sticky invisible si tab forcé sur 'ia') */}
+  {(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null) && (
+    <div style={{padding:'6px 10px',borderBottom:'1px solid '+T.border,background:'linear-gradient(135deg,#F9731608,#F59E0B04)',flexShrink:0}}>
+      {/* Suggestion IA (lit phraseToSay || nextSuggestion || suggestion backend GPT) */}
+      {((typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.phraseToSay || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.nextSuggestion || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.suggestion) ? (
+        <div style={{marginBottom:5}}>
+          <div style={{fontSize:7,fontWeight:800,color:'#22C55E',marginBottom:2,textTransform:'uppercase',letterSpacing:0.4}}>💬 Suggestion IA</div>
+          <div style={{fontSize:10,fontWeight:600,color:T.text,lineHeight:1.35,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>"{(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.phraseToSay || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.nextSuggestion || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.suggestion}"</div>
+        </div>
+      ) : (
+        <div style={{fontSize:8,color:T.text3,fontStyle:'italic',textAlign:'center',marginBottom:5}}>🤖 L'IA analyse l'appel…</div>
+      )}
+      {/* Voice activity compact Vous/Client (1 row) */}
+      <div style={{display:'flex',gap:4}}>
+        <div style={{flex:1,padding:'3px 6px',borderRadius:6,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent+'12':T.bg,border:'1px solid '+((typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent+'40':T.border+'50'),transition:'all .3s',display:'flex',alignItems:'center',gap:4}}>
+          <div style={{width:5,height:5,borderRadius:3,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent:'#D1D5DB',transition:'all .3s',boxShadow:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?'0 0 6px '+T.accent+'60':'none'}}/>
+          <span style={{fontSize:7,fontWeight:700,color:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent:T.text3}}>{(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?'Vous parlez…':'Vous'}</span>
+        </div>
+        <div style={{flex:1,padding:'3px 6px',borderRadius:6,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'#22C55E12':T.bg,border:'1px solid '+((typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'#22C55E40':T.border+'50'),transition:'all .3s',display:'flex',alignItems:'center',gap:4}}>
+          <div style={{width:5,height:5,borderRadius:3,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'#22C55E':'#D1D5DB',transition:'all .3s',boxShadow:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'0 0 6px #22C55E60':'none'}}/>
+          <span style={{fontSize:7,fontWeight:700,color:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'#22C55E':T.text3}}>{(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'Client parle…':'Client'}</span>
+        </div>
+      </div>
+    </div>
+  )}
+
   {/* ── MULTI-SELECT RIGHT PANEL ── */}
   {(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length >= 2 ? (()=>{
     const selContacts = (typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).map(id=>(contacts||[]).find(c=>c.id===id)).filter(Boolean);
@@ -1382,15 +1408,26 @@ return <div key={ev.id} style={{fontSize:11,color:T.text3,textAlign:'center',pad
     </div>);
   })() : null}
 
-  {/* ── UNIFIED RIGHT PANEL — pipeline contact OR call detail (hidden when multi-select active) ── */}
-  {(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length >= 2 ? null : ((typeof pipelineRightContact!=='undefined'?pipelineRightContact:null) || (typeof phoneCallDetailId!=='undefined'?phoneCallDetailId:null)) ? (()=>{
+  {/* ── UNIFIED RIGHT PANEL — pipeline contact OR call detail OR active call (dialer manuel) (hidden when multi-select active) ── */}
+  {/* V1.9 UX FIX BUG 1 — Étendu à phoneActiveCall pour que le panel droit complet (header + tabs + IA Copilot) s'affiche identiquement quelle que soit la source d'appel (pastille pipeline / clavier / fiche / entrant) */}
+  {(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length >= 2 ? null : ((typeof pipelineRightContact!=='undefined'?pipelineRightContact:null) || (typeof phoneCallDetailId!=='undefined'?phoneCallDetailId:null) || (typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)) ? (()=>{
     const ct = (typeof pipelineRightContact!=='undefined'?pipelineRightContact:null) || (()=>{
       const cl = (typeof phoneCallDetailId!=='undefined'?phoneCallDetailId:null) ? ((typeof voipCallLogs!=='undefined'?voipCallLogs:null)||[]).find(c=>c.id===(typeof phoneCallDetailId!=='undefined'?phoneCallDetailId:null)) : null;
-      if(!cl) return null;
-      const num = cl.direction==='outbound' ? cl.toNumber : cl.fromNumber;
-      let found = cl.contactId ? contacts.find(c=>c.id===cl.contactId) : null;
-      if(!found){const ph=(num||'').replace(/[^\d]/g,'').slice(-9);if(ph.length>=9) found=contacts.find(c=>{if(c.assignedTo!==collab.id){try{const sw=JSON.parse(c.shared_with_json||'[]');if(!sw.includes(collab.id))return false;}catch{return false;}}const cp=(c.phone||c.mobile||'').replace(/[^\d]/g,'').slice(-9);return cp&&cp===ph;});}
-      return found || {name: fmtPhone(num), phone: num, pipeline_stage: 'nouveau'};
+      if(cl){
+        const num = cl.direction==='outbound' ? cl.toNumber : cl.fromNumber;
+        let found = cl.contactId ? contacts.find(c=>c.id===cl.contactId) : null;
+        if(!found){const ph=(num||'').replace(/[^\d]/g,'').slice(-9);if(ph.length>=9) found=contacts.find(c=>{if(c.assignedTo!==collab.id){try{const sw=JSON.parse(c.shared_with_json||'[]');if(!sw.includes(collab.id))return false;}catch{return false;}}const cp=(c.phone||c.mobile||'').replace(/[^\d]/g,'').slice(-9);return cp&&cp===ph;});}
+        return found || {name: fmtPhone(num), phone: num, pipeline_stage: 'nouveau'};
+      }
+      // V1.9 UX FIX BUG 1 — Fallback dialer manuel : ghost contact depuis phoneActiveCall (contact inconnu si pas matché par numéro)
+      const pac = (typeof phoneActiveCall!=='undefined'?phoneActiveCall:null);
+      if(pac){
+        const num = pac.number || '';
+        let found = pac.contactId ? contacts.find(c=>c.id===pac.contactId) : null;
+        if(!found){const ph=(num||'').replace(/[^\d]/g,'').slice(-9);if(ph.length>=9) found=contacts.find(c=>{if(c.assignedTo!==collab.id){try{const sw=JSON.parse(c.shared_with_json||'[]');if(!sw.includes(collab.id))return false;}catch{return false;}}const cp=(c.phone||c.mobile||'').replace(/[^\d]/g,'').slice(-9);return cp&&cp===ph;});}
+        return found || {id:'__dialer_unknown__',name: 'Contact inconnu', phone: num, pipeline_stage: 'nouveau'};
+      }
+      return null;
     })();
     if(!ct) return null;
     const cl = (typeof phoneCallDetailId!=='undefined'?phoneCallDetailId:null) ? ((typeof voipCallLogs!=='undefined'?voipCallLogs:null)||[]).find(c=>c.id===(typeof phoneCallDetailId!=='undefined'?phoneCallDetailId:null)) : null;
@@ -1470,31 +1507,7 @@ if (n === ph) matched.set(c.id, c);
 ))}
       </div>
 
-      {/* V1.9 UX — MiniCopilotLiveStatus sticky : reste visible dans tous les tabs pendant un appel actif (évite doublon dans 'ia' qui a déjà le bloc détaillé) */}
-      {(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null) && phoneRightTab !== 'ia' && (
-        <div style={{padding:'6px 10px',borderBottom:'1px solid '+T.border,background:'linear-gradient(135deg,#F9731608,#F59E0B04)',flexShrink:0}}>
-          {/* Suggestion IA (lit phraseToSay || nextSuggestion || suggestion backend GPT) */}
-          {((typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.phraseToSay || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.nextSuggestion || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.suggestion) ? (
-            <div style={{marginBottom:5}}>
-              <div style={{fontSize:7,fontWeight:800,color:'#22C55E',marginBottom:2,textTransform:'uppercase',letterSpacing:0.4}}>💬 Suggestion IA</div>
-              <div style={{fontSize:10,fontWeight:600,color:T.text,lineHeight:1.35,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>"{(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.phraseToSay || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.nextSuggestion || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.suggestion}"</div>
-            </div>
-          ) : (
-            <div style={{fontSize:8,color:T.text3,fontStyle:'italic',textAlign:'center',marginBottom:5}}>🤖 L'IA analyse l'appel…</div>
-          )}
-          {/* Voice activity compact Vous/Client (1 row) */}
-          <div style={{display:'flex',gap:4}}>
-            <div style={{flex:1,padding:'3px 6px',borderRadius:6,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent+'12':T.bg,border:'1px solid '+((typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent+'40':T.border+'50'),transition:'all .3s',display:'flex',alignItems:'center',gap:4}}>
-              <div style={{width:5,height:5,borderRadius:3,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent:'#D1D5DB',transition:'all .3s',boxShadow:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?'0 0 6px '+T.accent+'60':'none'}}/>
-              <span style={{fontSize:7,fontWeight:700,color:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent:T.text3}}>{(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?'Vous parlez…':'Vous'}</span>
-            </div>
-            <div style={{flex:1,padding:'3px 6px',borderRadius:6,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'#22C55E12':T.bg,border:'1px solid '+((typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'#22C55E40':T.border+'50'),transition:'all .3s',display:'flex',alignItems:'center',gap:4}}>
-              <div style={{width:5,height:5,borderRadius:3,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'#22C55E':'#D1D5DB',transition:'all .3s',boxShadow:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'0 0 6px #22C55E60':'none'}}/>
-              <span style={{fontSize:7,fontWeight:700,color:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'#22C55E':T.text3}}>{(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).contact?'Client parle…':'Client'}</span>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* V1.9 UX — Sticky MiniCopilotLiveStatus déplacé en haut du panel droit (avant switch multi-select) pour rester visible même quand contact non sélectionné */}
 
       {/* Tab content */}
       <div style={{flex:1,overflow:'auto',padding:'8px 10px'}}>
@@ -1988,7 +2001,26 @@ if (n === ph) matched.set(c.id, c);
           const isCurrent=c.id===(typeof phoneCallDetailId!=='undefined'?phoneCallDetailId:null);
           return(
             <div key={c.id}>
-            <div onClick={()=>{setIaHubCollapse(p=>({...p,['pipeCall_'+c.id]:!p['pipeCall_'+c.id]}));}} style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px',borderRadius:8,cursor:'pointer',marginBottom:2,marginLeft:g.isToday?0:8,background:isCurrent?T.accentBg:'transparent',border:isCurrent?'1px solid '+T.accent+'30':'1px solid transparent',transition:'all .1s'}} onMouseEnter={e=>{if(!isCurrent)e.currentTarget.style.background=T.bg;}} onMouseLeave={e=>{if(!isCurrent)e.currentTarget.style.background='transparent';}}>
+            <div onClick={()=>{
+              const willExpand = !iaHubCollapse?.['pipeCall_'+c.id];
+              setIaHubCollapse(p=>({...p,['pipeCall_'+c.id]:willExpand}));
+              // V1.9 UX — Auto-load transcript when expanding (covers LIVE-only without recording)
+              if(willExpand && !_T.iaCallTranscripts?.[c.id]) {
+                api('/api/voip/transcript/'+c.id).then(d=>{
+                  if(!_T.iaCallTranscripts)_T.iaCallTranscripts={};
+                  const _hasRec = !!((typeof phoneCallRecordings!=='undefined'?phoneCallRecordings:null)?.[c.id]||c.recordingUrl);
+                  _T.iaCallTranscripts[c.id] = d || (_hasRec?{_empty:true}:{_noRec:true});
+                  setIaHubCollapse(p=>({...p,['pipeTr_'+c.id]:true}));
+                }).catch(()=>{
+                  if(!_T.iaCallTranscripts)_T.iaCallTranscripts={};
+                  const _hasRec = !!((typeof phoneCallRecordings!=='undefined'?phoneCallRecordings:null)?.[c.id]||c.recordingUrl);
+                  _T.iaCallTranscripts[c.id] = _hasRec?{_empty:true}:{_noRec:true};
+                  setIaHubCollapse(p=>({...p,['pipeTr_'+c.id]:true}));
+                });
+              } else if(willExpand) {
+                setIaHubCollapse(p=>({...p,['pipeTr_'+c.id]:true}));
+              }
+            }} style={{display:'flex',alignItems:'center',gap:6,padding:'5px 8px',borderRadius:8,cursor:'pointer',marginBottom:2,marginLeft:g.isToday?0:8,background:isCurrent?T.accentBg:'transparent',border:isCurrent?'1px solid '+T.accent+'30':'1px solid transparent',transition:'all .1s'}} onMouseEnter={e=>{if(!isCurrent)e.currentTarget.style.background=T.bg;}} onMouseLeave={e=>{if(!isCurrent)e.currentTarget.style.background='transparent';}}>
               <I n={cOut?'phone-outgoing':'phone-incoming'} s={11} style={{color:cMissed?'#EF4444':cOut?'#2563EB':'#22C55E',flexShrink:0}}/>
               <div style={{flex:1,minWidth:0}}>
                 <div style={{fontSize:11,fontWeight:600,color:cMissed?'#EF4444':T.text}}>{cOut?'Sortant':'Entrant'}{cMissed?' - Manqué':''}</div>
@@ -2006,19 +2038,15 @@ if (n === ph) matched.set(c.id, c);
                   e.stopPropagation();
                   const hasRec=!!((typeof phoneCallRecordings!=='undefined'?phoneCallRecordings:null)[c.id]||c.recordingUrl);
                   if(_T.iaCallTranscripts?.[c.id]){setIaHubCollapse(p=>({...p,['pipeTr_'+c.id]:!p['pipeTr_'+c.id]}));return;}
-                  if(!hasRec){
-                    if(!_T.iaCallTranscripts)_T.iaCallTranscripts={};
-                    _T.iaCallTranscripts[c.id]={_noRec:true};
-                    setIaHubCollapse(p=>({...p,['pipeTr_'+c.id]:true}));
-                    return;
-                  }
+                  // V1.9 UX FIX — Toujours fetch (transcripts LIVE-only existent même sans recording)
                   api('/api/voip/transcript/'+c.id).then(d=>{
                     if(!_T.iaCallTranscripts)_T.iaCallTranscripts={};
-                    _T.iaCallTranscripts[c.id]=d&&(d.fullText||d.segments)?d:{_empty:true};
+                    // Accepte aussi tr.live (live-only sans recording)
+                    _T.iaCallTranscripts[c.id]= (d && (d.fullText||d.segments||d.live)) ? d : (hasRec?{_empty:true}:{_noRec:true});
                     setIaHubCollapse(p=>({...p,['pipeTr_'+c.id]:true}));
                   }).catch(()=>{
                     if(!_T.iaCallTranscripts)_T.iaCallTranscripts={};
-                    _T.iaCallTranscripts[c.id]={_empty:true};
+                    _T.iaCallTranscripts[c.id]= hasRec?{_empty:true}:{_noRec:true};
                     setIaHubCollapse(p=>({...p,['pipeTr_'+c.id]:true}));
                   });
                 }} style={{fontSize:10,color:'#3B82F6',fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:3}}>
@@ -2026,10 +2054,12 @@ if (n === ph) matched.set(c.id, c);
                 </div>
                 {(typeof iaHubCollapse!=='undefined'?iaHubCollapse:null)['pipeTr_'+c.id] && _T.iaCallTranscripts?.[c.id] && (()=>{
                   const tr=_T.iaCallTranscripts[c.id];
-                  if(tr._noRec) return <div style={{padding:'6px 8px',borderRadius:6,background:'#F59E0B08',border:'1px solid #F59E0B20',fontSize:10,color:'#F59E0B',lineHeight:1.4}}>⚠️ REC n'était pas activé — pas de transcription pour cet appel</div>;
+                  if(tr._noRec) return <div style={{padding:'6px 8px',borderRadius:6,background:'#F59E0B08',border:'1px solid #F59E0B20',fontSize:10,color:'#F59E0B',lineHeight:1.4}}>⚠️ Pas de transcription disponible pour cet appel</div>;
                   if(tr._empty) return <div style={{padding:'6px 8px',borderRadius:6,background:T.bg,border:'1px solid '+T.border,fontSize:10,color:T.text3,textAlign:'center'}}>Aucune transcription trouvée</div>;
-                  const segs=tr.segments||(tr.segments_json?(()=>{try{return JSON.parse(tr.segments_json);}catch{return[];}})():[]);
-                  const fullText=segs.length>0?segs.map(s=>`[${s.speaker||'?'}] ${s.text}`).join('\n'):(tr.fullText||'');
+                  // V1.9 UX FIX — fallback sur tr.live (cas live-only renvoyé dans .live au lieu du flat)
+                  const dataSrc = (tr.segments || tr.fullText) ? tr : (tr.live || tr);
+                  const segs=dataSrc.segments||(dataSrc.segments_json?(()=>{try{return JSON.parse(dataSrc.segments_json);}catch{return[];}})():[]);
+                  const fullText=segs.length>0?segs.map(s=>`[${s.speaker||'?'}] ${s.text}`).join('\n'):(dataSrc.fullText||'');
                   return <>
                     {segs.length>0?(
                       <div style={{maxHeight:120,overflowY:'auto',display:'flex',flexDirection:'column',gap:2}}>
@@ -2039,7 +2069,7 @@ if (n === ph) matched.set(c.id, c);
                           </div>
                         ))}
                       </div>
-                    ):tr.fullText?<div style={{fontSize:10,color:T.text,lineHeight:1.4,maxHeight:120,overflowY:'auto',padding:'4px 8px',background:T.card,borderRadius:6,border:'1px solid '+T.border}}>{tr.fullText}</div>
+                    ):dataSrc.fullText?<div style={{fontSize:10,color:T.text,lineHeight:1.4,maxHeight:120,overflowY:'auto',padding:'4px 8px',background:T.card,borderRadius:6,border:'1px solid '+T.border}}>{dataSrc.fullText}</div>
                     :<div style={{fontSize:9,color:T.text3,textAlign:'center'}}>Aucune transcription</div>}
                     {fullText&&<div onClick={(e)=>{e.stopPropagation();const blob=new Blob([fullText],{type:'text/plain'});const url=URL.createObjectURL(blob);const a=document.createElement('a');a.href=url;a.download='transcription-'+c.id+'.txt';a.click();URL.revokeObjectURL(url);}} style={{fontSize:10,color:'#059669',fontWeight:600,cursor:'pointer',display:'flex',alignItems:'center',gap:3}}><I n="download" s={10}/> Télécharger (.txt)</div>}
                   </>;
