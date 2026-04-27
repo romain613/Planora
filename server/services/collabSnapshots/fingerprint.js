@@ -19,14 +19,17 @@ export function computeCollabFingerprint({ companyId, collabId }) {
 
   const parts = [];
 
-  // 1. contacts — (id, updatedAt, pipeline_stage) trié par id
+  // 1. contacts — (id, updatedAt, pipeline_stage, status) trié par id.
+  // V1.10.1 : aligné sur scope.js (5 colonnes ownership). Sans cet alignement,
+  // un changement de pipeline_stage sur un contact assignedTo (sans owner/executor) ne déclenchait
+  // PAS de snapshot dirty → bug critique invisible.
   const contacts = db
     .prepare(
       'SELECT id, updatedAt, pipeline_stage, status FROM contacts ' +
-        'WHERE companyId = ? AND (ownerCollaboratorId = ? OR executorCollaboratorId = ?) ' +
+        "WHERE companyId = ? AND (ownerCollaboratorId = ? OR executorCollaboratorId = ? OR assignedTo = ? OR sharedWithId = ? OR shared_with_json LIKE '%\"' || ? || '\"%') " +
         'ORDER BY id'
     )
-    .all(companyId, collabId, collabId);
+    .all(companyId, collabId, collabId, collabId, collabId, collabId);
   parts.push(
     'contacts:' +
       contacts

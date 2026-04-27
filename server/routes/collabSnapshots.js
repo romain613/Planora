@@ -14,6 +14,8 @@
 // Termes techniques (snapshot, payload, fingerprint) restent dans la couche backend pour debug/audit uniquement.
 
 import { Router } from 'express';
+import fs from 'fs';
+import path from 'path';
 import { db } from '../db/database.js';
 import { requireAuth } from '../middleware/auth.js';
 import {
@@ -172,6 +174,85 @@ router.post('/:id/restore', requireAuth, (req, res) => {
     res.json(result);
   } catch (err) {
     console.error('[COLLAB-SNAPSHOTS RESTORE ERROR]', err.message, err.stack);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── DELETE /:id ───────────────────────────────────────────────────────────
+// V1.10.1+ — Suppression d'une sauvegarde par son propriétaire (ou admin).
+// Audit + DELETE row + suppression best-effort du fichier .gz.
+// Préserve les sauvegardes 'pre-restore' non expirées (utiles pour annuler une restauration).
+router.delete('/:id', requireAuth, (req, res) => {
+  try {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) {
+      return res.status(400).json({ error: 'snapshotId invalide' });
+    }
+
+    const snap = db
+      .prepare('SELECT id, companyId, collabId, kind, payloadPath, expiresAt FROM collab_snapshots WHERE id = ?')
+      .get(id);
+    if (!snap) return res.status(404).json({ error: 'Sauvegarde introuvable' });
+
+    if (!canAccessCollab(req, snap.collabId, snap.companyId)) {
+      return res.status(403).json({ error: 'Accès refusé à cette sauvegarde' });
+    }
+
+    // Garde-fou : pre-restore non expirée = en cours d'utilisation pour annulation, refuser
+    if (snap.kind === 'pre-restore' && snap.expiresAt && snap.expiresAt > Date.now()) {
+      return res.status(409).json({
+        error: 'Cette sauvegarde "Pré-restauration" est protégée pour vous permettre d\'annuler une restauration récente. Elle expirera automatiquement.',
+      });
+    }
+
+    // DELETE row (la table peut être audit_logs-tracée selon la politique métier — ici on track manuellement)
+    db.prepare('DELETE FROM collab_snapshots WHERE id = ?').run(id);
+
+    // Suppression fichier .gz best-effort (ne fait pas échouer la requête si manquant)
+    try {
+      const SNAPSHOTS_DIR = process.env.SNAPSHOTS_DIR || '/var/www/planora-data/snapshots';
+      const fullPath = path.isAbsolute(snap.payloadPath)
+        ? snap.payloadPath
+        : path.join(SNAPSHOTS_DIR, snap.payloadPath);
+      if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+    } catch (e) {
+      console.warn('[COLLAB-SNAPSHOTS DELETE] file unlink warning:', e.message);
+    }
+
+    // Audit (immutable)
+    try {
+      const auditId = 'audit_' + Date.now() + '_' + Math.random().toString(36).slice(2, 10);
+      const actorId = req.auth.collaboratorId || `supra:${(req.auth.token||'').slice(0, 8)}`;
+      const actorRole = req.auth.isAdmin || req.auth.isSupra ? 'admin' : 'self';
+      db.prepare(
+        `INSERT INTO audit_logs (
+          id, companyId, userId, userName, userRole,
+          action, category, entityType, entityId,
+          detail, metadata_json, ipAddress, userAgent, createdAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+      ).run(
+        auditId,
+        snap.companyId,
+        actorId,
+        actorRole + ':' + actorId,
+        actorRole,
+        'collab_snapshot_deleted',
+        'data-recovery',
+        'collab_snapshot',
+        String(id),
+        `Suppression sauvegarde #${id} (${snap.kind}) pour collab ${snap.collabId}`,
+        JSON.stringify({ snapshotId: id, snapshotKind: snap.kind, payloadPath: snap.payloadPath }),
+        (req.headers['x-forwarded-for'] || req.socket?.remoteAddress || '').toString().slice(0, 64),
+        (req.headers['user-agent'] || '').toString().slice(0, 256),
+        new Date().toISOString()
+      );
+    } catch (e) {
+      console.warn('[COLLAB-SNAPSHOTS DELETE] audit warning:', e.message);
+    }
+
+    res.json({ success: true, snapshotId: id });
+  } catch (err) {
+    console.error('[COLLAB-SNAPSHOTS DELETE ERROR]', err.message);
     res.status(500).json({ error: err.message });
   }
 });

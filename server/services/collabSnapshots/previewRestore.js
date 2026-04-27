@@ -109,6 +109,20 @@ export function previewRestore(snapshotId) {
     }
   }
 
+  // V1.10.1 — Garde-fou anti-perte CRITIQUE : si snapshot vide pour contacts MAIS le collab a des contacts actuels,
+  // refus implicite (kind='critical-empty-snapshot' pour bloquer côté restoreSnapshot.js + warning rouge UI).
+  // Use-case : les anciens snapshots créés avec scope.js bugué (avant fix V1.10.1) ont contacts=0.
+  // Restaurer un de ces snapshots = perte totale des contacts du collab.
+  const currContacts = currentCounts.contacts || 0;
+  const snapContacts = snapshotCounts.contacts || 0;
+  if (currContacts > 5 && snapContacts === 0) {
+    warnings.push({
+      kind: 'critical-empty-snapshot',
+      message: 'Cette sauvegarde semble incomplète — la restauration est bloquée',
+      detail: `Aucun contact dans la sauvegarde alors que vous en avez ${currContacts} actuellement. Restaurer effacerait vos contacts. (Snapshot probablement créé avant le correctif scope V1.10.1.)`,
+    });
+  }
+
   // Warning V1 simple : grandes différences de counts (proxy "beaucoup d'écart")
   for (const [key, snapCount] of Object.entries(snapshotCounts)) {
     const curr = currentCounts[key];

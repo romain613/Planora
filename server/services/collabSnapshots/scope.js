@@ -34,10 +34,18 @@ export const DIRECT_TABLES = [
   {
     key: 'contacts',
     table: 'contacts',
-    // Ownership V7 : owner ou executor. assignedTo (legacy) laissé de côté intentionnellement
-    // pour éviter de snapper des contacts "historiques" que le collab n'a plus.
-    sql: 'SELECT * FROM contacts WHERE companyId = ? AND (ownerCollaboratorId = ? OR executorCollaboratorId = ?)',
-    args: ({ companyId, collabId }) => [companyId, collabId, collabId],
+    // V1.10.1 fix : élargi aux 5 colonnes ownership réellement utilisées en prod.
+    //   - ownerCollaboratorId / executorCollaboratorId : V7 ownership (souvent vides en prod)
+    //   - assignedTo : ownership legacy V5 toujours actif (95% des cas)
+    //   - sharedWithId : Contact Share V1
+    //   - shared_with_json : array JSON cross-collab V1.8.13 — match strict via guillemets
+    // Diagnostic 2026-04-27 : ancien filtre (owner/executor only) → tous snapshots prod = 0 contacts.
+    sql:
+      "SELECT * FROM contacts WHERE companyId = ? AND (" +
+      "ownerCollaboratorId = ? OR executorCollaboratorId = ? OR assignedTo = ? OR sharedWithId = ? " +
+      "OR shared_with_json LIKE '%\"' || ? || '\"%'" +
+      ")",
+    args: ({ companyId, collabId }) => [companyId, collabId, collabId, collabId, collabId, collabId],
     restoreMode: 'write-safe',
   },
   {

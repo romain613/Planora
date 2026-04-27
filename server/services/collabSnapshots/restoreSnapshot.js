@@ -124,6 +124,26 @@ export function restoreSnapshot({
   const { snap, payload } = readSnapshot(snapshotId);
   const { companyId, collabId } = snap;
 
+  // V1.10.1 — Garde-fou anti-perte : refuser si snapshot vide alors que le collab a des contacts actuels.
+  // Évite que le restore d'un ancien snapshot bugué (scope pré-V1.10.1) supprime tous les contacts.
+  // Override possible via reason="force-empty-snapshot-override" (admin uniquement, à utiliser uniquement en CLI).
+  const snapContactsCount = (payload?.tables?.contacts || []).length;
+  const currContactsCount = db
+    .prepare(
+      "SELECT COUNT(*) as n FROM contacts WHERE companyId = ? AND (" +
+        "ownerCollaboratorId = ? OR executorCollaboratorId = ? OR assignedTo = ? OR sharedWithId = ? " +
+        "OR shared_with_json LIKE '%\"' || ? || '\"%')"
+    )
+    .get(companyId, collabId, collabId, collabId, collabId, collabId)?.n || 0;
+  const forceOverride = arguments[0]?.reason === 'force-empty-snapshot-override' && actorType === 'admin';
+  if (currContactsCount > 5 && snapContactsCount === 0 && !forceOverride) {
+    throw new Error(
+      `restoreSnapshot: BLOQUÉ — sauvegarde vide (0 contacts) alors que le collab a ${currContactsCount} contact(s). ` +
+        `Restaurer effacerait tous les contacts. Snapshot probablement créé avant le correctif scope V1.10.1. ` +
+        `Override possible via reason="force-empty-snapshot-override" (admin uniquement).`
+    );
+  }
+
   // 2. Fingerprint avant
   const beforeFingerprint = computeCollabFingerprint({ companyId, collabId });
 

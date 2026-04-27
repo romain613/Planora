@@ -1466,6 +1466,188 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     });
   }, [cockpitIntentLevels]);
 
+  // V1.10.1 — UI Sauvegardes & restauration (self-service)
+  // Wording strict côté UX : "sauvegardes / restaurer / annuler une erreur" — JAMAIS "snapshot".
+  const [collabSnapshotsList, setCollabSnapshotsList] = useState([]);
+  const [collabSnapshotsLoading, setCollabSnapshotsLoading] = useState(false);
+  const [snapshotPreviewModal, setSnapshotPreviewModal] = useState(null); // {snapshot, willRestore, willSkip, warnings, counts}
+  const [snapshotPreviewLoading, setSnapshotPreviewLoading] = useState(false);
+  const [snapshotConfirmRestore, setSnapshotConfirmRestore] = useState(null); // {snapshot row}
+  const [snapshotRestoring, setSnapshotRestoring] = useState(false);
+  const [snapshotManualLoading, setSnapshotManualLoading] = useState(false);
+  // Préparation R4 : permet le bouton "Annuler la restauration" via re-restore du pre-restore snapshot
+  const [snapshotLastRestoreUndo, setSnapshotLastRestoreUndo] = useState(null); // {preRestoreSnapshotId, restoredAt}
+
+  // V1.10.1 — Helper format temps relatif "il y a X min" (UX humaine, jamais technique)
+  const fmtSnapshotAgo = (ms) => {
+    if (!ms) return '—';
+    const diff = Date.now() - Number(ms);
+    if (diff < 0) return "à l'instant";
+    if (diff < 60_000) return "à l'instant";
+    if (diff < 3_600_000) return 'il y a ' + Math.floor(diff / 60_000) + ' min';
+    if (diff < 86_400_000) {
+      const h = Math.floor(diff / 3_600_000);
+      return 'il y a ' + h + 'h';
+    }
+    const d = new Date(Number(ms));
+    const today = new Date();
+    if (d.toDateString() === today.toDateString()) {
+      return "aujourd'hui " + d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+    }
+    const yest = new Date(today.getTime() - 86_400_000);
+    if (d.toDateString() === yest.toDateString()) {
+      return "hier " + d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+    }
+    return d.toLocaleDateString('fr-FR', { day:'2-digit', month:'short' }) + ' ' + d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+  };
+
+  // V1.10.1 — Fetch liste sauvegardes (auto + manuel) du collab courant
+  const fetchCollabSnapshots = () => {
+    if (!collab?.id) return;
+    setCollabSnapshotsLoading(true);
+    api('/api/collab-snapshots/list?collabId=' + encodeURIComponent(collab.id))
+      .then(r => {
+        if (r && Array.isArray(r.snapshots)) setCollabSnapshotsList(r.snapshots);
+      })
+      .catch(() => showNotif('Erreur chargement des sauvegardes', 'danger'))
+      .finally(() => setCollabSnapshotsLoading(false));
+  };
+
+  // V1.10.1 — Auto-fetch quand l'utilisateur ouvre le sub-tab Sauvegardes
+  useEffect(() => {
+    if (portalTab === 'settings' && settingsSubTab === 'sauvegardes') {
+      fetchCollabSnapshots();
+    }
+  }, [portalTab, settingsSubTab]);
+
+  // V1.10.1 — Listener event global 'collabDataRestored' : tous les modules (CRM, pipeline, agenda) refetch leurs données
+  // pour synchroniser sans reload. Critique : aucun reload page autorisé après restore.
+  useEffect(() => {
+    const handler = () => {
+      Promise.all([
+        api('/api/data/contacts'),
+        api('/api/bookings'),
+      ]).then(([cs, bs]) => {
+        if (Array.isArray(cs)) setContacts(cs.filter(Boolean));
+        if (Array.isArray(bs)) setBookings(bs);
+      }).catch(() => {});
+    };
+    window.addEventListener('collabDataRestored', handler);
+    return () => window.removeEventListener('collabDataRestored', handler);
+  }, []);
+
+  // V1.10.1 — Action : ouvrir modal preview d'une sauvegarde
+  const openSnapshotPreview = (snapshotId) => {
+    setSnapshotPreviewLoading(true);
+    setSnapshotPreviewModal({ _loading: true, snapshotId });
+    api('/api/collab-snapshots/' + snapshotId + '/preview')
+      .then(preview => {
+        if (preview && preview.snapshot) setSnapshotPreviewModal(preview);
+        else { setSnapshotPreviewModal(null); showNotif('Aperçu indisponible', 'danger'); }
+      })
+      .catch(err => { setSnapshotPreviewModal(null); showNotif('Erreur aperçu : ' + (err?.message || ''), 'danger'); })
+      .finally(() => setSnapshotPreviewLoading(false));
+  };
+
+  // V1.10.1 — Action : créer une sauvegarde manuelle (avant action sensible)
+  const createManualSnapshot = () => {
+    if (!collab?.id) return;
+    setSnapshotManualLoading(true);
+    api('/api/collab-snapshots/manual', {
+      method: 'POST',
+      body: { collabId: collab.id, reason: 'snapshot manuel utilisateur' },
+    })
+      .then(r => {
+        if (r?.success) {
+          showNotif('✓ Sauvegarde créée', 'success');
+          fetchCollabSnapshots();
+        } else {
+          showNotif('Erreur création : ' + (r?.error || ''), 'danger');
+        }
+      })
+      .catch(err => showNotif('Erreur : ' + (err?.message || ''), 'danger'))
+      .finally(() => setSnapshotManualLoading(false));
+  };
+
+  // V1.10.1 — Action : confirmer et appliquer la restauration
+  // Flow : POST /restore → reset states locaux critiques → refetch data → dispatch event global → toast undo
+  const confirmRestoreSnapshot = (snapshot, reason) => {
+    if (!snapshot?.id) return;
+    setSnapshotRestoring(true);
+    api('/api/collab-snapshots/' + snapshot.id + '/restore', {
+      method: 'POST',
+      body: { confirmed: true, reason: reason || 'user-revert' },
+    })
+      .then(result => {
+        if (!result?.success) {
+          showNotif('Erreur restauration : ' + (result?.error || ''), 'danger');
+          return;
+        }
+        // 1. Reset states locaux critiques (peuvent pointer vers data invalide post-restore)
+        try { setSelectedCrmContact(null); } catch {}
+        try { setPipelineRightContact(null); } catch {}
+        try { setPhoneActiveCall(null); } catch {}
+        try { setCockpitOpen(false); } catch {}
+        try { setCockpitMinimized(false); } catch {}
+        // 2. Refetch global (contacts + bookings) sans reload
+        Promise.all([
+          api('/api/data/contacts'),
+          api('/api/bookings'),
+        ]).then(([cs, bs]) => {
+          if (Array.isArray(cs)) setContacts(cs.filter(Boolean));
+          if (Array.isArray(bs)) setBookings(bs);
+        }).catch(() => {});
+        // 3. Event global pour autres modules
+        try { window.dispatchEvent(new Event('collabDataRestored')); } catch {}
+        // 4. Préparation R4 : sauvegarder l'ID pre-restore pour bouton "Annuler"
+        if (result.preRestoreSnapshotId) {
+          setSnapshotLastRestoreUndo({
+            preRestoreSnapshotId: result.preRestoreSnapshotId,
+            restoredAt: Date.now(),
+          });
+        }
+        // 5. Refresh liste + close modals
+        fetchCollabSnapshots();
+        setSnapshotPreviewModal(null);
+        setSnapshotConfirmRestore(null);
+        // 6. Toast succès
+        showNotif('✅ Vos données ont été restaurées', 'success');
+      })
+      .catch(err => showNotif('Erreur restauration : ' + (err?.message || ''), 'danger'))
+      .finally(() => setSnapshotRestoring(false));
+  };
+
+  // V1.10.1 — Action R4 : annuler la dernière restauration (re-restore du pre-restore snapshot)
+  const undoLastRestore = () => {
+    if (!snapshotLastRestoreUndo?.preRestoreSnapshotId) {
+      showNotif('Aucune restauration à annuler', 'info');
+      return;
+    }
+    confirmRestoreSnapshot({ id: snapshotLastRestoreUndo.preRestoreSnapshotId }, 'undo-restore');
+    setSnapshotLastRestoreUndo(null);
+  };
+
+  // V1.10.1+ — Action : supprimer une sauvegarde (avec confirm)
+  const deleteSnapshot = (snapshot) => {
+    if (!snapshot?.id) return;
+    const dateLabel = fmtSnapshotAgo(snapshot.createdAt);
+    if (!confirm(`Supprimer la sauvegarde "${dateLabel}" ?\n\nCette action est définitive. Vous ne pourrez plus revenir à cet état.`)) return;
+    api('/api/collab-snapshots/' + snapshot.id, { method: 'DELETE' })
+      .then(r => {
+        if (r?.success) {
+          showNotif('Sauvegarde supprimée', 'success');
+          // Si c'était le pre-restore actuel, retirer le banner Annuler
+          if (snapshotLastRestoreUndo?.preRestoreSnapshotId === snapshot.id) {
+            setSnapshotLastRestoreUndo(null);
+          }
+          fetchCollabSnapshots();
+        } else {
+          showNotif('Erreur : ' + (r?.error || 'suppression refusée'), 'danger');
+        }
+      })
+      .catch(err => showNotif('Erreur : ' + (err?.message || ''), 'danger'));
+  };
+
   // Post-call form
   const [phonePostCallModal, setPhonePostCallModal] = useState(null); // callId
   const [nrpPostCallModal, setNrpPostCallModal] = useState(null); // { contact, nrpCount, followups, isShortCall, duration, isNrp }
@@ -4371,6 +4553,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                   {id:'smspipeline',icon:'repeat',label:'SMS par colonne',desc:'Automatisation pipeline',color:'#7C3AED'},
                   {id:'powerdialer',icon:'phone-call',label:'Power Dialer',desc:'Ring timeout',color:'#3B82F6'},
                   {id:'amd',icon:'voicemail',label:'Détection messagerie',desc:'AMD, voicemail',color:'#6366F1'},
+                  {id:'sauvegardes',icon:'shield',label:'Sauvegardes & restauration',desc:'Vos données protégées automatiquement',color:'#10B981'},
                 ];
                 const [_openSec, _setOpenSec] = [settingsSubTab, setSettingsSubTab];
                 _T.settingsAccordion = {open:_openSec, set:_setOpenSec};
@@ -5022,6 +5205,106 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                   </div>
                 </> : null}
               </div>}
+              </Card>}
+
+              {/* V1.10.1 — Sauvegardes & restauration (UI self-service R3). Wording strict UX : "sauvegardes / restaurer / annuler" — JAMAIS "snapshot" */}
+              {(settingsSubTab===''||settingsSubTab==='sauvegardes') && <Card style={{marginBottom:8}}>
+                <div onClick={()=>(typeof setSettingsSubTab==='function'?setSettingsSubTab:function(){})(p=>p==='sauvegardes'?'':'sauvegardes')} style={{display:'flex',alignItems:'center',gap:10,cursor:'pointer',marginBottom:settingsSubTab==='sauvegardes'?16:0}}>
+                  <div style={{width:32,height:32,borderRadius:8,background:'#10B98112',display:'flex',alignItems:'center',justifyContent:'center'}}><I n="shield" s={16} style={{color:'#10B981'}}/></div>
+                  <div style={{flex:1}}>
+                    <div style={{fontSize:14,fontWeight:700,color:T.text}}>Sauvegardes & restauration</div>
+                    <div style={{fontSize:10,color:T.text3}}>Vos données sont protégées automatiquement</div>
+                  </div>
+                  <I n={settingsSubTab==='sauvegardes'?'chevron-up':'chevron-down'} s={16} style={{color:T.text3}}/>
+                </div>
+                {settingsSubTab==='sauvegardes' && <div>
+                  {/* Header rassurant */}
+                  <div style={{padding:'14px 16px',borderRadius:12,background:'linear-gradient(135deg,#10B98108,#22C55E04)',border:'1px solid #10B98125',marginBottom:12}}>
+                    <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:8}}>
+                      <span style={{fontSize:22}}>🛡</span>
+                      <div style={{flex:1}}>
+                        <div style={{fontSize:13,fontWeight:700,color:T.text}}>Vos données sont sauvegardées automatiquement</div>
+                        <div style={{fontSize:11,color:T.text3,marginTop:2}}>
+                          {collabSnapshotsList[0]
+                            ? `Dernière sauvegarde : ${fmtSnapshotAgo(collabSnapshotsList[0].createdAt)}`
+                            : (collabSnapshotsLoading ? 'Chargement…' : 'Aucune sauvegarde encore')}
+                        </div>
+                      </div>
+                    </div>
+                    <Btn small primary disabled={snapshotManualLoading} onClick={createManualSnapshot}>
+                      {snapshotManualLoading ? <Spinner size={12}/> : <I n="plus" s={12}/>}
+                      <span style={{marginLeft:6}}>Créer une sauvegarde maintenant</span>
+                    </Btn>
+                    {snapshotLastRestoreUndo?.preRestoreSnapshotId && (
+                      <div style={{marginTop:10,padding:'8px 10px',borderRadius:8,background:'#F59E0B10',border:'1px solid #F59E0B30',display:'flex',alignItems:'center',gap:8}}>
+                        <I n="rotate-ccw" s={13} style={{color:'#B45309'}}/>
+                        <div style={{flex:1,fontSize:11,color:'#92400E'}}>Vous venez de restaurer un état précédent. Vous pouvez encore annuler cette action.</div>
+                        <Btn small onClick={undoLastRestore}><I n="undo" s={11}/> Annuler la restauration</Btn>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Liste des sauvegardes */}
+                  <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:8}}>
+                    <div style={{fontSize:12,fontWeight:700,color:T.text2}}>
+                      Historique ({collabSnapshotsList.length})
+                    </div>
+                    <Btn small ghost onClick={fetchCollabSnapshots} disabled={collabSnapshotsLoading}>
+                      <I n="refresh-cw" s={11}/> Actualiser
+                    </Btn>
+                  </div>
+
+                  {collabSnapshotsLoading && collabSnapshotsList.length === 0 ? (
+                    <div style={{textAlign:'center',padding:20,color:T.text3,fontSize:12}}>Chargement…</div>
+                  ) : collabSnapshotsList.length === 0 ? (
+                    <div style={{textAlign:'center',padding:20,color:T.text3,fontSize:12}}>
+                      <I n="shield-off" s={20} style={{color:T.text3,display:'block',margin:'0 auto 6px'}}/>
+                      Aucune sauvegarde pour l'instant.<br/>
+                      Une sauvegarde automatique sera créée dès qu'un changement sera détecté.
+                    </div>
+                  ) : (
+                    <div style={{display:'flex',flexDirection:'column',gap:6,maxHeight:380,overflowY:'auto'}}>
+                      {collabSnapshotsList.map(s => {
+                        const isManual = s.kind === 'manual';
+                        const isPreRestore = s.kind === 'pre-restore';
+                        const tagColor = isManual ? '#7C3AED' : isPreRestore ? '#F59E0B' : '#10B981';
+                        const tagLabel = isManual ? '👆 Manuel' : isPreRestore ? '⏪ Pré-restauration' : '🔄 Auto';
+                        return (
+                          <div key={s.id} style={{padding:'10px 12px',borderRadius:10,border:'1px solid '+T.border,background:T.bg,display:'flex',alignItems:'center',gap:10}}>
+                            <div style={{flex:1,minWidth:0}}>
+                              <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:3}}>
+                                <span style={{fontSize:13,fontWeight:700,color:T.text}}>{fmtSnapshotAgo(s.createdAt)}</span>
+                                <span style={{fontSize:9,fontWeight:700,padding:'2px 7px',borderRadius:5,background:tagColor+'15',color:tagColor,letterSpacing:0.3}}>{tagLabel}</span>
+                              </div>
+                              <div style={{fontSize:10,color:T.text3}}>
+                                {s.summary?.contacts != null ? `${s.summary.contacts} contacts · ` : ''}
+                                {s.summary?.bookings != null ? `${s.summary.bookings} RDV · ` : ''}
+                                {(s.sizeBytes/1024).toFixed(1)} KB
+                              </div>
+                            </div>
+                            <Btn small ghost onClick={()=>openSnapshotPreview(s.id)} disabled={snapshotPreviewLoading}>
+                              <I n="eye" s={11}/> Voir les détails
+                            </Btn>
+                            <Btn small primary onClick={()=>setSnapshotConfirmRestore(s)}>
+                              <I n="rotate-ccw" s={11}/> Restaurer cet état
+                            </Btn>
+                            <Btn small ghost danger onClick={()=>deleteSnapshot(s)} title="Supprimer cette sauvegarde">
+                              <I n="trash-2" s={11}/>
+                            </Btn>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  <div style={{marginTop:12,padding:'10px 12px',borderRadius:8,background:'#0EA5E908',border:'1px solid #0EA5E930',fontSize:11,color:T.text2,lineHeight:1.5,display:'flex',alignItems:'flex-start',gap:8}}>
+                    <I n="info" s={13} style={{color:'#0EA5E9',flexShrink:0,marginTop:1}}/>
+                    <div>
+                      <strong style={{color:T.text}}>Conservation :</strong> les sauvegardes de plus de 7 jours sont automatiquement supprimées.
+                      <div style={{fontSize:10,color:T.text3,marginTop:3}}>Politique détaillée : 20 dernières + 1 par heure sur 24h + 1 par jour sur 7 jours. Les sauvegardes "Pré-restauration" récentes sont protégées (utilisées pour annuler une restauration).</div>
+                    </div>
+                  </div>
+                </div>}
               </Card>}
 
               {/* Mes calendriers — toujours visible */}
@@ -6383,6 +6666,188 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
               setContractModal(null);
               showNotif(`Contrat validé — ${amt.toLocaleString('fr-FR')} €`);
             }}><I n="check" s={14}/> Valider le contrat</Btn>
+          </div>
+        </Modal>
+      )}
+
+      {/* V1.10.1 — Modal "Voir les détails" d'une sauvegarde */}
+      {snapshotPreviewModal && (
+        <Modal open={true} onClose={()=>setSnapshotPreviewModal(null)} title="Détails de la sauvegarde" width={520}>
+          {snapshotPreviewModal._loading || snapshotPreviewLoading ? (
+            <div style={{padding:30,textAlign:'center',color:T.text3}}>
+              <Spinner size={24}/>
+              <div style={{marginTop:10,fontSize:12}}>Chargement de l'aperçu…</div>
+            </div>
+          ) : snapshotPreviewModal.snapshot ? (
+            <div>
+              {/* Header info */}
+              <div style={{padding:'10px 12px',borderRadius:10,background:T.bg,marginBottom:14}}>
+                <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:4}}>
+                  Sauvegarde de {fmtSnapshotAgo(snapshotPreviewModal.snapshot.createdAt)}
+                </div>
+                <div style={{fontSize:11,color:T.text3}}>
+                  {snapshotPreviewModal.snapshot.kind === 'manual' ? '👆 Sauvegarde manuelle' : snapshotPreviewModal.snapshot.kind === 'pre-restore' ? '⏪ Pré-restauration (avant une autre restauration)' : '🔄 Sauvegarde automatique'}
+                </div>
+              </div>
+
+              {/* Contenu de la sauvegarde — wording humain */}
+              <div style={{marginBottom:14}}>
+                <div style={{fontSize:12,fontWeight:700,color:T.text2,marginBottom:8}}>Cet état contient :</div>
+                <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+                  {[
+                    { label:'Contacts', icon:'users', key:'contacts', color:'#3B82F6' },
+                    { label:'RDV enregistrés', icon:'calendar', key:'bookings', color:'#0EA5E9' },
+                    { label:'Suivis pipeline', icon:'git-branch', key:'pipeline_history', color:'#7C3AED' },
+                    { label:'Changements de statut', icon:'refresh-cw', key:'contact_status_history', color:'#F59E0B' },
+                    { label:'Notes IA contact', icon:'cpu', key:'contact_ai_memory', color:'#8B5CF6' },
+                    { label:'Documents', icon:'paperclip', key:'contact_documents', color:'#22C55E' },
+                  ].map(item => {
+                    const count = (snapshotPreviewModal.willRestore && snapshotPreviewModal.willRestore[item.key]) || 0;
+                    return (
+                      <div key={item.key} style={{padding:'8px 10px',borderRadius:8,background:item.color+'08',border:'1px solid '+item.color+'20',display:'flex',alignItems:'center',gap:8}}>
+                        <I n={item.icon} s={14} style={{color:item.color}}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{fontSize:11,color:T.text2}}>{item.label}</div>
+                          <div style={{fontSize:14,fontWeight:800,color:item.color}}>{count}</div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* V1.10.1 — Preview "Vos RDV actuels" : aperçu concret de ce qui sera remplacé.
+                  Source = state local 'bookings' (déjà chargé). Affichage 3 prochains à venir du collab. */}
+              {(() => {
+                const myUpcoming = (bookings||[])
+                  .filter(b => b && b.collaboratorId === collab.id && b.status === 'confirmed')
+                  .map(b => {
+                    try {
+                      const dt = new Date((b.date||'') + 'T' + ((b.time||'00:00')+'00:00').slice(0,5));
+                      return { ...b, _dt: dt.getTime() };
+                    } catch { return null; }
+                  })
+                  .filter(b => b && !isNaN(b._dt) && b._dt >= Date.now() - 60_000)
+                  .sort((a,bb) => a._dt - bb._dt)
+                  .slice(0, 3);
+                if (myUpcoming.length === 0) return null;
+                return (
+                  <div style={{marginBottom:14,padding:'10px 12px',borderRadius:10,background:T.bg,border:'1px solid '+T.border}}>
+                    <div style={{fontSize:11,fontWeight:700,color:T.text2,marginBottom:8,display:'flex',alignItems:'center',gap:5}}>
+                      <I n="calendar" s={12} style={{color:'#0EA5E9'}}/> Vos {myUpcoming.length} prochains RDV (aperçu de l'état actuel)
+                    </div>
+                    {myUpcoming.map((b,i) => {
+                      const ct = (contacts||[]).find(c => c.id === b.contactId);
+                      const dateStr = (() => {
+                        try {
+                          const d = new Date(b._dt);
+                          return d.toLocaleDateString('fr-FR', { day:'2-digit', month:'short' }) + ' à ' + d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+                        } catch { return b.date + ' ' + b.time; }
+                      })();
+                      return (
+                        <div key={b.id||i} style={{display:'flex',alignItems:'center',gap:8,fontSize:11,padding:'4px 0',borderTop:i>0?'1px solid '+T.border+'40':'none'}}>
+                          <I n="calendar" s={11} style={{color:T.text3}}/>
+                          <span style={{color:T.text,fontWeight:600}}>{dateStr}</span>
+                          <span style={{color:T.text3}}>·</span>
+                          <span style={{color:T.text2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{ct?.name || b.visitorName || 'Sans nom'}</span>
+                        </div>
+                      );
+                    })}
+                    <div style={{fontSize:9,color:T.text3,marginTop:6,fontStyle:'italic'}}>Ces RDV pourraient être remplacés par ceux de la sauvegarde.</div>
+                  </div>
+                );
+              })()}
+
+              {/* Avertissements — séparation critical (bloquant) vs simple (informatif) */}
+              {(() => {
+                const warns = Array.isArray(snapshotPreviewModal.warnings) ? snapshotPreviewModal.warnings : [];
+                const critical = warns.filter(w => w.kind === 'critical-empty-snapshot');
+                const others = warns.filter(w => w.kind !== 'critical-empty-snapshot');
+                return (
+                  <>
+                    {critical.length > 0 && (
+                      <div style={{marginBottom:14,padding:'12px 14px',borderRadius:10,background:'#EF444412',border:'2px solid #EF4444'}}>
+                        <div style={{fontSize:12,fontWeight:800,color:'#B91C1C',marginBottom:6,display:'flex',alignItems:'center',gap:6}}>
+                          <I n="shield-off" s={14}/> Restauration bloquée
+                        </div>
+                        {critical.map((w, i) => (
+                          <div key={i} style={{fontSize:11,color:'#7F1D1D',lineHeight:1.5}}>
+                            <strong>{w.message}</strong>
+                            {w.detail && <div style={{marginTop:4,color:'#991B1B'}}>{w.detail}</div>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {others.length > 0 && (
+                      <div style={{marginBottom:14,padding:'10px 12px',borderRadius:10,background:'#F59E0B08',border:'1px solid #F59E0B30'}}>
+                        <div style={{fontSize:11,fontWeight:700,color:'#B45309',marginBottom:6,display:'flex',alignItems:'center',gap:5}}>
+                          <I n="alert-triangle" s={12}/> Avertissements ({others.length})
+                        </div>
+                        {others.slice(0, 5).map((w, i) => (
+                          <div key={i} style={{fontSize:10,color:T.text2,marginTop:3}}>• {w.message}{w.detail ? ` (${w.detail})` : ''}</div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                );
+              })()}
+
+              {/* Note historique externe */}
+              {Array.isArray(snapshotPreviewModal.willSkip) && snapshotPreviewModal.willSkip.length > 0 && (
+                <div style={{marginBottom:14,fontSize:10,color:T.text3,fontStyle:'italic'}}>
+                  Note : les appels VoIP, transcriptions et logs d'activité ne sont pas restaurés (historique externe préservé).
+                </div>
+              )}
+
+              {/* CTA — désactivé si warning critical (anti-perte) */}
+              {(() => {
+                const hasCritical = (snapshotPreviewModal.warnings||[]).some(w => w.kind === 'critical-empty-snapshot');
+                return (
+                  <div style={{display:'flex',gap:8,justifyContent:'flex-end',paddingTop:8,borderTop:'1px solid '+T.border}}>
+                    <Btn onClick={()=>setSnapshotPreviewModal(null)}>Fermer</Btn>
+                    <Btn primary disabled={hasCritical} onClick={()=>{
+                      if (hasCritical) return;
+                      const snap = snapshotPreviewModal.snapshot;
+                      setSnapshotPreviewModal(null);
+                      setSnapshotConfirmRestore(snap);
+                    }} title={hasCritical ? 'Restauration bloquée pour protéger vos données' : 'Restaurer cet état'}>
+                      <I n="rotate-ccw" s={13}/> {hasCritical ? 'Restauration bloquée' : 'Restaurer cet état'}
+                    </Btn>
+                  </div>
+                );
+              })()}
+            </div>
+          ) : (
+            <div style={{padding:20,color:T.text3,fontSize:12,textAlign:'center'}}>Aperçu indisponible</div>
+          )}
+        </Modal>
+      )}
+
+      {/* V1.10.1 — Modal de confirmation Restore (obligatoire) */}
+      {snapshotConfirmRestore && (
+        <Modal open={true} onClose={()=>!snapshotRestoring && setSnapshotConfirmRestore(null)} title="Revenir à cet état ?" width={460}>
+          <div>
+            <div style={{padding:'14px 16px',borderRadius:10,background:'#F59E0B08',border:'1px solid #F59E0B30',marginBottom:14}}>
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
+                <span style={{fontSize:22}}>⚠</span>
+                <div style={{fontSize:13,fontWeight:700,color:T.text}}>Vos données actuelles seront remplacées</div>
+              </div>
+              <div style={{fontSize:12,color:T.text2,lineHeight:1.5}}>
+                Vous reviendrez à l'état de <strong>{fmtSnapshotAgo(snapshotConfirmRestore.createdAt)}</strong>.
+                Vos contacts, rendez-vous, statuts pipeline et notes seront remplacés par cet état précédent.
+              </div>
+              <div style={{fontSize:11,color:'#16A34A',marginTop:8,display:'flex',alignItems:'center',gap:5}}>
+                <I n="shield-check" s={12}/> Une sauvegarde de votre état actuel sera créée. Vous pourrez annuler cette action.
+              </div>
+            </div>
+
+            <div style={{display:'flex',gap:8,justifyContent:'flex-end'}}>
+              <Btn disabled={snapshotRestoring} onClick={()=>setSnapshotConfirmRestore(null)}>Annuler</Btn>
+              <Btn primary disabled={snapshotRestoring} onClick={()=>confirmRestoreSnapshot(snapshotConfirmRestore)}>
+                {snapshotRestoring ? <Spinner size={12}/> : <I n="check" s={13}/>}
+                <span style={{marginLeft:6}}>{snapshotRestoring ? 'Restauration en cours…' : 'Confirmer la restauration'}</span>
+              </Btn>
+            </div>
           </div>
         </Modal>
       )}
