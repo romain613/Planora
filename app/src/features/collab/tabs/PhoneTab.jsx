@@ -1300,20 +1300,17 @@ return <div key={ev.id} style={{fontSize:11,color:T.text3,textAlign:'center',pad
   {/* ── COLLAPSE BUTTON ── */}
   <div onClick={togglePhoneRightPanel} style={{display:'flex',alignItems:'center',justifyContent:'center',padding:'4px 0',cursor:'pointer',borderBottom:`1px solid ${T.border}`,flexShrink:0}} title="Replier le panneau"><I n="chevron-right" s={14} style={{color:T.text3}}/></div>
 
-  {/* V1.9 UX — MiniCopilotLiveStatus PERSISTANT — toujours visible en haut de la colonne droite pendant un appel actif (V1.9-cockpitfix : retiré garde phoneRightTab !== 'ia' qui rendait sticky invisible si tab forcé sur 'ia') */}
+  {/* V1.9.1 UX — Sticky statut Copilot allégé : suggestion IA RETIRÉE (centralisée dans bannière basse). Conserve uniquement statut LIVE + voice activity Vous/Client (signaux système simples autorisés). */}
   {(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null) && (
-    <div style={{padding:'6px 10px',borderBottom:'1px solid '+T.border,background:'linear-gradient(135deg,#F9731608,#F59E0B04)',flexShrink:0}}>
-      {/* Suggestion IA (lit phraseToSay || nextSuggestion || suggestion backend GPT) */}
-      {((typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.phraseToSay || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.nextSuggestion || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.suggestion) ? (
-        <div style={{marginBottom:5}}>
-          <div style={{fontSize:7,fontWeight:800,color:'#22C55E',marginBottom:2,textTransform:'uppercase',letterSpacing:0.4}}>💬 Suggestion IA</div>
-          <div style={{fontSize:10,fontWeight:600,color:T.text,lineHeight:1.35,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>"{(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.phraseToSay || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.nextSuggestion || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.suggestion}"</div>
-        </div>
-      ) : (
-        <div style={{fontSize:8,color:T.text3,fontStyle:'italic',textAlign:'center',marginBottom:5}}>🤖 L'IA analyse l'appel…</div>
-      )}
-      {/* Voice activity compact Vous/Client (1 row) */}
-      <div style={{display:'flex',gap:4}}>
+    <div style={{padding:'6px 10px',borderBottom:'1px solid '+T.border,background:'linear-gradient(135deg,#7C3AED06,#2563EB04)',flexShrink:0,display:'flex',alignItems:'center',gap:8}}>
+      {/* Statut Copilot LIVE compact */}
+      <div style={{display:'flex',alignItems:'center',gap:5,flexShrink:0}}>
+        <I n="cpu" s={11} style={{color:'#7C3AED'}}/>
+        <span style={{fontSize:8,fontWeight:800,color:'#7C3AED',letterSpacing:0.3}}>LIVE</span>
+        <span style={{width:5,height:5,borderRadius:3,background:'#22C55E',animation:'pulse 2s infinite',boxShadow:'0 0 4px #22C55E80'}}/>
+      </div>
+      {/* Voice activity compact Vous/Client (signaux système simples) */}
+      <div style={{display:'flex',gap:4,flex:1}}>
         <div style={{flex:1,padding:'3px 6px',borderRadius:6,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent+'12':T.bg,border:'1px solid '+((typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent+'40':T.border+'50'),transition:'all .3s',display:'flex',alignItems:'center',gap:4}}>
           <div style={{width:5,height:5,borderRadius:3,background:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent:'#D1D5DB',transition:'all .3s',boxShadow:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?'0 0 6px '+T.accent+'60':'none'}}/>
           <span style={{fontSize:7,fontWeight:700,color:(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?T.accent:T.text3}}>{(typeof phoneLiveVoiceActivity!=='undefined'?phoneLiveVoiceActivity:{}).me?'Vous parlez…':'Vous'}</span>
@@ -2894,60 +2891,7 @@ return <div style={{flex:1,overflowY:'auto',padding:10}}>
         <div style={{fontSize:8,fontWeight:700,color:T.text3}}>Messages</div>
       </div>
     </div>
-    {/* ── COACHING COMMERCIAL LIVE — bloc principal dynamique (accordéon) ── */}
-    <div style={{borderRadius:10,border:'1.5px solid #F9731640',marginBottom:8,overflow:'hidden',background:'linear-gradient(135deg,#F9731606,#F59E0B03)',transition:'border-color .3s',borderColor:(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.phraseToSay?'#22C55E60':'#F9731640'}}>
-      <div onClick={()=>setIaHubCollapse(p=>({...p,_coachingOpen:p._coachingOpen===false?true:p._coachingOpen===undefined?false:!p._coachingOpen}))} style={{padding:'6px 10px',background:'linear-gradient(135deg,#F97316,#F59E0B)',display:'flex',alignItems:'center',gap:6,cursor:'pointer',userSelect:'none'}}>
-        <span style={{fontSize:14}}>🎯</span>
-        <span style={{fontSize:11,fontWeight:800,color:'#fff',flex:1}}>Coaching commercial</span>
-        {(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.salesTechnique && <span style={{fontSize:8,fontWeight:700,padding:'2px 6px',borderRadius:4,background:'rgba(255,255,255,0.25)',color:'#fff'}}>{phoneLiveAnalysis.salesTechnique}</span>}
-        <span style={{width:6,height:6,borderRadius:3,background:'#fff',animation:'pulse 2s infinite',boxShadow:'0 0 6px rgba(255,255,255,0.6)'}}/>
-        <I n={(typeof iaHubCollapse!=='undefined'?iaHubCollapse:{})._coachingOpen===false?'chevron-down':'chevron-up'} s={14} style={{color:'#fff',transition:'transform .2s'}}/>
-      </div>
-      <div style={{maxHeight:(typeof iaHubCollapse!=='undefined'?iaHubCollapse:{})._coachingOpen===false?0:'1000px',overflow:'hidden',transition:'max-height .3s ease'}}>
-      <div style={{padding:'8px 10px',display:'flex',flexDirection:'column',gap:6}}>
-        {/* Phrase à dire — LA PLUS GROSSE */}
-        {/* V1.9 UX FIX — backend GPT pousse analysis.suggestion (et non phraseToSay/nextSuggestion). Lire les 3 champs. */}
-        {((typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.phraseToSay || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.nextSuggestion || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.suggestion) ? (
-          <div style={{padding:'10px 12px',borderRadius:8,background:'linear-gradient(135deg,#22C55E10,#22C55E06)',border:'1.5px solid #22C55E35',position:'relative'}}>
-            <div style={{fontSize:8,fontWeight:800,color:'#22C55E',marginBottom:4,textTransform:'uppercase',letterSpacing:0.5}}>💬 Suggestion IA</div>
-            <div style={{fontSize:13,fontWeight:700,color:T.text,lineHeight:1.5}}>"{(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.phraseToSay || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.nextSuggestion || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.suggestion}"</div>
-            {(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.step && <div style={{fontSize:8,color:T.text3,marginTop:3,fontStyle:'italic'}}>Étape : {phoneLiveAnalysis.step}</div>}
-          </div>
-        ) : (
-          <div style={{padding:'8px 10px',borderRadius:8,background:T.bg,border:'1px dashed '+T.border,textAlign:'center'}}>
-            <div style={{fontSize:9,color:T.text3}}>🤖 L'IA analyse l'appel… les suggestions arrivent dans quelques secondes</div>
-          </div>
-        )}
-        {/* Question ouverte */}
-        {(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.openQuestion && (
-          <div style={{padding:'6px 10px',borderRadius:6,background:'#3B82F608',border:'1px solid #3B82F625'}}>
-            <div style={{fontSize:8,fontWeight:700,color:'#3B82F6',marginBottom:2}}>❓ Question à poser</div>
-            <div style={{fontSize:11,color:T.text,lineHeight:1.4}}>"{(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:{}).openQuestion}"</div>
-          </div>
-        )}
-        {/* Réponse objection — urgent si détectée */}
-        {(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.detectedObjection && (
-          <div style={{padding:'6px 10px',borderRadius:6,background:'#EF444410',border:'1.5px solid #EF444435'}}>
-            <div style={{fontSize:8,fontWeight:800,color:'#EF4444',marginBottom:3}}>⚡ OBJECTION : {(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:{}).detectedObjection}</div>
-            {(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:{}).objectionResponse && <div style={{fontSize:11,fontWeight:600,color:'#22C55E',lineHeight:1.4}}>→ "{(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:{}).objectionResponse}"</div>}
-          </div>
-        )}
-        {/* Action + Insight — compact */}
-        <div style={{display:'flex',gap:4}}>
-          {(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.actionToDo && (
-            <div style={{flex:1,padding:'4px 8px',borderRadius:6,background:'#F59E0B08',border:'1px solid #F59E0B20',fontSize:9,color:T.text,display:'flex',alignItems:'center',gap:3}}>
-              <I n="zap" s={9} style={{color:'#F59E0B',flexShrink:0}}/> {(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:{}).actionToDo}
-            </div>
-          )}
-          {(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.keyInsight && !(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.actionToDo && (
-            <div style={{flex:1,padding:'4px 8px',borderRadius:6,background:T.bg,border:'1px solid '+T.border,fontSize:9,color:T.text3,fontStyle:'italic'}}>
-              💡 {(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:{}).keyInsight}
-            </div>
-          )}
-        </div>
-      </div>
-      </div>{/* fin accordéon coaching */}
-    </div>
+    {/* V1.9.1 UX — Bloc "Coaching commercial" RETIRÉ (allégement colonne droite). Toute la logique "quoi dire" (phraseToSay/nextSuggestion/suggestion/openQuestion/detectedObjection/actionToDo/keyInsight) est désormais centralisée UNIQUEMENT dans la bannière flottante basse Cockpit. La colonne droite reste zone de lecture/contexte. */}
     {/* ── Transcription live ── */}
     <div style={{borderRadius:8,border:'1px solid '+T.border,marginBottom:8}}>
       <div style={{padding:'5px 8px',background:T.bg,display:'flex',alignItems:'center',gap:4,borderBottom:'1px solid '+T.border}}>
@@ -2971,20 +2915,7 @@ return <div style={{flex:1,overflowY:'auto',padding:10}}>
           </div>
         </div>
       </div>
-      {/* V1.9 UX — Mini bloc Coaching IA dans panel droit (avant transcription) — lit analysis.suggestion */}
-      {(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null) && (
-        <div style={{padding:'5px 8px',borderBottom:'1px solid '+T.border+'50',background:'linear-gradient(135deg,#F9731606,#F59E0B03)'}}>
-          {((typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.phraseToSay || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.nextSuggestion || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.suggestion) ? (
-            <div>
-              <div style={{fontSize:7,fontWeight:800,color:'#22C55E',marginBottom:2,textTransform:'uppercase',letterSpacing:0.4}}>💬 Suggestion IA</div>
-              <div style={{fontSize:10,fontWeight:600,color:T.text,lineHeight:1.35}}>"{(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.phraseToSay || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.nextSuggestion || (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.suggestion}"</div>
-              {(typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null)?.step && <div style={{fontSize:7,color:T.text3,marginTop:2,fontStyle:'italic'}}>Étape : {phoneLiveAnalysis.step}</div>}
-            </div>
-          ) : (
-            <div style={{fontSize:8,color:T.text3,fontStyle:'italic',textAlign:'center'}}>🤖 L'IA analyse l'appel…</div>
-          )}
-        </div>
-      )}
+      {/* V1.9.1 UX — Mini bloc Coaching IA RETIRÉ : suggestion IA centralisée dans bannière flottante basse */}
       <div style={{maxHeight:(typeof iaHubCollapse!=='undefined'?iaHubCollapse:{})._transcriptExpanded?500:150,overflow:'auto',padding:6,display:'flex',flexDirection:'column',gap:3,transition:'max-height .3s ease'}} ref={el=>{if(el&&!(typeof iaHubCollapse!=='undefined'?iaHubCollapse:{})._transcriptExpanded)el.scrollTop=el.scrollHeight;}}>
         {(typeof phoneLiveTranscript!=='undefined'?phoneLiveTranscript:{}).length===0 && <div style={{textAlign:'center',padding:12,color:T.text3,fontSize:9}}>En attente...</div>}
         {(typeof phoneLiveTranscript!=='undefined'?phoneLiveTranscript:{}).map((t,i)=>(

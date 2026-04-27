@@ -1394,6 +1394,77 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const [cockpitTab, setCockpitTab] = useState('dashboard');
   const [cockpitNoteText, setCockpitNoteText] = useState('');
   const [cockpitMinimized, setCockpitMinimized] = useState(false);
+  // V1.9.1 — Bannière flottante : carousel suggestions (1 visible à la fois)
+  const [cockpitCarouselIdx, setCockpitCarouselIdx] = useState(0);
+  // V1.9.1 — Jauges intelligentes par intention (max 4 répétitions). 4 boutons : accept | rdv | sms | email
+  const [cockpitIntentLevels, setCockpitIntentLevels] = useState({ accept: 0, rdv: 0, sms: 0, email: 0 });
+  // V1.9.1 — Tracking du dernier signal vibration appliqué par bouton (déclenchement UNIQUE quand passage à level 4)
+  const cockpitVibrationFiredRef = useRef({ accept: false, rdv: false, sms: false, email: false });
+  // V1.9.1 — Détection nouveaux items phoneLiveSuggestions (pour incrément jauge)
+  const cockpitLastSuggestionsCountRef = useRef(0);
+  // V1.9.1 — Vibration éphémère 1x quand level passe à 4 (par bouton)
+  const [cockpitVibrating, setCockpitVibrating] = useState({ accept: false, rdv: false, sms: false, email: false });
+
+  // V1.9.1 — Reset carousel + jauges + vibration ref à fin d'appel (phoneActiveCall null = appel terminé)
+  useEffect(() => {
+    if (!phoneActiveCall) {
+      setCockpitCarouselIdx(0);
+      setCockpitIntentLevels({ accept: 0, rdv: 0, sms: 0, email: 0 });
+      cockpitVibrationFiredRef.current = { accept: false, rdv: false, sms: false, email: false };
+      cockpitLastSuggestionsCountRef.current = 0;
+    }
+  }, [phoneActiveCall]);
+
+  // V1.9.1 — Auto-open bannière Copilot à chaque démarrage d'appel (entrant ou sortant)
+  // UX : Copilot toujours visible automatiquement, aucune action manuelle requise.
+  // Ferme uniquement sur clic croix utilisateur OU fin d'appel (useEffect reset cockpitOpen ailleurs).
+  useEffect(() => {
+    if (phoneActiveCall) {
+      setCockpitOpen(true);
+      setCockpitMinimized(false);
+    }
+  }, [phoneActiveCall]);
+
+  // V1.9.1 — Jauge intelligente : incrémenter à chaque nouveau phoneLiveSuggestions item, mappé par type → bouton (max 4)
+  useEffect(() => {
+    if (!phoneActiveCall) return;
+    const cur = phoneLiveSuggestions || [];
+    const prevCount = cockpitLastSuggestionsCountRef.current;
+    if (cur.length <= prevCount) { cockpitLastSuggestionsCountRef.current = cur.length; return; }
+    const intentMap = {
+      rdv: 'rdv', rappel: 'rdv', disponibilite: 'rdv',
+      document: 'email', devis: 'email', email_dicte: 'email',
+      accord: 'accept', interet: 'accept', satisfaction: 'accept', qualification: 'accept',
+      canal: 'sms',
+    };
+    const incr = { accept: 0, rdv: 0, sms: 0, email: 0 };
+    for (let i = prevCount; i < cur.length; i++) {
+      const s = cur[i];
+      const t = (s?.type || '').toLowerCase();
+      const key = intentMap[t];
+      if (key) incr[key] += 1;
+    }
+    if (incr.accept || incr.rdv || incr.sms || incr.email) {
+      setCockpitIntentLevels(p => ({
+        accept: Math.min(4, (p.accept || 0) + incr.accept),
+        rdv: Math.min(4, (p.rdv || 0) + incr.rdv),
+        sms: Math.min(4, (p.sms || 0) + incr.sms),
+        email: Math.min(4, (p.email || 0) + incr.email),
+      }));
+    }
+    cockpitLastSuggestionsCountRef.current = cur.length;
+  }, [phoneLiveSuggestions, phoneActiveCall]);
+
+  // V1.9.1 — Effet vibration unique quand level d'intention passe à 4 (et pas encore consommé)
+  useEffect(() => {
+    ['accept','rdv','sms','email'].forEach(key => {
+      if (cockpitIntentLevels[key] === 4 && !cockpitVibrationFiredRef.current[key]) {
+        cockpitVibrationFiredRef.current[key] = true;
+        setCockpitVibrating(p => ({...p, [key]: true}));
+        setTimeout(() => setCockpitVibrating(p => ({...p, [key]: false})), 500);
+      }
+    });
+  }, [cockpitIntentLevels]);
 
   // Post-call form
   const [phonePostCallModal, setPhonePostCallModal] = useState(null); // callId
@@ -6396,7 +6467,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       </div>
     )}
 
-    {/* V1.9 UX FIX bug 2 — BANNIÈRE FLOTTANTE BASSE — overlay non-bloquant (n'occulte pas la colonne droite). Suggestion IA principale + actions Accepter/RDV/SMS/Email + timer + statut IA. PAS de transcription (reste colonne droite). */}
+    {/* V1.9.1 — BANNIÈRE FLOTTANTE BASSE — Centre d'action conversion temps réel : carousel 1-slide + jauges intelligentes par intention + Raccrocher. Overlay non-bloquant (n'occulte pas la colonne droite). PAS de transcription. */}
     {(typeof cockpitOpen!=='undefined'?cockpitOpen:null) && voipState === 'in-call' && (typeof phoneActiveCall!=='undefined'?phoneActiveCall:null) && (()=>{
       const pac = (typeof phoneActiveCall!=='undefined'?phoneActiveCall:null) || {};
       const ana = (typeof phoneLiveAnalysis!=='undefined'?phoneLiveAnalysis:null) || {};
@@ -6408,50 +6479,238 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       const ct = (typeof pipelineRightContact!=='undefined'?pipelineRightContact:null) || ctFromActive || ctFromNumber || { name: 'Contact inconnu', phone: pac.number||'' };
       const ctName = ct.name || 'Contact inconnu';
       const ctPhone = ct.phone || ct.mobile || pac.number || '';
-      const suggestionText = ana.phraseToSay || ana.nextSuggestion || ana.suggestion || '';
-      const actionText = ana.actionToDo || ana.keyInsight || '';
       const timer = (typeof phoneCallTimer!=='undefined'?phoneCallTimer:0) || 0;
       const timerStr = `${Math.floor(timer/60).toString().padStart(2,'0')}:${(timer%60).toString().padStart(2,'0')}`;
-      const sseConnected = !!(typeof phoneLiveTranscript!=='undefined'&&phoneLiveTranscript&&phoneLiveTranscript.length>=0); // proxy: state initialisé = écoute active
+      const sseConnected = !!(typeof phoneLiveTranscript!=='undefined'&&phoneLiveTranscript&&phoneLiveTranscript.length>=0);
+
+      // V1.9.1 — Construction des slides du carousel (1 visible à la fois)
+      const slides = [];
+      const anaSugg = ana && (ana.phraseToSay || ana.nextSuggestion || ana.suggestion);
+      if (anaSugg) {
+        slides.push({ kind:'analysis', tag:ana.salesTechnique||'', step:ana.step||'', text:anaSugg, action:ana.actionToDo||ana.keyInsight||'', color:'#16A34A', label:'Suggestion IA' });
+      }
+      const pendingSugs = ((typeof phoneLiveSuggestions!=='undefined'?phoneLiveSuggestions:null)||[]).filter(s=>s && s.status==='pending');
+      for (const s of pendingSugs) {
+        const lbl = s.label || (s.type ? `Détection ${s.type}` : 'Détection');
+        const txt = s.phrase || s.message || s.text || lbl;
+        slides.push({ kind:'detect', tag:s.type||'', step:'', text:txt, action:'', color:s.color||'#7C3AED', label:lbl });
+      }
+      const slidesCount = slides.length;
+      const safeIdx = slidesCount > 0 ? Math.min((typeof cockpitCarouselIdx!=='undefined'?cockpitCarouselIdx:0), slidesCount-1) : 0;
+      const slide = slidesCount > 0 ? slides[safeIdx] : null;
+
+      // V1.9.1 — Handler reset jauge au clic + reset vibration ref
+      const consumeIntent = (key) => {
+        setCockpitIntentLevels(p => ({...p, [key]: 0}));
+        if (cockpitVibrationFiredRef.current) cockpitVibrationFiredRef.current[key] = false;
+      };
+      const lvl = (typeof cockpitIntentLevels!=='undefined'?cockpitIntentLevels:{accept:0,rdv:0,sms:0,email:0});
+      const vib = (typeof cockpitVibrating!=='undefined'?cockpitVibrating:{accept:false,rdv:false,sms:false,email:false});
+
+      // V1.9.1 — CTA DYNAMIQUE CONTEXTUEL : le bouton principal lance L'ACTION la plus pertinente liée à la suggestion active
+      const ctValid = ct.id && ct.id !== '__dialer_unknown__';
+      const baseLog = () => { try { setPhoneCopilotReactions(p=>({...(p||{}),[(ana.id||'live')+'-'+safeIdx]:true})); }catch{} };
+      const appendNote = (label, text) => { if(!ctValid || typeof handleCollabUpdateContact!=='function') return false; const stamp=new Date().toLocaleString('fr-FR',{day:'2-digit',month:'short',hour:'2-digit',minute:'2-digit'}); const append=`\n[${stamp}] ${label}: ${text}`; handleCollabUpdateContact(ct.id, { notes: (ct.notes||'')+append }); return true; };
+
+      // V1.9.1 — Détection d'intention basée sur le TEXTE de la suggestion (utilisé quand slide.tag est vide ou trop générique, ex: kind='analysis')
+      const detectIntentFromText = (rawText) => {
+        const txt = (rawText||'').toLowerCase();
+        if (!txt) return null;
+        if (/(rendez-?vous|\brdv\b|cr[ée]neau|disponibilit[ée]|prendre date|on se voit|on se cale|fixer un|programmer un|planifier un|on bloque|on r[eé]server)/.test(txt)) return 'rdv';
+        if (/\b(sms|texto|whatsapp)\b|message court/.test(txt)) return 'sms';
+        if (/(plaquette|brochure|documentation|devis|envoyer.*(?:par |en )?(?:mail|email|e-?mail)|envoyez-moi|je vous envoie|par mail|par email)/.test(txt)) return 'email';
+        if (/(je signe|on signe|j'?accepte|on y va|c'?est valid[ée]|c'?est conclu|on prend|c'?est bon pour moi|je dis oui|d'?accord)/.test(txt)) return 'accord';
+        if (/(qualifier|int[ée]ress[ée]|son besoin|ses besoins|son budget|son projet)/.test(txt)) return 'qualif';
+        if (/(objection|trop cher|pas int[ée]ress|r[ée]flechir|hésit|h[ée]sit)/.test(txt)) return 'objection';
+        return null;
+      };
+
+      // V1.9.1 — Factories d'actions. Règle UX MH : la bannière ne se ferme JAMAIS automatiquement (uniquement sur clic croix ou fin d'appel).
+      const makeRdvAction = () => ({ label:'Créer le RDV', icon:'calendar-plus', tip:'Ouvrir le formulaire RDV pré-rempli avec ce contact', kicker:'🔥 Opportunité RDV', action: () => { baseLog(); if(ctValid){ setPhoneScheduleForm({contactId:ct.id,contactName:ctName,number:ctPhone,date:new Date(Date.now()+86400000).toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true}); setPhoneShowScheduleModal(true); showNotif('Formulaire RDV ouvert','success'); } else { showNotif('Créez le contact avant de programmer un RDV','info'); } } });
+      const makeEmailAction = (mode) => ({ label: mode==='dicte'?'Envoyer email':'Envoyer la plaquette', icon: mode==='dicte'?'mail':'send', tip: mode==='dicte'?'Ouvrir le composeur email avec l\'adresse dictée':'Ouvrir le composeur email pour envoyer la plaquette/document', kicker: mode==='dicte'?'📧 Email dicté':'📎 Demande document', action: () => { baseLog(); const dictee = (slide?.text||'').match(/[\w.+-]+@[\w-]+\.[\w.-]+/)?.[0]; const email = (mode==='dicte'?(dictee||ct.email||''):(ct.email||'')); if(email){ const subj = mode==='dicte' ? 'Suite à notre échange' : 'Documentation suite à notre échange'; window.open('mailto:'+email+'?subject='+encodeURIComponent(subj)); showNotif('Email prêt à envoyer ('+email+')','success'); } else { showNotif("Pas d'email valide pour ce contact",'info'); } } });
+      const makeSmsAction = () => ({ label:'Envoyer un SMS', icon:'message-square', tip:'Préparer un SMS au contact (panneau droit)', kicker:'📱 Canal SMS', action: () => { baseLog(); setPhoneDialNumber(ctPhone||''); setPhoneRightTab('sms'); if(typeof setPhoneRightCollapsed==='function')setPhoneRightCollapsed(false); showNotif('Composeur SMS ouvert (panneau droit)','success'); } });
+      const makeValidateClientAction = () => ({ label:'Passer en client', icon:'check-circle', tip:'Passer le contact en Client Validé', kicker:'✅ Accord client', action: () => { baseLog(); if(ctValid && typeof handleCollabUpdateContact==='function'){ handleCollabUpdateContact(ct.id, { pipeline_stage:'client_valide' }); showNotif('Contact passé en Client Validé','success'); } else { showNotif('Contact requis pour cette action','info'); } } });
+      const makeQualifyAction = () => ({ label:'Marquer comme intéressé', icon:'star', tip:'Passer le contact en Intéressé', kicker:'🎯 Lead qualifié', action: () => { baseLog(); if(ctValid && typeof handleCollabUpdateContact==='function'){ handleCollabUpdateContact(ct.id, { pipeline_stage:'qualifie' }); showNotif('Contact passé en Intéressé','success'); } else { showNotif('Contact requis pour cette action','info'); } } });
+      const makeObjectionAction = () => ({ label:'Ajouter une objection', icon:'alert-triangle', tip:'Ajouter l\'objection aux notes du contact', kicker:'⚠️ Objection détectée', action: () => { baseLog(); if(!ctValid){ showNotif('Contact requis pour enregistrer la note','info'); return; } if(appendNote(slide?.label||'Objection', slide?.text||'')) showNotif('Objection ajoutée aux notes du contact','success'); else showNotif('Erreur enregistrement note','danger'); } });
+      const makeNoteAction = () => ({ label:"Enregistrer l'idée", icon:'edit-3', tip:'Ajouter la suggestion dans les notes visibles du contact', kicker:'📝 Note suggestion', action: () => { baseLog(); if(!ctValid){ showNotif('Contact requis pour enregistrer la note','info'); return; } if(appendNote(slide?.label||'Suggestion IA', slide?.text||'')) showNotif('Suggestion ajoutée aux notes du contact','success'); else showNotif('Erreur enregistrement note','danger'); } });
+
+      const acceptCfg = (()=>{
+        const t = (slide?.tag || '').toLowerCase();
+        // Pas de slide → fallback "Noter la suggestion" (mais pas d'action possible)
+        if (!slide) return makeNoteAction();
+        // 1) Mapping par TAG (slides de type 'detect' ont toujours un tag)
+        if (slide.kind !== 'analysis') {
+          if (/^(rdv|rappel|disponibilite)$/.test(t)) return makeRdvAction();
+          if (/^(document|devis)$/.test(t)) return makeEmailAction('plaquette');
+          if (/^email_dicte$/.test(t)) return makeEmailAction('dicte');
+          if (/^(canal|tel_dicte)$/.test(t)) return makeSmsAction();
+          if (/^accord$/.test(t)) return makeValidateClientAction();
+          if (/^(interet|qualification|satisfaction|besoin)$/.test(t)) return makeQualifyAction();
+          if (/^(objection|insatisfaction)$/.test(t)) return makeObjectionAction();
+          // tag présent mais non mappé (note/adresse/decideur/urgence/transfert/recommandation/paiement/entreprise_info/...) → noter
+          return makeNoteAction();
+        }
+        // 2) slide.kind === 'analysis' (suggestion phrase IA pure, pas de tag) → analyse du TEXTE pour détecter l'intention
+        const intent = detectIntentFromText((slide.text||'') + ' ' + (slide.action||''));
+        if (intent === 'rdv') return makeRdvAction();
+        if (intent === 'email') return makeEmailAction('plaquette');
+        if (intent === 'sms') return makeSmsAction();
+        if (intent === 'accord') return makeValidateClientAction();
+        if (intent === 'qualif') return makeQualifyAction();
+        if (intent === 'objection') return makeObjectionAction();
+        // 3) Aucune intention détectée → noter la suggestion (action concrète + visible)
+        return makeNoteAction();
+      })();
+
+      // V1.9.1 — Jauge interne (overlay vertical depuis bas) selon level 0..4
+      const renderGauge = (level, fillColor) => (
+        <div style={{position:'absolute',bottom:0,left:0,right:0,height:`${level*25}%`,background:fillColor,transition:'height 0.6s cubic-bezier(0.22,1,0.36,1)',pointerEvents:'none',zIndex:0,opacity:level>=4?0.95:0.55+level*0.10}}/>
+      );
+
       return (
-        <div style={{position:'fixed',bottom:0,left:0,right:0,zIndex:10001,background:'linear-gradient(180deg,rgba(255,255,255,0.97),rgba(255,255,255,1))',borderTop:'2px solid #7C3AED',boxShadow:'0 -8px 32px rgba(124,58,237,0.18)',padding:'12px 20px',display:'flex',alignItems:'center',gap:14,backdropFilter:'blur(8px)',pointerEvents:'auto'}}>
-          {/* Bloc gauche : statut IA + timer + contact */}
-          <div style={{display:'flex',flexDirection:'column',gap:4,minWidth:180,flexShrink:0,borderRight:'1px solid #E5E7EB',paddingRight:14}}>
-            <div style={{display:'flex',alignItems:'center',gap:6}}>
-              <I n="cpu" s={16} style={{color:'#7C3AED'}}/>
-              <span style={{fontSize:12,fontWeight:800,color:'#7C3AED'}}>Copilot LIVE</span>
-              <span style={{width:7,height:7,borderRadius:4,background:sseConnected?'#22C55E':'#9CA3AF',boxShadow:sseConnected?'0 0 6px #22C55E80':'none',animation:sseConnected?'pulse 2s infinite':'none'}}/>
-            </div>
-            <div style={{display:'flex',alignItems:'center',gap:8}}>
-              <span style={{fontSize:18,fontWeight:800,fontFamily:'monospace',color:'#1F2937'}}>{timerStr}</span>
-              <span style={{fontSize:14}}>{sentEmoji}</span>
-              <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:4,background:sentColor+'15',color:sentColor}}>{sentiment==='positive'?'Positif':sentiment==='negative'?'Négatif':'Neutre'}</span>
-            </div>
-            <div style={{fontSize:10,color:'#6B7280',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ctName} · {ctPhone}</div>
-          </div>
+        <>
+          {/* V1.9.1 — Keyframes locaux à la bannière */}
+          <style>{`
+            @keyframes cockpitBannerSlideUp { from { transform: translateY(100%); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+            @keyframes cockpitCtaGlow { 0%,100% { box-shadow: 0 8px 24px rgba(34,197,94,0.35), 0 0 0 0 rgba(34,197,94,0.45); } 50% { box-shadow: 0 12px 32px rgba(34,197,94,0.50), 0 0 0 8px rgba(34,197,94,0); } }
+            @keyframes cockpitDotPulse { 0%,100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(34,197,94,0.55); } 50% { transform: scale(1.08); box-shadow: 0 0 0 5px rgba(34,197,94,0); } }
+            @keyframes cockpitLoadingDot { 0%,100% { opacity: 0.25; transform: translateY(0); } 50% { opacity: 1; transform: translateY(-3px); } }
+            @keyframes cockpitGaugeVibrate { 0%,100% { transform: translateX(0); } 20% { transform: translateX(-2px); } 40% { transform: translateX(2px); } 60% { transform: translateX(-2px); } 80% { transform: translateX(1px); } }
+            @keyframes cockpitGaugeReady { 0%,100% { box-shadow: 0 0 0 0 currentColor; } 50% { box-shadow: 0 0 0 3px currentColor; } }
+            @keyframes cockpitSlideEnter { from { opacity: 0; transform: translateX(8px); } to { opacity: 1; transform: translateX(0); } }
+            .cockpitBanner { animation: cockpitBannerSlideUp 0.42s cubic-bezier(0.22,1,0.36,1); }
+            .cockpitBtn { transition: transform 0.18s cubic-bezier(0.22,1,0.36,1), filter 0.16s ease, box-shadow 0.18s ease; will-change: transform; position: relative; overflow: hidden; }
+            .cockpitBtn:hover { transform: translateY(-2px); filter: brightness(1.07); }
+            .cockpitBtn:active { transform: translateY(0) scale(0.97); filter: brightness(0.94); }
+            .cockpitCtaPrimary { animation: cockpitCtaGlow 2.6s ease-in-out infinite; }
+            .cockpitDotLive { animation: cockpitDotPulse 2.2s ease-in-out infinite; }
+            .cockpitClose:hover { background: rgba(239,68,68,0.10) !important; color: #DC2626 !important; border-color: rgba(239,68,68,0.30) !important; }
+            .cockpitHangup:hover { background: linear-gradient(135deg,#DC2626,#991B1B) !important; }
+            .cockpitVibrate { animation: cockpitGaugeVibrate 0.5s ease both; }
+            .cockpitGaugeReady { animation: cockpitGaugeReady 1.4s ease-in-out infinite; }
+            .cockpitArrow { transition: background 0.15s, color 0.15s; }
+            .cockpitArrow:hover { background: rgba(15,23,42,0.06); color: #0F172A; }
+            .cockpitSlide { animation: cockpitSlideEnter 0.32s cubic-bezier(0.22,1,0.36,1); }
+          `}</style>
+          <div className="cockpitBanner" style={{position:'fixed',bottom:0,left:0,right:0,zIndex:10001,pointerEvents:'auto',padding:'18px 24px 20px',background:'linear-gradient(135deg, rgba(255,255,255,0.84) 0%, rgba(248,250,255,0.88) 50%, rgba(245,243,255,0.86) 100%)',backdropFilter:'blur(24px) saturate(180%)',WebkitBackdropFilter:'blur(24px) saturate(180%)',borderTop:'1px solid rgba(124,58,237,0.20)',borderRadius:'20px 20px 0 0',boxShadow:'0 -14px 48px rgba(124,58,237,0.16), 0 -2px 12px rgba(15,23,42,0.06)',display:'flex',alignItems:'stretch',gap:22}}>
 
-          {/* Bloc centre : suggestion IA principale + action recommandée */}
-          <div style={{flex:1,display:'flex',flexDirection:'column',gap:4,minWidth:0}}>
-            {suggestionText ? (
-              <>
-                <div style={{fontSize:9,fontWeight:800,color:'#22C55E',textTransform:'uppercase',letterSpacing:0.5}}>💬 Suggestion IA</div>
-                <div style={{fontSize:14,fontWeight:700,color:'#1F2937',lineHeight:1.4,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical'}}>"{suggestionText}"</div>
-                {actionText && <div style={{fontSize:11,color:'#F59E0B',fontWeight:600,display:'flex',alignItems:'center',gap:4}}><I n="zap" s={11}/> {actionText}</div>}
-              </>
-            ) : (
-              <div style={{fontSize:12,color:'#6B7280',fontStyle:'italic',textAlign:'center',padding:'8px 0'}}>🤖 L'IA analyse l'appel… les suggestions arrivent dans quelques secondes</div>
-            )}
-          </div>
+            {/* ZONE 1 — Statut Copilot + Timer + Contact */}
+            <div style={{display:'flex',flexDirection:'column',gap:8,minWidth:200,maxWidth:220,flexShrink:0,paddingRight:20,borderRight:'1px solid rgba(15,23,42,0.07)',justifyContent:'center'}}>
+              <div style={{display:'flex',alignItems:'center',gap:9}}>
+                <div style={{width:32,height:32,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',background:'linear-gradient(135deg,#7C3AED 0%,#2563EB 100%)',boxShadow:'0 3px 10px rgba(124,58,237,0.32)'}}>
+                  <I n="cpu" s={16} style={{color:'#fff'}}/>
+                </div>
+                <div style={{display:'flex',flexDirection:'column',gap:1}}>
+                  <div style={{display:'flex',alignItems:'center',gap:5}}>
+                    <span style={{fontSize:11,fontWeight:800,color:'#7C3AED',letterSpacing:0.4}}>COPILOT</span>
+                    <span className={sseConnected?'cockpitDotLive':''} style={{width:6,height:6,borderRadius:3,background:sseConnected?'#22C55E':'#9CA3AF'}}/>
+                  </div>
+                  <span style={{fontSize:8,fontWeight:800,color:sseConnected?'#16A34A':'#94A3B8',letterSpacing:0.6,textTransform:'uppercase'}}>{sseConnected?'En direct':'Hors ligne'}</span>
+                </div>
+              </div>
+              <div style={{display:'flex',alignItems:'center',gap:10}}>
+                <span style={{fontSize:24,fontWeight:800,fontFamily:'ui-monospace,SFMono-Regular,Menlo,monospace',color:'#0F172A',letterSpacing:0.4,lineHeight:1}}>{timerStr}</span>
+                <span style={{fontSize:18,lineHeight:1}}>{sentEmoji}</span>
+                <span style={{fontSize:9,fontWeight:800,padding:'3px 8px',borderRadius:5,background:sentColor+'15',color:sentColor,letterSpacing:0.5,textTransform:'uppercase'}}>{sentiment==='positive'?'Positif':sentiment==='negative'?'Négatif':'Neutre'}</span>
+              </div>
+              <div style={{display:'flex',flexDirection:'column',gap:1,minWidth:0}}>
+                <div style={{fontSize:11,color:'#334155',fontWeight:700,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ctName}</div>
+                <div style={{fontSize:10,color:'#94A3B8',fontWeight:500,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{ctPhone}</div>
+              </div>
+            </div>
 
-          {/* Bloc droit : actions larges + fermer */}
-          <div style={{display:'flex',gap:6,flexShrink:0}}>
-            <div onClick={()=>{ if(suggestionText){ try{ setPhoneCopilotReactions(p=>({...(p||{}),[(ana.id||'live')]:true})); }catch{} } setCockpitOpen(false); showNotif('Suggestion acceptée','success'); }} style={{padding:'10px 14px',borderRadius:10,background:'linear-gradient(135deg,#22C55E,#16A34A)',color:'#fff',fontSize:11,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(34,197,94,0.3)'}} title="Marquer la suggestion comme acceptée"><I n="check" s={13}/> Accepter</div>
-            <div onClick={()=>{ if(ct.id && ct.id!=='__dialer_unknown__'){ setPhoneScheduleForm({contactId:ct.id,contactName:ctName,number:ctPhone,date:new Date(Date.now()+86400000).toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true}); setPhoneShowScheduleModal(true); } else { showNotif('Créez le contact avant de programmer un RDV','info'); } }} style={{padding:'10px 14px',borderRadius:10,background:'linear-gradient(135deg,#F59E0B,#F97316)',color:'#fff',fontSize:11,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(245,158,11,0.3)'}} title="Planifier un RDV avec ce contact"><I n="calendar-plus" s={13}/> RDV</div>
-            <div onClick={()=>{ setPhoneDialNumber(ctPhone||''); setPhoneRightTab('sms'); if(typeof setPhoneRightCollapsed==='function')setPhoneRightCollapsed(false); }} style={{padding:'10px 14px',borderRadius:10,background:'linear-gradient(135deg,#0EA5E9,#0284C7)',color:'#fff',fontSize:11,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(14,165,233,0.3)'}} title="Envoyer un SMS"><I n="message-square" s={13}/> SMS</div>
-            <div onClick={()=>{ const email = ct.email||''; if(email){ window.open('mailto:'+email); } else { showNotif("Pas d'email pour ce contact",'info'); } }} style={{padding:'10px 14px',borderRadius:10,background:'linear-gradient(135deg,#6366F1,#4F46E5)',color:'#fff',fontSize:11,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',gap:5,boxShadow:'0 2px 8px rgba(99,102,241,0.3)'}} title="Envoyer un email"><I n="mail" s={13}/> Email</div>
-            <div onClick={()=>setCockpitOpen(false)} style={{width:34,height:34,borderRadius:10,background:'#F3F4F6',color:'#6B7280',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',marginLeft:4,border:'1px solid #E5E7EB'}} title="Fermer la bannière"><I n="x" s={15}/></div>
+            {/* ZONE 2 — CAROUSEL suggestion (1 slide visible) */}
+            <div style={{flex:1,display:'flex',alignItems:'center',gap:8,minWidth:0}}>
+              {/* Flèche gauche */}
+              <div className="cockpitArrow" onClick={()=>{ if(slidesCount<=1) return; setCockpitCarouselIdx(p => (p-1+slidesCount)%slidesCount); }} style={{width:30,height:30,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',cursor:slidesCount>1?'pointer':'default',color:slidesCount>1?'#64748B':'#CBD5E1',flexShrink:0,opacity:slidesCount>1?1:0.4}} title="Suggestion précédente">
+                <I n="chevron-left" s={18}/>
+              </div>
+
+              {/* Slide content */}
+              <div style={{flex:1,display:'flex',flexDirection:'column',gap:8,minWidth:0,justifyContent:'center'}} key={'slide-'+safeIdx} className={slide?'cockpitSlide':''}>
+                {slide ? (
+                  <>
+                    <div style={{display:'flex',alignItems:'center',gap:7,flexWrap:'wrap'}}>
+                      <span style={{fontSize:9,fontWeight:800,color:slide.color,textTransform:'uppercase',letterSpacing:0.8,padding:'3px 9px',borderRadius:5,background:slide.color+'12',border:'1px solid '+slide.color+'30',display:'inline-flex',alignItems:'center',gap:5}}>{slide.kind==='analysis'?'💬 '+slide.label:'⚡ '+slide.label}</span>
+                      {slide.tag && <span style={{fontSize:9,fontWeight:700,color:'#7C3AED',padding:'3px 8px',borderRadius:5,background:'rgba(124,58,237,0.08)',letterSpacing:0.3}}>{slide.tag}</span>}
+                      {slide.step && <span style={{fontSize:9,fontWeight:600,color:'#64748B',letterSpacing:0.3}}>· {slide.step}</span>}
+                      {slidesCount>1 && <span style={{fontSize:9,fontWeight:700,color:'#94A3B8',marginLeft:'auto',padding:'2px 7px',borderRadius:5,background:'rgba(15,23,42,0.04)'}}>{safeIdx+1}/{slidesCount}</span>}
+                    </div>
+                    <div style={{fontSize:20,fontWeight:700,color:'#0F172A',lineHeight:1.32,overflow:'hidden',display:'-webkit-box',WebkitLineClamp:2,WebkitBoxOrient:'vertical',letterSpacing:-0.25}}>« {slide.text} »</div>
+                    {slide.action && (
+                      <div style={{display:'flex',alignItems:'center',gap:8,fontSize:12.5,color:'#B45309',fontWeight:700}}>
+                        <span style={{display:'flex',alignItems:'center',justifyContent:'center',width:22,height:22,borderRadius:6,background:'linear-gradient(135deg,#FEF3C7 0%,#FDE68A 100%)',flexShrink:0}}>
+                          <I n="zap" s={12} style={{color:'#D97706'}}/>
+                        </span>
+                        <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{slide.action}</span>
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div style={{display:'flex',alignItems:'center',gap:12,padding:'8px 0'}}>
+                    <div style={{display:'flex',gap:5,alignItems:'center'}}>
+                      {[0,1,2].map(i=><span key={i} style={{width:7,height:7,borderRadius:4,background:'#7C3AED',animation:'cockpitLoadingDot 1.4s ease-in-out infinite',animationDelay:(i*0.16)+'s'}}/>)}
+                    </div>
+                    <span style={{fontSize:13.5,color:'#475569',fontStyle:'italic',fontWeight:500,letterSpacing:-0.1}}>L'IA analyse l'appel… les suggestions arrivent</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Flèche droite */}
+              <div className="cockpitArrow" onClick={()=>{ if(slidesCount<=1) return; setCockpitCarouselIdx(p => (p+1)%slidesCount); }} style={{width:30,height:30,borderRadius:9,display:'flex',alignItems:'center',justifyContent:'center',cursor:slidesCount>1?'pointer':'default',color:slidesCount>1?'#64748B':'#CBD5E1',flexShrink:0,opacity:slidesCount>1?1:0.4}} title="Suggestion suivante">
+                <I n="chevron-right" s={18}/>
+              </div>
+            </div>
+
+            {/* ZONE 3 — CTA dominant Accepter + secondaires (jauges) + Raccrocher + close */}
+            <div style={{display:'flex',alignItems:'center',gap:10,flexShrink:0}}>
+              {/* CTA PRIMAIRE DYNAMIQUE — action contextuelle pilotée par acceptCfg (label + icône + kicker + action selon slide active) */}
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:4,minWidth:178}}>
+                <span style={{fontSize:9,fontWeight:800,color:lvl.accept>=3?'#DC2626':'#7C3AED',textTransform:'uppercase',letterSpacing:0.6,padding:'2px 8px',borderRadius:5,background:lvl.accept>=3?'rgba(220,38,38,0.08)':'rgba(124,58,237,0.06)',border:'1px solid '+(lvl.accept>=3?'rgba(220,38,38,0.18)':'rgba(124,58,237,0.12)'),whiteSpace:'nowrap'}}>{lvl.accept>=3?'🔥 Action prioritaire':acceptCfg.kicker}</span>
+                <div className={'cockpitBtn cockpitCtaPrimary'+(vib.accept?' cockpitVibrate':'')+(lvl.accept>=3?' cockpitGaugeReady':'')} onClick={()=>{ consumeIntent('accept'); acceptCfg.action(); }} style={{padding:'14px 22px',borderRadius:13,background:'linear-gradient(135deg,#22C55E 0%,#15803D 100%)',color:'#fff',fontSize:14,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',gap:8,letterSpacing:0.2,border:'1px solid rgba(34,197,94,0.50)',width:'100%',justifyContent:'center'}} title={acceptCfg.tip}>
+                  {renderGauge(lvl.accept, 'rgba(255,255,255,0.18)')}
+                  <I n={acceptCfg.icon} s={17} style={{position:'relative',zIndex:1}}/>
+                  <span key={acceptCfg.label} className="cockpitSlide" style={{position:'relative',zIndex:1,whiteSpace:'nowrap'}}>{acceptCfg.label}</span>
+                </div>
+              </div>
+
+              <div style={{width:1,height:30,background:'rgba(15,23,42,0.08)',margin:'0 2px'}}/>
+
+              {/* CTA secondaires — outline soft (RDV / SMS / Email) avec jauges intelligentes */}
+              <div style={{display:'flex',gap:6}}>
+                {/* RDV — couleur jaune/orange */}
+                <div className={'cockpitBtn'+(vib.rdv?' cockpitVibrate':'')+(lvl.rdv>=3?' cockpitGaugeReady':'')} onClick={()=>{ consumeIntent('rdv'); if(ct.id && ct.id!=='__dialer_unknown__'){ setPhoneScheduleForm({contactId:ct.id,contactName:ctName,number:ctPhone,date:new Date(Date.now()+86400000).toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true}); setPhoneShowScheduleModal(true); } else { showNotif('Créez le contact avant de programmer un RDV','info'); } }} style={{padding:'10px 13px',borderRadius:10,background:'rgba(245,158,11,0.08)',color:'#B45309',fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:5,border:'1px solid rgba(245,158,11,0.32)'}} title={lvl.rdv>=3?'Action prioritaire — RDV demandé plusieurs fois':'Planifier un RDV'}>
+                  {renderGauge(lvl.rdv, 'rgba(245,158,11,0.20)')}
+                  <I n="calendar-plus" s={13} style={{position:'relative',zIndex:1}}/>
+                  <span style={{position:'relative',zIndex:1}}>RDV</span>
+                </div>
+                {/* SMS — couleur bleue */}
+                <div className={'cockpitBtn'+(vib.sms?' cockpitVibrate':'')+(lvl.sms>=3?' cockpitGaugeReady':'')} onClick={()=>{ consumeIntent('sms'); setPhoneDialNumber(ctPhone||''); setPhoneRightTab('sms'); if(typeof setPhoneRightCollapsed==='function')setPhoneRightCollapsed(false); }} style={{padding:'10px 13px',borderRadius:10,background:'rgba(14,165,233,0.08)',color:'#0369A1',fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:5,border:'1px solid rgba(14,165,233,0.32)'}} title={lvl.sms>=3?'Action prioritaire — canal SMS demandé':'Envoyer un SMS'}>
+                  {renderGauge(lvl.sms, 'rgba(14,165,233,0.20)')}
+                  <I n="message-square" s={13} style={{position:'relative',zIndex:1}}/>
+                  <span style={{position:'relative',zIndex:1}}>SMS</span>
+                </div>
+                {/* Email — couleur violet/indigo */}
+                <div className={'cockpitBtn'+(vib.email?' cockpitVibrate':'')+(lvl.email>=3?' cockpitGaugeReady':'')} onClick={()=>{ consumeIntent('email'); const email = ct.email||''; if(email){ window.open('mailto:'+email); } else { showNotif("Pas d'email pour ce contact",'info'); } }} style={{padding:'10px 13px',borderRadius:10,background:'rgba(99,102,241,0.08)',color:'#4338CA',fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:5,border:'1px solid rgba(99,102,241,0.32)'}} title={lvl.email>=3?'Action prioritaire — document/email demandé':'Envoyer un email'}>
+                  {renderGauge(lvl.email, 'rgba(99,102,241,0.20)')}
+                  <I n="mail" s={13} style={{position:'relative',zIndex:1}}/>
+                  <span style={{position:'relative',zIndex:1}}>Email</span>
+                </div>
+              </div>
+
+              <div style={{width:1,height:30,background:'rgba(15,23,42,0.08)',margin:'0 2px'}}/>
+
+              {/* RACCROCHER — bouton rouge prominent (action critique) */}
+              <div className="cockpitBtn cockpitHangup" onClick={()=>{ try{ endPhoneCall(); }catch(e){ console.warn('hangup error',e); } }} style={{padding:'12px 16px',borderRadius:11,background:'linear-gradient(135deg,#EF4444 0%,#B91C1C 100%)',color:'#fff',fontSize:12,fontWeight:800,cursor:'pointer',display:'flex',alignItems:'center',gap:6,boxShadow:'0 4px 14px rgba(239,68,68,0.35)',border:'1px solid rgba(239,68,68,0.50)',letterSpacing:0.2}} title="Raccrocher l'appel">
+                <I n="phone-off" s={14}/>
+                <span>Raccrocher</span>
+              </div>
+
+              {/* Close discret */}
+              <div className="cockpitBtn cockpitClose" onClick={()=>setCockpitOpen(false)} style={{width:32,height:32,borderRadius:10,background:'rgba(15,23,42,0.04)',color:'#64748B',cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center',marginLeft:2,border:'1px solid rgba(15,23,42,0.08)'}} title="Fermer la bannière"><I n="x" s={15}/></div>
+            </div>
           </div>
-        </div>
+        </>
       );
     })()}
 
