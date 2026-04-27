@@ -6,7 +6,7 @@ import { _T } from "../../shared/state/tabState";
 
 // Phase 1A extractions
 import { T, T_LIGHT, T_DARK, setTheme } from "../../theme";
-import { formatPhoneFR, displayPhone } from "../../shared/utils/phone";
+import { formatPhoneFR, displayPhone, normalizePhoneNumber, phoneMatchKey } from "../../shared/utils/phone";
 import { isValidEmail, isValidPhone } from "../../shared/utils/validators";
 import { COMMON_TIMEZONES, genCode } from "../../shared/utils/constants";
 
@@ -3417,6 +3417,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     const isBtb = (typeof phoneQuickAddType!=='undefined'?phoneQuickAddType:null) === 'btb';
     const contactName = isBtb ? (typeof phoneQuickAddCompany!=='undefined'?phoneQuickAddCompany:{}).trim() : `${(typeof phoneQuickAddFirstname!=='undefined'?phoneQuickAddFirstname:{}).trim()} ${(typeof phoneQuickAddLastname!=='undefined'?phoneQuickAddLastname:{}).trim()}`.trim();
     if (!contactName || !(typeof phoneQuickAddPhone!=='undefined'?phoneQuickAddPhone:null)) { showNotif(isBtb ? 'Nom entreprise obligatoire' : 'Prénom et nom obligatoires','danger'); return; }
+    // V1.10.2 — Normalisation E.164 systématique avant persist (évite doublons format-related)
+    const rawPhone = (typeof phoneQuickAddPhone!=='undefined'?phoneQuickAddPhone:'')||'';
+    const normalizedPhone = normalizePhoneNumber(rawPhone) || rawPhone;
     const nc = {
       id:'ct'+Date.now(), companyId:company.id,
       name: contactName,
@@ -3426,12 +3429,13 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       company: isBtb ? (typeof phoneQuickAddCompany!=='undefined'?phoneQuickAddCompany:{}).trim() : '',
       siret: isBtb ? (typeof phoneQuickAddSiret!=='undefined'?phoneQuickAddSiret:{}).trim() : '',
       responsable: isBtb ? (typeof phoneQuickAddResponsable!=='undefined'?phoneQuickAddResponsable:{}).trim() : '',
-      phone: (typeof phoneQuickAddPhone!=='undefined'?phoneQuickAddPhone:null),
+      phone: normalizedPhone,
       mobile: isBtb ? (typeof phoneQuickAddMobile!=='undefined'?phoneQuickAddMobile:{}).trim() : '',
       email: (typeof phoneQuickAddEmail!=='undefined'?phoneQuickAddEmail:{}).trim(),
       website: isBtb ? (typeof phoneQuickAddWebsite!=='undefined'?phoneQuickAddWebsite:{}).trim() : '',
       totalBookings:0, lastVisit:'', tags:[], notes:'', rating:null, docs:[],
-      pipeline_stage: (typeof phoneQuickAddStage!=='undefined'?phoneQuickAddStage:null)||'nouveau', assignedTo:collab.id, shared_with:[]
+      pipeline_stage: (typeof phoneQuickAddStage!=='undefined'?phoneQuickAddStage:null)||'nouveau', assignedTo:collab.id, shared_with:[],
+      createdAt: new Date().toISOString()
     };
     setContacts(p => [...p, nc]);
     // Sauvegarder immédiatement en DB (pas attendre sync-batch)
@@ -3440,12 +3444,41 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       else console.warn('[CONTACT] Save failed:', r?.error);
     }).catch(() => {});
     // Update existing call_logs contactId for this phone
-    const last9 = (typeof phoneQuickAddPhone!=='undefined'?phoneQuickAddPhone:{}).replace(/[^\d]/g,'').slice(-9);
+    const last9 = phoneMatchKey(normalizedPhone);
     setVoipCallLogs(prev => prev.map(cl => {
       const clPhone = (cl.direction === 'outbound' ? cl.toNumber : cl.fromNumber) || '';
-      if (clPhone.replace(/[^\d]/g,'').slice(-9) === last9 && !cl.contactId) return { ...cl, contactId: nc.id };
+      if (phoneMatchKey(clPhone) === last9 && !cl.contactId) return { ...cl, contactId: nc.id };
       return cl;
     }));
+    // V1.10.2 — Auto-relink conversation SMS Hub si l'utilisateur venait du CTA "Créer la fiche"
+    try {
+      const sourceConvId = _T.smsHubLastUnknownConvId;
+      const sourcePhone = _T.smsHubLastUnknownPhone || '';
+      const sourceLast9 = phoneMatchKey(sourcePhone);
+      const linkConv = (cv) => {
+        if (!cv) return;
+        api('/api/conversations/'+cv.id, { method:'PUT', body:{ contactId: nc.id } }).catch(()=>{});
+        if (typeof setAppConversations === 'function') {
+          setAppConversations(prev => (prev||[]).map(c => c.id === cv.id ? { ...c, contactId: nc.id, contactName: nc.name } : c));
+        }
+      };
+      if (sourceConvId && (typeof appConversations !== 'undefined' && Array.isArray(appConversations))) {
+        const cv = appConversations.find(c => c.id === sourceConvId);
+        if (cv) linkConv(cv);
+      }
+      // Filet de sécurité : relink toute autre conv SMS du même collab dont le numéro matche
+      if ((typeof appConversations !== 'undefined' && Array.isArray(appConversations)) && last9.length >= 9) {
+        for (const cv of appConversations) {
+          if (cv.contactId) continue;
+          if (cv.id === sourceConvId) continue;
+          if (phoneMatchKey(cv.clientPhone) !== last9) continue;
+          if (cv.collaboratorId && cv.collaboratorId !== collab.id && !isAdminView) continue;
+          linkConv(cv);
+        }
+      }
+      _T.smsHubLastUnknownConvId = null;
+      _T.smsHubLastUnknownPhone = '';
+    } catch (e) { console.warn('[V1.10.2] sms-hub auto-relink err', e?.message); }
     setPhoneQuickAddPhone(null);
     setPhoneQuickAddName('');
     setPhoneQuickAddStage('nouveau');
@@ -3459,7 +3492,6 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     setPhoneQuickAddMobile('');
     setPhoneQuickAddWebsite('');
     showNotif(`${nc.name} ajouté au CRM`);
-    api('/api/data/contacts', { method:'POST', body:nc });
     // Also update call_logs on server
     api(`/api/voip/calls?companyId=${company.id}`).then(d => { if(Array.isArray(d)) setVoipCallLogs(d); }).catch(()=>{});
   };

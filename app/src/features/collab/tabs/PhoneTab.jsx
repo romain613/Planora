@@ -7,7 +7,7 @@
 import React, { useState, useMemo, useEffect, useRef, Fragment } from "react";
 import { T } from "../../../theme";
 import { I, Btn, Card, Avatar, Badge, Modal, Input, ValidatedInput, Stars, Spinner, Stat, EmptyState, HelpTip, HookIsolator, ErrorBoundary } from "../../../shared/ui";
-import { displayPhone, formatPhoneFR } from "../../../shared/utils/phone";
+import { displayPhone, formatPhoneFR, normalizePhoneNumber, phoneMatchKey, matchContactByPhone } from "../../../shared/utils/phone";
 import { isValidEmail, isValidPhone } from "../../../shared/utils/validators";
 import { fmtDate, DAYS_FR, DAYS_SHORT, MONTHS_FR, getDow, formatDateTime, formatDate } from "../../../shared/utils/dates";
 import { PIPELINE_CARD_COLORS_DEFAULT, RDV_CATEGORIES, PIPELINE_LABELS, STATUS_COLORS } from "../../../shared/utils/pipeline";
@@ -662,56 +662,93 @@ const PhoneTab = () => {
           </div>
         </div>
 
-        {/* ── SMS Conversations with unread badges ── */}
+        {/* ── SMS Conversations with unread badges (V1.10.2 — tags Connu/Nouveau/Inconnu + CTA Créer fiche) ── */}
         {(()=>{
           const convs = ((typeof appConversations!=='undefined'?appConversations:null)||[]).filter(c=>c.lastEventType&&(c.lastEventType.includes('sms')||c.unreadCount>0));
           const totalUnread = convs.reduce((s,c)=>s+(c.unreadCount||0),0);
+          // V1.10.2 — Compteur conversations sans contact lié (numéros à qualifier)
+          const _isAdmin = (typeof isAdminView!=='undefined' && isAdminView) || collab?.role==='admin' || collab?.role==='supra';
+          let unknownCount = 0;
+          for (const cv of convs) {
+            if (cv.contactId) continue;
+            const m = matchContactByPhone(contacts, cv.clientPhone, { collabId: collab.id, companyId: company.id, isAdmin: _isAdmin });
+            if (!m) unknownCount++;
+          }
           if (convs.length === 0) return null;
           return <div style={{borderBottom:'1px solid '+T.border,flexShrink:0}}>
             <div style={{padding:'6px 14px 4px',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
               <span style={{fontSize:10,fontWeight:700,color:'#0EA5E9',display:'flex',alignItems:'center',gap:4}}><I n="message-circle" s={11}/> Conversations SMS</span>
-              {totalUnread>0&&<span style={{fontSize:9,fontWeight:800,color:'#fff',background:'#EF4444',borderRadius:10,padding:'1px 6px',minWidth:16,textAlign:'center'}}>{totalUnread}</span>}
+              <div style={{display:'flex',alignItems:'center',gap:4}}>
+                {unknownCount>0&&<span title="Numéros à qualifier" style={{fontSize:9,fontWeight:700,color:'#F59E0B',background:'#F59E0B18',border:'1px solid #F59E0B40',borderRadius:8,padding:'1px 6px'}}>{unknownCount} à qualifier</span>}
+                {totalUnread>0&&<span style={{fontSize:9,fontWeight:800,color:'#fff',background:'#EF4444',borderRadius:10,padding:'1px 6px',minWidth:16,textAlign:'center'}}>{totalUnread}</span>}
+              </div>
             </div>
             <div style={{maxHeight:180,overflow:'auto'}}>
               {convs.slice(0,10).map(conv=>{
-                const ct = conv.contactId?(contacts||[]).find(c=>c.id===conv.contactId):null;
-                const name = ct?.name||conv.contactName||fmtPhone(conv.clientPhone)||'Inconnu';
+                // V1.10.2 — Matching unifié + cross-collab scope
+                let ct = conv.contactId ? (contacts||[]).find(c=>c.id===conv.contactId) : null;
+                if (!ct) ct = matchContactByPhone(contacts, conv.clientPhone, { collabId: collab.id, companyId: company.id, isAdmin: _isAdmin });
+                const isKnown = !!ct;
+                // 🟢 connu / 🟠 nouveau (créé < 24h) / 🔴 inconnu non enregistré
+                const isFresh = isKnown && ct.createdAt && (Date.now() - new Date(ct.createdAt).getTime() < 24*3600*1000);
+                const tagColor = isKnown ? (isFresh ? '#F59E0B' : '#22C55E') : '#EF4444';
+                const tagLabel = isKnown ? (isFresh ? 'Nouveau contact' : 'Contact connu') : 'Numéro inconnu';
+                const name = ct?.name || conv.contactName || displayPhone(conv.clientPhone) || 'Numéro inconnu';
                 const isActive = (typeof selConvId!=='undefined'?selConvId:null)===conv.id;
                 const hasUnread = (conv.unreadCount||0)>0;
-                return <div key={conv.id} onClick={(e)=>{
+                const timeStr = (()=>{if(!conv.lastActivityAt)return'';const d=Date.now()-new Date(conv.lastActivityAt).getTime();if(d<60000)return"now";if(d<3600000)return Math.floor(d/60000)+'m';if(d<86400000)return Math.floor(d/3600000)+'h';return new Date(conv.lastActivityAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});})();
+                return <div key={conv.id}
+                  onMouseEnter={e=>{ if(!isActive)e.currentTarget.style.background=T.bg; }}
+                  onMouseLeave={e=>{ if(!isActive)e.currentTarget.style.background='transparent'; }}
+                  onClick={(e)=>{
                   e.stopPropagation();
-                  // Trouver le contact par ID ou par téléphone
-                  let foundCt = ct;
-                  if (!foundCt && conv.clientPhone) {
-                    const last9 = (conv.clientPhone||'').replace(/\D/g,'').slice(-9);
-                    if (last9.length >= 9) foundCt = (contacts||[]).find(c=>(c.phone||c.mobile||'').replace(/\D/g,'').slice(-9)===last9);
-                  }
-                  if (!foundCt) foundCt = { id: conv.contactId||'tmp_'+conv.id, name: conv.contactName||fmtPhone(conv.clientPhone)||'Inconnu', phone: conv.clientPhone, pipeline_stage: 'nouveau' };
-                  // Meme pattern que clic sur card pipeline (ligne 11584) — ça marche
+                  const foundCt = ct || { id: conv.contactId||'tmp_'+conv.id, name: conv.contactName||displayPhone(conv.clientPhone)||'Numéro inconnu', phone: conv.clientPhone, pipeline_stage: 'nouveau', _isUnknown: true };
                   setPipelineRightContact(foundCt);
                   setPhoneRightTab('sms');
                   setPhoneDialNumber(conv.clientPhone||'');
                   if(phoneRightCollapsed){(typeof setPhoneRightCollapsed==='function'?setPhoneRightCollapsed:function(){})(false);try{localStorage.setItem('c360-phone-right-collapsed-'+collab.id,'0');}catch{}}
-                  // Vider cache SMS
-                  if(_T.smsCache){const k='sms_'+(conv.clientPhone||'').replace(/\D/g,'').slice(-9);delete _T.smsCache[k];}
+                  if(_T.smsCache){const k='sms_'+phoneMatchKey(conv.clientPhone||'');delete _T.smsCache[k];}
                   setPhoneRightAccordion(p=>({...p,_smsR:Date.now()}));
-                  // Mark as read — supprimer le badge unread
                   if(conv.unreadCount>0){
                     api('/api/conversations/'+conv.id+'/read',{method:'PUT'}).catch(()=>{});
                     setAppConversations(prev=>prev.map(c=>c.id===conv.id?{...c,unreadCount:0}:c));
                   }
-                }} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 14px',cursor:'pointer',background:isActive?T.accentBg:'transparent',borderLeft:isActive?'3px solid '+T.accent:'3px solid transparent',transition:'background .1s'}} onMouseEnter={e=>{if(!isActive)e.currentTarget.style.background=T.bg;}} onMouseLeave={e=>{if(!isActive)e.currentTarget.style.background='transparent';}}>
-                  <div style={{width:28,height:28,borderRadius:14,background:hasUnread?'#0EA5E9':'#0EA5E915',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-                    <I n="message-circle" s={12} style={{color:hasUnread?'#fff':'#0EA5E9'}}/>
+                  _T.smsHubLastUnknownConvId = isKnown ? null : conv.id;
+                }} style={{display:'flex',alignItems:'center',gap:8,padding:'7px 12px',cursor:'pointer',background:isActive?T.accentBg:'transparent',borderLeft:isActive?'3px solid '+T.accent:'3px solid transparent',transition:'background .1s',overflow:'hidden',minWidth:0,position:'relative'}}>
+                  {/* ── 1. Avatar fixe gauche ── */}
+                  <div title={tagLabel} style={{width:28,height:28,borderRadius:14,background:isKnown?(hasUnread?'#0EA5E9':'#0EA5E915'):'#EF444412',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,position:'relative'}}>
+                    <I n={isKnown?'message-circle':'help-circle'} s={12} style={{color:isKnown?(hasUnread?'#fff':'#0EA5E9'):'#EF4444'}}/>
+                    <span title={tagLabel} style={{position:'absolute',bottom:-1,right:-1,width:8,height:8,borderRadius:4,background:tagColor,border:'1.5px solid '+T.surface}}/>
                   </div>
-                  <div style={{flex:1,minWidth:0}}>
-                    <div style={{fontSize:12,fontWeight:hasUnread?700:500,color:hasUnread?T.text:T.text2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{name}</div>
+                  {/* ── 2. Texte flex centre (ellipsis) ── */}
+                  <div style={{flex:1,minWidth:0,overflow:'hidden'}}>
+                    <div title={isKnown?undefined:'Numéro inconnu'} style={{fontSize:12,fontWeight:hasUnread?700:500,color:isKnown?(hasUnread?T.text:T.text2):T.text2,fontStyle:isKnown?'normal':'italic',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{name}</div>
                     <div style={{fontSize:10,color:T.text3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{conv.lastEventPreview||''}</div>
                   </div>
-                  <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2,flexShrink:0}}>
-                    <span style={{fontSize:9,color:T.text3}}>{(()=>{if(!conv.lastActivityAt)return'';const d=Date.now()-new Date(conv.lastActivityAt).getTime();if(d<60000)return"now";if(d<3600000)return Math.floor(d/60000)+'m';if(d<86400000)return Math.floor(d/3600000)+'h';return new Date(conv.lastActivityAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short'});})()}</span>
+                  {/* ── 3. Méta droite : date + unread (toujours) ── */}
+                  <div style={{display:'flex',flexDirection:'column',alignItems:'flex-end',gap:2,flexShrink:0,minWidth:28}}>
+                    <span style={{fontSize:9,color:T.text3,whiteSpace:'nowrap'}}>{timeStr}</span>
                     {hasUnread&&<span style={{fontSize:8,fontWeight:800,color:'#fff',background:'#EF4444',borderRadius:8,padding:'1px 5px',minWidth:14,textAlign:'center'}}>{conv.unreadCount}</span>}
                   </div>
+                  {/* ── 4. CTA "+" icon-only — visible si inconnu (ou hover) ── */}
+                  {!isKnown && (
+                    <div onClick={(e)=>{
+                      e.stopPropagation();
+                      const norm = normalizePhoneNumber(conv.clientPhone||'');
+                      setPhoneQuickAddPhone(norm || conv.clientPhone || '');
+                      setPhoneQuickAddName('');
+                      setPhoneQuickAddFirstname('');
+                      setPhoneQuickAddLastname('');
+                      setPhoneQuickAddEmail('');
+                      setPhoneQuickAddCompany('');
+                      setPhoneQuickAddType('btc');
+                      setPhoneQuickAddStage('nouveau');
+                      _T.smsHubLastUnknownConvId = conv.id;
+                      _T.smsHubLastUnknownPhone = norm || conv.clientPhone || '';
+                    }} title="Créer la fiche" style={{flexShrink:0,width:22,height:22,borderRadius:6,background:'#22C55E',color:'#fff',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',boxShadow:'0 1px 3px rgba(34,197,94,0.4)'}}>
+                      <I n="plus" s={13} style={{color:'#fff'}}/>
+                    </div>
+                  )}
                 </div>;
               })}
             </div>
@@ -912,8 +949,14 @@ if (d?.success) {
     };
 
     const selectedConv = convs.find(c => c.id === (typeof selConvId!=='undefined'?selConvId:null));
-    const selectedContact = selectedConv?.contactId ? contacts.find(c => c.id === selectedConv.contactId) : null;
-    const displayName = selectedContact?.name || fmtPhone(selectedConv?.clientPhone) || 'Contact inconnu';
+    // V1.10.2 — Match unifié + cross-collab scope (assignedTo / sharedWithId / shared_with_json)
+    const _isAdmin = (typeof isAdminView!=='undefined' && isAdminView) || collab?.role==='admin' || collab?.role==='supra';
+    let selectedContact = selectedConv?.contactId ? contacts.find(c => c.id === selectedConv.contactId) : null;
+    if (!selectedContact && selectedConv?.clientPhone) {
+      selectedContact = matchContactByPhone(contacts, selectedConv.clientPhone, { collabId: collab.id, companyId: company.id, isAdmin: _isAdmin });
+    }
+    const isUnknownContact = !selectedContact;
+    const displayName = selectedContact?.name || fmtPhone(selectedConv?.clientPhone) || 'Numéro inconnu';
     const displayInitials = selectedContact?.name
       ? selectedContact.name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2)
       : '?';
@@ -928,31 +971,88 @@ if (d?.success) {
 <I n="arrow-left" s={15} style={{color:T.text2}}/>
 </div>
 
-{/* Contact avatar */}
-<div style={{width:40,height:40,borderRadius:20,background:T.accentBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
-<span style={{fontWeight:700,fontSize:15,color:T.accent}}>{displayInitials}</span>
+{/* Contact avatar — V1.10.2 : "?" rouge si inconnu */}
+<div style={{width:40,height:40,borderRadius:20,background:isUnknownContact?'#EF444415':T.accentBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,border:isUnknownContact?'1.5px dashed #EF444450':'none'}}>
+<span style={{fontWeight:700,fontSize:15,color:isUnknownContact?'#EF4444':T.accent}}>{isUnknownContact?'?':displayInitials}</span>
 </div>
 
-{/* Contact info */}
-<div style={{flex:1,minWidth:0}}>
-<div style={{fontWeight:700,fontSize:14,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{displayName}</div>
-<div style={{fontSize:11,color:T.text3,display:'flex',alignItems:'center',gap:4}}>
+{/* Contact info — V1.10.2 : label "Contact non enregistré" si inconnu */}
+<div style={{flex:1,minWidth:0,overflow:'hidden'}}>
+<div style={{fontWeight:700,fontSize:14,color:isUnknownContact?T.text2:T.text,fontStyle:isUnknownContact?'italic':'normal',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{displayName}</div>
+<div style={{fontSize:11,color:T.text3,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',minWidth:0}}>
   <span onClick={()=>{if(selectedConv?.clientPhone) setPhoneDialNumber(selectedConv.clientPhone);}} style={{color:T.accent,cursor:'pointer',borderRadius:3,padding:'0 2px',transition:'background .12s'}} onMouseEnter={e=>e.currentTarget.style.background=T.accentBg} onMouseLeave={e=>e.currentTarget.style.background='transparent'} title="Afficher sur le clavier">{fmtPhone(selectedConv?.clientPhone)}</span>
-  {selectedContact?.company && <span> &middot; {selectedContact.company}</span>}
+  {isUnknownContact ? (
+    <span style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:10,fontWeight:700,color:'#EF4444',background:'#EF444412',border:'1px solid #EF444430',borderRadius:6,padding:'1px 6px'}}>
+      <I n="alert-circle" s={10} style={{color:'#EF4444'}}/> Contact non enregistré
+    </span>
+  ) : (
+    selectedContact?.company && <span>&middot; {selectedContact.company}</span>
+  )}
 </div>
 </div>
 
-{/* Action buttons */}
-<div style={{display:'flex',gap:6,flexShrink:0}}>
-<div onClick={()=>{if(selectedConv?.clientPhone) prefillKeypad(selectedConv.clientPhone);}} style={{width:34,height:34,borderRadius:10,background:'#22C55E15',border:'1px solid #22C55E30',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',transition:'all .15s'}} onMouseEnter={e=>{e.currentTarget.style.background='#22C55E25';}} onMouseLeave={e=>{e.currentTarget.style.background='#22C55E15';}} title="Appeler">
-  <I n="phone" s={15} style={{color:'#22C55E'}}/>
-</div>
-<div onClick={()=>{
-  const smsInput = document.querySelector('[data-conv-sms-input]');
-  if(smsInput) smsInput.focus();
-}} style={{width:34,height:34,borderRadius:10,background:'#2563EB15',border:'1px solid #2563EB30',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',transition:'all .15s'}} onMouseEnter={e=>{e.currentTarget.style.background='#2563EB25';}} onMouseLeave={e=>{e.currentTarget.style.background='#2563EB15';}} title="SMS">
-  <I n="message-square" s={15} style={{color:'#2563EB'}}/>
-</div>
+{/* V1.10.2 — Action buttons : 5 actions rapides + CTA Créer fiche si inconnu */}
+<div style={{display:'flex',gap:6,flexShrink:0,alignItems:'center'}}>
+{isUnknownContact ? (
+  <div onClick={()=>{
+    const norm = normalizePhoneNumber(selectedConv?.clientPhone||'');
+    setPhoneQuickAddPhone(norm || selectedConv?.clientPhone || '');
+    setPhoneQuickAddName('');
+    setPhoneQuickAddFirstname('');
+    setPhoneQuickAddLastname('');
+    setPhoneQuickAddEmail('');
+    setPhoneQuickAddCompany('');
+    setPhoneQuickAddType('btc');
+    setPhoneQuickAddStage('nouveau');
+    _T.smsHubLastUnknownConvId = selectedConv?.id || null;
+    _T.smsHubLastUnknownPhone = norm || selectedConv?.clientPhone || '';
+  }} style={{padding:'8px 14px',borderRadius:10,background:'linear-gradient(135deg,#22C55E,#16A34A)',color:'#fff',fontSize:12,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:6,boxShadow:'0 2px 8px rgba(34,197,94,0.3)'}} title="Créer la fiche contact">
+    <I n="user-plus" s={14} style={{color:'#fff'}}/> Créer la fiche
+  </div>
+) : (<>
+  <div onClick={()=>{if(selectedConv?.clientPhone) prefillKeypad(selectedConv.clientPhone);}} style={{width:34,height:34,borderRadius:10,background:'#22C55E15',border:'1px solid #22C55E30',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',transition:'all .15s'}} onMouseEnter={e=>{e.currentTarget.style.background='#22C55E25';}} onMouseLeave={e=>{e.currentTarget.style.background='#22C55E15';}} title="Appeler">
+    <I n="phone" s={15} style={{color:'#22C55E'}}/>
+  </div>
+  <div onClick={()=>{
+    const smsInput = document.querySelector('[data-conv-sms-input]');
+    if(smsInput) smsInput.focus();
+  }} style={{width:34,height:34,borderRadius:10,background:'#2563EB15',border:'1px solid #2563EB30',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',transition:'all .15s'}} onMouseEnter={e=>{e.currentTarget.style.background='#2563EB25';}} onMouseLeave={e=>{e.currentTarget.style.background='#2563EB15';}} title="SMS">
+    <I n="message-square" s={15} style={{color:'#2563EB'}}/>
+  </div>
+  {/* V1.10.2 — Créer RDV pour le contact lié */}
+  <div onClick={()=>{
+    if (!selectedContact) return;
+    if (typeof setPipelineRdvForm === 'function') {
+      setPipelineRdvForm({ contactId: selectedContact.id, contactName: selectedContact.name, phone: selectedConv?.clientPhone||'', source: 'sms-hub' });
+    } else {
+      // Fallback : ouvre fiche dans CRM en mode RDV
+      setSelectedCrmContact && setSelectedCrmContact(selectedContact);
+      setCollabFicheTab && setCollabFicheTab('rdv');
+    }
+  }} style={{width:34,height:34,borderRadius:10,background:'#7C3AED15',border:'1px solid #7C3AED30',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',transition:'all .15s'}} onMouseEnter={e=>{e.currentTarget.style.background='#7C3AED25';}} onMouseLeave={e=>{e.currentTarget.style.background='#7C3AED15';}} title="Créer un RDV">
+    <I n="calendar-plus" s={15} style={{color:'#7C3AED'}}/>
+  </div>
+  {/* V1.10.2 — Voir / déplacer dans le pipeline */}
+  <div onClick={()=>{
+    if (!selectedContact) return;
+    setPipelineRightContact && setPipelineRightContact(selectedContact);
+    if (typeof setPhoneSubTab === 'function') setPhoneSubTab('pipeline');
+  }} style={{width:34,height:34,borderRadius:10,background:'#F59E0B15',border:'1px solid #F59E0B30',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',transition:'all .15s'}} onMouseEnter={e=>{e.currentTarget.style.background='#F59E0B25';}} onMouseLeave={e=>{e.currentTarget.style.background='#F59E0B15';}} title="Pipeline">
+    <I n="kanban" s={15} style={{color:'#F59E0B'}}/>
+  </div>
+  {/* V1.10.2 — Ajouter une note (focus champ note conv) */}
+  <div onClick={()=>{
+    const noteInput = document.querySelector('[data-conv-note-input]');
+    if (noteInput) { noteInput.focus(); return; }
+    // Fallback : ouvre fiche en mode notes
+    if (selectedContact) {
+      setSelectedCrmContact && setSelectedCrmContact(selectedContact);
+      setCollabFicheTab && setCollabFicheTab('notes');
+    }
+  }} style={{width:34,height:34,borderRadius:10,background:'#EC489915',border:'1px solid #EC489930',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',transition:'all .15s'}} onMouseEnter={e=>{e.currentTarget.style.background='#EC489925';}} onMouseLeave={e=>{e.currentTarget.style.background='#EC489915';}} title="Ajouter une note">
+    <I n="edit-3" s={15} style={{color:'#EC4899'}}/>
+  </div>
+</>)}
 </div>
       </div>
 
@@ -8182,16 +8282,20 @@ else showNotif(res?.error || 'Erreur CRM', 'error');
     </div>
   )}
 
-  {/* d) Quick Add Contact Popup */}
-  {(typeof phoneQuickAddPhone!=='undefined'?phoneQuickAddPhone:null) && (
-    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.4)',backdropFilter:'blur(4px)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center'}} onClick={()=>setPhoneQuickAddPhone(null)}>
-      <div onClick={e=>e.stopPropagation()} style={{background:T.surface,borderRadius:16,padding:24,width:380,boxShadow:'0 20px 50px rgba(0,0,0,0.25)'}}>
-<div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
-<div style={{width:40,height:40,borderRadius:12,background:'linear-gradient(135deg,#2563EB,#3B82F6)',display:'flex',alignItems:'center',justifyContent:'center'}}><I n="user-plus" s={18} style={{color:'#fff'}}/></div>
-<div>
-  <div style={{fontWeight:800,fontSize:15}}>Créer une fiche rapide</div>
-  <div style={{fontSize:12,color:T.text3}}>{phoneQuickAddPhone}</div>
+  {/* d) Quick Add Contact Popup — V1.10.2 fix overflow + responsive */}
+  {(typeof phoneQuickAddPhone!=='undefined'?phoneQuickAddPhone:null) && (()=>{
+    const _qaInput = {boxSizing:'border-box',width:'100%',minWidth:0,padding:'10px 12px',borderRadius:10,border:`1.5px solid ${T.border}`,background:T.bg,fontSize:14,fontFamily:'inherit',color:T.text,outline:'none'};
+    const _qaPhone = {boxSizing:'border-box',width:'100%',minWidth:0,display:'flex',alignItems:'center',gap:6,padding:'10px 12px',borderRadius:10,background:T.bg,border:`1.5px solid ${T.border}`};
+    return (
+    <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.4)',backdropFilter:'blur(4px)',zIndex:9999,display:'flex',alignItems:'center',justifyContent:'center',padding:16,boxSizing:'border-box'}} onClick={()=>setPhoneQuickAddPhone(null)}>
+      <div onClick={e=>e.stopPropagation()} style={{boxSizing:'border-box',background:T.surface,borderRadius:16,padding:20,width:'100%',maxWidth:380,maxHeight:'calc(100vh - 32px)',overflow:'auto',boxShadow:'0 20px 50px rgba(0,0,0,0.25)'}}>
+<div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16,minWidth:0}}>
+<div style={{width:40,height:40,borderRadius:12,background:'linear-gradient(135deg,#2563EB,#3B82F6)',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><I n="user-plus" s={18} style={{color:'#fff'}}/></div>
+<div style={{flex:1,minWidth:0,overflow:'hidden'}}>
+  <div style={{fontWeight:800,fontSize:15,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Créer une fiche rapide</div>
+  <div style={{fontSize:12,color:T.text3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{phoneQuickAddPhone}</div>
 </div>
+<div onClick={()=>setPhoneQuickAddPhone(null)} style={{flexShrink:0,width:28,height:28,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:T.bg,border:`1px solid ${T.border}`,color:T.text3}} title="Fermer"><I n="x" s={14}/></div>
 </div>
 <div style={{display:'flex',flexDirection:'column',gap:10}}>
 {/* BTC / BTB Toggle */}
@@ -8205,30 +8309,36 @@ else showNotif(res?.error || 'Erreur CRM', 'error');
 </div>
 {/* BTC Fields */}
 {phoneQuickAddType==='btc' && <>
-  <div style={{display:'flex',gap:8}}>
-    <input value={phoneQuickAddFirstname} onChange={e=>(typeof setPhoneQuickAddFirstname==='function'?setPhoneQuickAddFirstname:function(){})(e.target.value)} placeholder="Prénom *" autoFocus style={{flex:1,padding:'10px 12px',borderRadius:10,border:`1.5px solid ${T.border}`,background:T.bg,fontSize:14,fontFamily:'inherit',color:T.text,outline:'none'}}/>
-    <input value={phoneQuickAddLastname} onChange={e=>(typeof setPhoneQuickAddLastname==='function'?setPhoneQuickAddLastname:function(){})(e.target.value)} placeholder="Nom *" style={{flex:1,padding:'10px 12px',borderRadius:10,border:`1.5px solid ${T.border}`,background:T.bg,fontSize:14,fontFamily:'inherit',color:T.text,outline:'none'}}/>
+  <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+    <div style={{flex:'1 1 140px',minWidth:0}}>
+      <input value={phoneQuickAddFirstname} onChange={e=>(typeof setPhoneQuickAddFirstname==='function'?setPhoneQuickAddFirstname:function(){})(e.target.value)} placeholder="Prénom *" autoFocus style={_qaInput}/>
+    </div>
+    <div style={{flex:'1 1 140px',minWidth:0}}>
+      <input value={phoneQuickAddLastname} onChange={e=>(typeof setPhoneQuickAddLastname==='function'?setPhoneQuickAddLastname:function(){})(e.target.value)} placeholder="Nom *" style={_qaInput}/>
+    </div>
   </div>
-  <div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 12px',borderRadius:10,background:T.bg,border:`1.5px solid ${T.border}`}}>
-    <I n="phone" s={13} style={{color:T.text3}}/>
-    <span style={{fontSize:13,color:T.text2}}>{phoneQuickAddPhone}</span>
+  <div style={_qaPhone}>
+    <I n="phone" s={13} style={{color:T.text3,flexShrink:0}}/>
+    <span style={{fontSize:13,color:T.text2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{phoneQuickAddPhone}</span>
   </div>
-  <input value={phoneQuickAddEmail} onChange={e=>(typeof setPhoneQuickAddEmail==='function'?setPhoneQuickAddEmail:function(){})(e.target.value)} placeholder="Email" style={{padding:'10px 12px',borderRadius:10,border:`1.5px solid ${T.border}`,background:T.bg,fontSize:14,fontFamily:'inherit',color:T.text,outline:'none'}}/>
+  <input value={phoneQuickAddEmail} onChange={e=>(typeof setPhoneQuickAddEmail==='function'?setPhoneQuickAddEmail:function(){})(e.target.value)} placeholder="Email" style={_qaInput}/>
 </>}
 {/* BTB Fields */}
 {phoneQuickAddType==='btb' && <>
-  <input value={phoneQuickAddCompany} onChange={e=>(typeof setPhoneQuickAddCompany==='function'?setPhoneQuickAddCompany:function(){})(e.target.value)} placeholder="Nom de l'entreprise *" autoFocus style={{padding:'10px 12px',borderRadius:10,border:`1.5px solid ${T.border}`,background:T.bg,fontSize:14,fontFamily:'inherit',color:T.text,outline:'none'}}/>
-  <input value={phoneQuickAddSiret} onChange={e=>(typeof setPhoneQuickAddSiret==='function'?setPhoneQuickAddSiret:function(){})(e.target.value)} placeholder="SIRET" style={{padding:'10px 12px',borderRadius:10,border:`1.5px solid ${T.border}`,background:T.bg,fontSize:14,fontFamily:'inherit',color:T.text,outline:'none'}}/>
-  <input value={phoneQuickAddResponsable} onChange={e=>(typeof setPhoneQuickAddResponsable==='function'?setPhoneQuickAddResponsable:function(){})(e.target.value)} placeholder="Responsable" style={{padding:'10px 12px',borderRadius:10,border:`1.5px solid ${T.border}`,background:T.bg,fontSize:14,fontFamily:'inherit',color:T.text,outline:'none'}}/>
-  <div style={{display:'flex',gap:8}}>
-    <div style={{flex:1,display:'flex',alignItems:'center',gap:6,padding:'6px 12px',borderRadius:10,background:T.bg,border:`1.5px solid ${T.border}`}}>
-      <I n="phone" s={13} style={{color:T.text3}}/>
-      <span style={{fontSize:13,color:T.text2}}>{phoneQuickAddPhone}</span>
+  <input value={phoneQuickAddCompany} onChange={e=>(typeof setPhoneQuickAddCompany==='function'?setPhoneQuickAddCompany:function(){})(e.target.value)} placeholder="Nom de l'entreprise *" autoFocus style={_qaInput}/>
+  <input value={phoneQuickAddSiret} onChange={e=>(typeof setPhoneQuickAddSiret==='function'?setPhoneQuickAddSiret:function(){})(e.target.value)} placeholder="SIRET" style={_qaInput}/>
+  <input value={phoneQuickAddResponsable} onChange={e=>(typeof setPhoneQuickAddResponsable==='function'?setPhoneQuickAddResponsable:function(){})(e.target.value)} placeholder="Responsable" style={_qaInput}/>
+  <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+    <div style={{flex:'1 1 140px',minWidth:0,...(_qaPhone)}}>
+      <I n="phone" s={13} style={{color:T.text3,flexShrink:0}}/>
+      <span style={{fontSize:13,color:T.text2,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{phoneQuickAddPhone}</span>
     </div>
-    <input value={phoneQuickAddMobile} onChange={e=>(typeof setPhoneQuickAddMobile==='function'?setPhoneQuickAddMobile:function(){})(e.target.value)} placeholder="Tél portable" style={{flex:1,padding:'10px 12px',borderRadius:10,border:`1.5px solid ${T.border}`,background:T.bg,fontSize:14,fontFamily:'inherit',color:T.text,outline:'none'}}/>
+    <div style={{flex:'1 1 140px',minWidth:0}}>
+      <input value={phoneQuickAddMobile} onChange={e=>(typeof setPhoneQuickAddMobile==='function'?setPhoneQuickAddMobile:function(){})(e.target.value)} placeholder="Tél portable" style={_qaInput}/>
+    </div>
   </div>
-  <input value={phoneQuickAddEmail} onChange={e=>(typeof setPhoneQuickAddEmail==='function'?setPhoneQuickAddEmail:function(){})(e.target.value)} placeholder="Email" style={{padding:'10px 12px',borderRadius:10,border:`1.5px solid ${T.border}`,background:T.bg,fontSize:14,fontFamily:'inherit',color:T.text,outline:'none'}}/>
-  <input value={phoneQuickAddWebsite} onChange={e=>(typeof setPhoneQuickAddWebsite==='function'?setPhoneQuickAddWebsite:function(){})(e.target.value)} placeholder="Site web" style={{padding:'10px 12px',borderRadius:10,border:`1.5px solid ${T.border}`,background:T.bg,fontSize:14,fontFamily:'inherit',color:T.text,outline:'none'}}/>
+  <input value={phoneQuickAddEmail} onChange={e=>(typeof setPhoneQuickAddEmail==='function'?setPhoneQuickAddEmail:function(){})(e.target.value)} placeholder="Email" style={_qaInput}/>
+  <input value={phoneQuickAddWebsite} onChange={e=>(typeof setPhoneQuickAddWebsite==='function'?setPhoneQuickAddWebsite:function(){})(e.target.value)} placeholder="Site web" style={_qaInput}/>
 </>}
 <div>
   <label style={{display:'block',fontSize:11,fontWeight:600,color:T.text3,marginBottom:4}}>Statut</label>
@@ -8247,7 +8357,8 @@ else showNotif(res?.error || 'Erreur CRM', 'error');
 </div>
       </div>
     </div>
-  )}
+    );
+  })()}
 
 {/* ═══════════════════════════════════════════════════════════════════
     PIPELINE POPUP CONTACT — Click card → popup with actions
