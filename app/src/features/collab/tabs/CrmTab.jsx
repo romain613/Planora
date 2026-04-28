@@ -17,6 +17,7 @@ import { sendNotification, buildNotifyPayload } from "../../../shared/utils/noti
 import { api } from "../../../shared/services/api";
 import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";
+import FicheReportingBlock from "./crm/fiche/FicheReportingBlock";
 
 const CrmTab = () => {
   const ctx = useCollabContext();
@@ -1079,6 +1080,9 @@ const CrmTab = () => {
             {/* Cancel contract modal — gestion via (typeof contractModal!=='undefined'?contractModal:null)/handlePipelineStageChange, pas ici */}
           </div>
         ) : null}
+
+        {/* V1.10.3 P3 — Bloc "📊 Suivi RDV transmis" (visible permanent, auto-masqué si rien) */}
+        <FicheReportingBlock ct={ct} />
 
         {/* Sub-tabs: 5 onglets unifiés */}
         <div style={{display:"flex",gap:4,marginBottom:16,overflowX:"auto"}}>

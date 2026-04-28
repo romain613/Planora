@@ -5436,6 +5436,9 @@ return(
         const rdvD2=liveRdv2?liveRdv2.date+(liveRdv2.time?'T'+liveRdv2.time:'T23:59'):ct.next_rdv_date;
         return rdvD2&&new Date(rdvD2).getTime()<nowMs2;
       })();
+      // V1.10.3 P2 — Détection "card transmise" (Jordan voit contact owned par Guillaume)
+      const _ctSharedRaw = Array.isArray(ct.shared_with) ? ct.shared_with : (()=>{ try { return JSON.parse(ct.shared_with_json||'[]'); } catch { return []; } })();
+      const _isSharedCard = _ctSharedRaw.includes(collab.id) && ct.assignedTo && ct.assignedTo !== collab.id;
       return(
       <div key={ct.id} draggable={!(ct.assignedTo && ct.assignedTo !== collab.id && !(collab?.role === 'admin' || collab?.role === 'supra' || isAdminView))} onDragStart={e=>{
         // V1.8.14 — Bloquer le drag pour shared (non-owner, non-admin)
@@ -5452,7 +5455,7 @@ return(
           setPipelineRightContact(ct);setPhoneRightTab('fiche');if(phoneRightCollapsed){(typeof setPhoneRightCollapsed==='function'?setPhoneRightCollapsed:function(){})(false);try{localStorage.setItem('c360-phone-right-collapsed-'+collab.id,'0');}catch{}}api('/api/data/pipeline-history?contactId='+ct.id).then(h=>setPipelinePopupHistory(h||[])).catch(()=>setPipelinePopupHistory([]));
         }}
         data-pipe-card="1"
-        style={{padding:'8px 10px',borderRadius:10,background:_isRdvPasse2?'linear-gradient(135deg, #F9731612 0%, #F9731604 60%, transparent 100%)':_isSelected?T.accent+'08':_isPipeSel?T.accentBg:_ccBg,border:_isRdvPasse2?'2px solid #F97316':_isSelected?`2.5px solid ${T.accent}`:_isPipeSel?`2px solid ${T.accent}`:_ccBorder,borderLeft:_isRdvPasse2?'5px solid #F97316':_isSelected?`5px solid ${T.accent}`:_ccHas?`6px solid ${ct.card_color}`:undefined,cursor:'pointer',transition:'all .3s',boxShadow:_isRdvPasse2?'0 3px 12px #F9731625':_isSelected?`0 4px 16px ${T.accent}25`:_ccShadow,position:'relative'}}
+        style={{padding:'8px 10px',borderRadius:10,background:_isRdvPasse2?'linear-gradient(135deg, #F9731612 0%, #F9731604 60%, transparent 100%)':_isSelected?T.accent+'08':_isPipeSel?T.accentBg:_isSharedCard?'#F9731608':_ccBg,border:_isRdvPasse2?'2px solid #F97316':_isSelected?`2.5px solid ${T.accent}`:_isPipeSel?`2px solid ${T.accent}`:_isSharedCard?'2px solid #F9731660':_ccBorder,borderLeft:_isRdvPasse2?'5px solid #F97316':_isSelected?`5px solid ${T.accent}`:_isSharedCard?'5px solid #F97316':_ccHas?`6px solid ${ct.card_color}`:undefined,cursor:'pointer',transition:'all .3s',boxShadow:_isRdvPasse2?'0 3px 12px #F9731625':_isSelected?`0 4px 16px ${T.accent}25`:_isSharedCard?'0 2px 8px #F9731620':_ccShadow,position:'relative'}}
         onMouseEnter={e=>{if(!isAutoDialing&&!_ccHas)e.currentTarget.style.boxShadow='0 4px 12px rgba(0,0,0,0.08)';}}
         onMouseLeave={e=>{e.currentTarget.style.boxShadow=_ccShadow;}}>
         {/* Auto-dialer badge */}
@@ -5468,8 +5471,18 @@ return(
           const _capName = (n) => { const s = String(n||'').trim(); return s ? s.charAt(0).toUpperCase() + s.slice(1) : '—'; };
           if (_sharedHere) {
             const _ownerName = (collabs||[]).find(_c => _c.id === ct.assignedTo)?.name || '';
-            return <div title={'Apporté à ' + (_ownerName ? _capName(_ownerName) : 'autre collaborateur') + ' — lecture seule'} style={{display:'inline-flex',alignItems:'center',gap:3,padding:'1px 5px',borderRadius:4,background:'#3B82F614',border:'1px solid #3B82F635',color:'#1E40AF',fontSize:8,fontWeight:700,marginBottom:2,maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-              🤝 Apporté à {_capName(_ownerName)}
+            // V1.10.3 P2 — sous-texte "Reporting en attente" si RDV transmis sans reporting
+            const _shareTransfBk = (bookings||[]).find(b => b.contactId === ct.id && b.bookingType === 'share_transfer' && b.status === 'confirmed');
+            const _hasPendingReport = _shareTransfBk && (!_shareTransfBk.bookingReportingStatus || _shareTransfBk.bookingReportingStatus === '');
+            return <div style={{marginBottom:2,maxWidth:'100%'}}>
+              <div title={'Transmis à ' + (_ownerName ? _capName(_ownerName) : 'autre collaborateur') + ' — lecture seule'} style={{display:'inline-flex',alignItems:'center',gap:3,padding:'1px 5px',borderRadius:4,background:'#F9731614',border:'1px solid #F9731635',color:'#9A3412',fontSize:8,fontWeight:700,maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                🤝 Transmis à {_capName(_ownerName)}
+              </div>
+              {_hasPendingReport && (
+                <div title="Reporting en attente du receveur" style={{display:'inline-flex',alignItems:'center',gap:2,marginLeft:4,padding:'0 4px',borderRadius:3,background:'#F59E0B14',color:'#92400E',fontSize:7,fontWeight:700,verticalAlign:'middle'}}>
+                  ⏳ Reporting en attente
+                </div>
+              )}
             </div>;
           }
           if (_isOwner && _shared.filter(_id => _id && _id !== collab.id).length > 0) {
