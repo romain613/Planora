@@ -56,6 +56,10 @@ import {
 import CollabPortal from "./features/collab/CollabPortal";
 import AdminDash from "./features/admin/AdminDash";
 
+// ─── V3: TAB ISOLATION — identifiant unique par onglet, volatile, jamais persisté ───
+const TAB_ID = crypto.randomUUID ? crypto.randomUUID() : 'tab-' + Date.now() + '-' + Math.random().toString(36).slice(2, 8);
+
+
 // HookIsolator: wraps IIFE-with-hooks in a real React component
 // so each tab gets its own hook scope (prevents React #311 on tab switch)
 
@@ -297,7 +301,7 @@ export default function App() {
         setAppPipelineStages(data.pipelineStages || []);
         setAppContactFieldDefs(data.contactFieldDefs || []);
         setSmsHistory(data.smsTransactions || []);
-        setContacts(data.contacts || []);
+        setContacts((data.contacts || []).filter(Boolean)); // hotfix 2026-04-23 — null-safe API boundary
         if (data?.customTables) (typeof setCustomTables==='function'?setCustomTables:function(){})(data.customTables);
         if (data?.googleEvents) setGoogleEvents(data.googleEvents);
         // Sécurité : si le collaborateur connecté n'est PAS admin → ouvrir son portail directement
@@ -354,11 +358,15 @@ export default function App() {
             const cid = viewCollabId;
             const filtered = data.contacts.filter(c => {
               if (c.assignedTo === cid) return true;
-              try { return JSON.parse(c.shared_with_json || '[]').includes(cid); } catch { return false; }
+              // V1.10.4 P1 — parseRow expose shared_with array (shared_with_json supprimé). Lire les 2.
+              const shared = Array.isArray(c.shared_with)
+                ? c.shared_with
+                : (() => { try { return JSON.parse(c.shared_with_json || '[]'); } catch { return []; } })();
+              return shared.includes(cid);
             });
-            setContacts(filtered);
+            setContacts((filtered||[]).filter(Boolean)); // hotfix 2026-04-23 — null-safe API boundary
           } else {
-            setContacts(data.contacts);
+            setContacts((data.contacts||[]).filter(Boolean)); // hotfix 2026-04-23 — null-safe API boundary
           }
         } else if (data?.contacts && timeSinceEdit <= 10000) {
           console.log('[AUTO-REFRESH] Contacts skip — edit local il y a', Math.round(timeSinceEdit/1000)+'s');
@@ -413,7 +421,7 @@ export default function App() {
             setVoipCallLogs(data.voipCallLogs || []);
             setVoipConfigured(data.voipConfigured ?? false);
             setSmsHistory(data.smsTransactions || []);
-            setContacts(data.contacts || []);
+            setContacts((data.contacts || []).filter(Boolean)); // hotfix 2026-04-23 — null-safe API boundary
             if (data?.customTables) (typeof setCustomTables==='function'?setCustomTables:function(){})(data.customTables);
             if (data?.googleEvents) setGoogleEvents(data.googleEvents);
             // Telecom states (voipPacks, smsPacks, telecomCredits, allTelecomCredits, etc.)
@@ -462,9 +470,13 @@ export default function App() {
                 // Filter contacts for this specific collab
                 const collabContacts = data.contacts.filter(c => {
                   if (c.assignedTo === collab.id) return true;
-                  try { return JSON.parse(c.shared_with_json || c.shared_with || '[]').includes(collab.id); } catch { return false; }
+                  // V1.10.4 P1 — parseRow expose shared_with array. Évite JSON.parse sur un array (SyntaxError).
+                  const shared = Array.isArray(c.shared_with)
+                    ? c.shared_with
+                    : (() => { try { return JSON.parse(c.shared_with_json || '[]'); } catch { return []; } })();
+                  return shared.includes(collab.id);
                 });
-                setContacts(collabContacts);
+                setContacts((collabContacts||[]).filter(Boolean)); // hotfix 2026-04-23 — null-safe API boundary
               }
               // SECURITE: filtrer TOUTES les données par collaborateur (vue isolée)
               if (data?.bookings) setAllBookings(data.bookings.filter(b => b.collaboratorId === collab.id));
@@ -528,7 +540,7 @@ export default function App() {
                 if(data.telecomCreditLogs) (typeof setTelecomCreditLogs==='function'?setTelecomCreditLogs:function(){})(data.telecomCreditLogs);
                 (typeof setAppPipelineStages==='function'?setAppPipelineStages:function(){})(data.pipelineStages || []);
                 setSmsHistory(data.smsTransactions || []);
-                setContacts(data.contacts || []);
+                setContacts((data.contacts || []).filter(Boolean)); // hotfix 2026-04-23 — null-safe API boundary
                 if (data?.customTables) (typeof setCustomTables==='function'?setCustomTables:function(){})(data.customTables);
                 if (data?.googleEvents) (typeof setGoogleEvents==='function'?setGoogleEvents:function(){})(data.googleEvents);
                 // Persist in localStorage as UX convenience (backend is source of truth)
@@ -571,7 +583,7 @@ export default function App() {
               } catch {}
               // Recharger TOUS les contacts de la company (vue admin)
               api("/api/init?companyId=" + company.id).then(data => {
-                if (data?.contacts) setContacts(data.contacts);
+                if (data?.contacts) setContacts(data.contacts.filter(Boolean)); // hotfix 2026-04-23 — null-safe API boundary
               });
               setView("admin");
             }}

@@ -16,6 +16,7 @@ import { api, recUrl, API_BASE, collectEnv } from "../../../shared/services/api"
 import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";
 import { FicheDocsPanelScreen } from "../screens"; // hotfix 2026-04-23 — Phase 14b missed import propagation
+import { isContactInSuiviForCollab, getContactSuiviRole, getReceiverIdForSentTransfer, getActiveSentTransferBooking } from "../../../shared/utils/suivi";
 
 const PhoneTab = () => {
   const ctx = useCollabContext();
@@ -5173,8 +5174,8 @@ return(
     if(c.email&&_collabEmails.has(c.email.toLowerCase()))return false;
     if(c.name&&_collabNames.has(c.name.toLowerCase()))return false;
     if(isAdminView)return c.companyId===company?.id;
-    const sw=Array.isArray(c.shared_with)?c.shared_with:(()=>{try{return JSON.parse(c.shared_with_json||'[]')}catch{return[]}})();
-    return c.assignedTo===collab.id||sw.includes(collab.id);
+    // V1.10.4 P1 — élargi : owner OU shared OU sender/receiver d'un booking share_transfer
+    return isContactInSuiviForCollab(c, bookings, collab.id);
   });
   const allCtxRaw=myPipeContacts.map(c=>({...c,_score:getScore(c),_daysSince:Math.floor((Date.now()-new Date(c.lastVisit||c.createdAt||0).getTime())/86400000)}));
   const pipeFavFilter=localStorage.getItem('c360-pipe-fav-filter-'+collab.id)==='1';
@@ -5437,10 +5438,18 @@ return(
         return rdvD2&&new Date(rdvD2).getTime()<nowMs2;
       })();
       // V1.10.3 P2 — Détection "card transmise" (Jordan voit contact owned par Guillaume)
+      // V1.10.4 P1 STRICT — visuel "transmis" uniquement si :
+      //   assignedTo !== self
+      //   ET (shared_with inclut self  OU  sender d'un share_transfer ≠ owner)
+      // Cas A (owner + sender du même contact) = NON coloré (le contact reste à soi).
       const _ctSharedRaw = Array.isArray(ct.shared_with) ? ct.shared_with : (()=>{ try { return JSON.parse(ct.shared_with_json||'[]'); } catch { return []; } })();
-      const _isSharedCard = _ctSharedRaw.includes(collab.id) && ct.assignedTo && ct.assignedTo !== collab.id;
+      const _suiviRole = getContactSuiviRole(ct, bookings, collab.id);
+      const _isShareSender = _suiviRole === 'sender'; // strict : exclut 'sender-owner' (cas A)
+      const _isSharedCard = !!(ct.assignedTo && ct.assignedTo !== collab.id && (_ctSharedRaw.includes(collab.id) || _isShareSender));
+      const _isAdminOverride = collab?.role === 'admin' || collab?.role === 'supra' || isAdminView;
+      const _isCardReadOnly = !_isAdminOverride && !!(ct.assignedTo && ct.assignedTo !== collab.id);
       return(
-      <div key={ct.id} draggable={!(ct.assignedTo && ct.assignedTo !== collab.id && !(collab?.role === 'admin' || collab?.role === 'supra' || isAdminView))} onDragStart={e=>{
+      <div key={ct.id} draggable={!_isCardReadOnly} onDragStart={e=>{
         // V1.8.14 — Bloquer le drag pour shared (non-owner, non-admin)
         const _isAdminBp = collab?.role === 'admin' || collab?.role === 'supra' || isAdminView;
         if (ct.assignedTo && ct.assignedTo !== collab.id && !_isAdminBp) { e.preventDefault(); return; }
@@ -5463,12 +5472,38 @@ return(
         {pdResult&&!isAutoDialing&&<div style={{position:'absolute',top:-4,right:20,fontSize:7,fontWeight:800,color:'#fff',background:pdResult==='contacted'?'#22C55E':'#EF4444',borderRadius:8,padding:'1px 5px',zIndex:2}}>{pdResult==='contacted'?'OK':'NRP'}</div>}
         {/* ── V6: Nom + température + checkbox ── */}
         {(()=>{const _t=getLeadTemperature(ct);ct._temp=_t;return null;})()}
-        {/* V1.8.14 — Cross-collab badge (kanban card) */}
+        {/* V1.8.14 — Cross-collab badge (kanban card) — V1.10.4 P1 priorité sender */}
         {(()=>{
           const _isOwner = ct.assignedTo === collab.id;
           const _shared = Array.isArray(ct.shared_with) ? ct.shared_with : [];
           const _sharedHere = _shared.includes(collab.id) && !_isOwner && ct.assignedTo;
           const _capName = (n) => { const s = String(n||'').trim(); return s ? s.charAt(0).toUpperCase() + s.slice(1) : '—'; };
+          // V1.10.4 P1 — sender d'un share_transfer (cas A owner+sender, cas B/C sender pur)
+          // prend la priorité sur les autres branches pour éviter double rendu
+          if (_isShareSender) {
+            const _receiverId = getReceiverIdForSentTransfer(ct, bookings, collab.id);
+            const _receiverName = (collabs||[]).find(_c => _c.id === _receiverId)?.name || '';
+            const _shareTransfBk = getActiveSentTransferBooking(ct, bookings, collab.id);
+            const _rs = _shareTransfBk && _shareTransfBk.bookingReportingStatus;
+            const _hasPendingReport = _shareTransfBk && (!_rs || _rs === '' || _rs === 'pending');
+            const _statusLabels = { validated: '✓ Validé', signed: '✅ Signé', no_show: '❌ No-show', cancelled: '⛔ Annulé', follow_up: '🔄 À suivre', other: '🔘 Autre' };
+            const _statusLabel = (_rs && _statusLabels[_rs]) || '';
+            return <div style={{marginBottom:2,maxWidth:'100%'}}>
+              <div title={'Transmis à ' + (_receiverName ? _capName(_receiverName) : 'autre collaborateur') + ' — lecture seule (suivi)'} style={{display:'inline-flex',alignItems:'center',gap:3,padding:'1px 5px',borderRadius:4,background:'#F9731614',border:'1px solid #F9731635',color:'#9A3412',fontSize:8,fontWeight:700,maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                🤝 Transmis à {_capName(_receiverName)}
+              </div>
+              {_hasPendingReport && (
+                <div title="Reporting en attente du receveur" style={{display:'inline-flex',alignItems:'center',gap:2,marginLeft:4,padding:'0 4px',borderRadius:3,background:'#F59E0B14',color:'#92400E',fontSize:7,fontWeight:700,verticalAlign:'middle'}}>
+                  ⏳ Reporting en attente
+                </div>
+              )}
+              {!_hasPendingReport && _statusLabel && (
+                <div title={'Reporting : ' + _statusLabel} style={{display:'inline-flex',alignItems:'center',gap:2,marginLeft:4,padding:'0 4px',borderRadius:3,background:'#22C55E14',color:'#15803D',fontSize:7,fontWeight:700,verticalAlign:'middle'}}>
+                  {_statusLabel}
+                </div>
+              )}
+            </div>;
+          }
           if (_sharedHere) {
             const _ownerName = (collabs||[]).find(_c => _c.id === ct.assignedTo)?.name || '';
             // V1.10.3 P2 — sous-texte "Reporting en attente" si RDV transmis sans reporting
@@ -5497,7 +5532,7 @@ return(
         })()}
         <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:2}}>
           <div style={{flex:1,minWidth:0,fontSize:12,fontWeight:700,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ct.firstname||ct.lastname?(ct.civility&&!ct.name.startsWith(ct.civility)?ct.civility+' ':'')+(ct.firstname?ct.firstname+' ':'')+(ct.lastname||''):ct.name}{ct.contact_type==='btb'?' 🏢':''}</div>
-          <input type="checkbox" checked={_isPipeSel} onChange={e=>{e.stopPropagation();setPipeSelectedIds(p=>e.target.checked?[...p,ct.id]:p.filter(x=>x!==ct.id));}} onClick={e=>e.stopPropagation()} style={{cursor:'pointer',accentColor:T.accent,width:13,height:13,flexShrink:0}}/>
+          <input type="checkbox" disabled={_isCardReadOnly} checked={_isPipeSel} onChange={e=>{if(_isCardReadOnly)return;e.stopPropagation();setPipeSelectedIds(p=>e.target.checked?[...p,ct.id]:p.filter(x=>x!==ct.id));}} onClick={e=>e.stopPropagation()} style={{cursor:_isCardReadOnly?'not-allowed':'pointer',accentColor:T.accent,width:13,height:13,flexShrink:0,opacity:_isCardReadOnly?0.4:1}} title={_isCardReadOnly?'Lecture seule (suivi RDV transmis ou contact géré par un autre collaborateur)':undefined}/>
         </div>
         {/* ── V6: Statut + température ── */}
         <div style={{marginBottom:3,display:'flex',alignItems:'center',gap:4}}>
