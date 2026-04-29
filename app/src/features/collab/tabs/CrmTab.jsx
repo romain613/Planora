@@ -18,6 +18,7 @@ import { api } from "../../../shared/services/api";
 import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";
 import FicheReportingBlock from "./crm/fiche/FicheReportingBlock";
+import InteractionTemplatesPanel from "../../interactions/InteractionTemplatesPanel.jsx";
 
 const CrmTab = () => {
   const ctx = useCollabContext();
@@ -1086,7 +1087,7 @@ const CrmTab = () => {
 
         {/* Sub-tabs: 5 onglets unifiés */}
         <div style={{display:"flex",gap:4,marginBottom:16,overflowX:"auto"}}>
-          {[{id:"notes",label:"Info & Notes"},{id:"client_msg",label:"💬 Messages"},{id:"sms",label:"SMS"},{id:"history",label:`RDV (${contactBookings.length})`},{id:"appels",label:`Appels (${contactCalls.length})`},{id:"docs",label:"📎 Docs"},{id:"suivi",label:"📋 Suivi"},...(ct._linked&&ct.assignedTo===collab.id?[{id:"partage",label:"Partage"}]:[])].map(t=>(
+          {[{id:"notes",label:"Info & Notes"},{id:"client_msg",label:"💬 Messages"},{id:"sms",label:"SMS"},{id:"history",label:`RDV (${contactBookings.length})`},{id:"appels",label:`Appels (${contactCalls.length})`},{id:"docs",label:"📎 Docs"},{id:"suivi",label:"📋 Suivi"},{id:"modeles",label:"📋 Modèles"},...(ct._linked&&ct.assignedTo===collab.id?[{id:"partage",label:"Partage"}]:[])].map(t=>(
             <div key={t.id} onClick={()=>(typeof setCollabFicheTab==='function'?setCollabFicheTab:function(){})(t.id)} style={{padding:"7px 16px",borderRadius:8,cursor:"pointer",fontSize:13,fontWeight:600,background:collabFicheTab===t.id?T.accentBg:"transparent",color:collabFicheTab===t.id?T.accent:T.text2,whiteSpace:"nowrap"}}>{t.label}</div>
           ))}
         </div>
@@ -1649,6 +1650,18 @@ const CrmTab = () => {
 
         {/* P0.3 — Onglet Suivi — V7 Transfer Tracking */}
         {collabFicheTab==="suivi" && <FicheSuiviScreen ct={ct} setV7TransferModal={setV7TransferModal} setV7TransferTarget={setV7TransferTarget} />}
+
+        {/* V1.11 Phase 5 — Onglet Modèles d'interaction (scripts/questionnaires/checklists) */}
+        {collabFicheTab==="modeles" && (
+          <InteractionTemplatesPanel
+            T={T} I={I} Btn={Btn} Modal={Modal}
+            contact={ct}
+            callLogId={''}
+            role={collab?.role || ''}
+            collaboratorId={collab?.id || ''}
+            pushNotification={(title, detail, type)=>showNotif && showNotif(detail || title, type==='error'?'danger':type)}
+          />
+        )}
 
         {collabFicheTab==="docs"&&ct._linked && <FicheDocsLinkedScreen ct={ct} showNotif={showNotif} />}
 
