@@ -13,6 +13,7 @@ import { fmtDate, DAYS_FR, DAYS_SHORT, MONTHS_FR, getDow, formatDateTime, format
 import { PIPELINE_CARD_COLORS_DEFAULT, RDV_CATEGORIES, PIPELINE_LABELS, STATUS_COLORS } from "../../../shared/utils/pipeline";
 import { sendNotification, buildNotifyPayload } from "../../../shared/utils/notifications";
 import { api, recUrl, API_BASE, collectEnv } from "../../../shared/services/api";
+import InteractionTemplatesPanel from "../../interactions/InteractionTemplatesPanel.jsx";
 import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";
 import { FicheDocsPanelScreen } from "../screens"; // hotfix 2026-04-23 — Phase 14b missed import propagation
@@ -1610,58 +1611,16 @@ if (n === ph) matched.set(c.id, c);
       {/* Tab content */}
       <div style={{flex:1,overflow:'auto',padding:'8px 10px'}}>
 
-{/* ══ SCRIPT tab — Script d'appel intégré à la fiche ══ */}
+{/* ══ SCRIPT tab — V1.11 Modèles d'interaction (templates + responses) ══ */}
 {phoneRightTab==='script' && (
-<div>
-  {/* Sélecteur de script */}
-  <div style={{marginBottom:12}}>
-    <div style={{fontSize:11,fontWeight:600,color:T.text3,marginBottom:6}}>📜 Script d'appel</div>
-    <select value={phoneActiveScriptId} onChange={e=>(typeof setPhoneActiveScriptId==='function'?setPhoneActiveScriptId:function(){})(e.target.value)}
-      style={{width:'100%',padding:'8px 10px',borderRadius:8,border:`1px solid ${T.border}`,background:T.bg,color:T.text,fontSize:12,outline:'none'}}>
-      <option value="">— Choisir un script —</option>
-      {(typeof phoneCallScripts!=='undefined'?phoneCallScripts:{}).map(sc=><option key={sc.id} value={sc.id}>{sc.name||sc.title||'Script'}</option>)}
-    </select>
-    {/* Auto-suggestion basée sur pipeline_stage */}
-    {!(typeof phoneActiveScriptId!=='undefined'?phoneActiveScriptId:null) && ct.pipeline_stage && (()=>{
-      const suggestions = {nouveau:'prospection',contacte:'suivi',qualifie:'rdv',nrp:'prospection',rdv_programme:'rdv'};
-      const suggested = suggestions[ct.pipeline_stage];
-      const match = (typeof phoneCallScripts!=='undefined'?phoneCallScripts:{}).find(s=>s.id===suggested||s.category===suggested);
-      return match ? <div style={{fontSize:10,color:T.accent,marginTop:4,cursor:'pointer'}} onClick={()=>setPhoneActiveScriptId(match.id)}>
-        💡 Suggestion : {match.name||match.title} <span style={{textDecoration:'underline'}}>Utiliser</span>
-      </div> : null;
-    })()}
-  </div>
-
-  {/* Affichage du script sélectionné */}
-  {(()=>{
-    const activeScript = (typeof phoneCallScripts!=='undefined'?phoneCallScripts:{}).find(s=>s.id===(typeof phoneActiveScriptId!=='undefined'?phoneActiveScriptId:null));
-    if(!activeScript) return <div style={{textAlign:'center',padding:'40px 10px',color:T.text3}}>
-      <I n="file-text" s={32} style={{color:T.text3,opacity:0.3,marginBottom:8}}/>
-      <div style={{fontSize:12}}>Sélectionnez un script pour commencer</div>
-    </div>;
-    return <div>
-      <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:10}}>{activeScript.name||activeScript.title}</div>
-      {activeScript.steps.map((step,i)=>(
-        <div key={i} onClick={e=>{
-          document.querySelectorAll('.script-step-hl').forEach(el=>{el.style.background='transparent';el.style.borderColor=T.border+'22';});
-          e.currentTarget.style.background=T.accentBg||'#7C3AED10';
-          e.currentTarget.style.borderColor=T.accent||'#7C3AED';
-          e.currentTarget.classList.add('script-step-hl');
-        }} style={{display:'flex',gap:8,padding:'8px 10px',borderRadius:8,cursor:'pointer',marginBottom:4,transition:'all .15s',border:`1px solid ${T.border}22`}}>
-          <div style={{width:20,height:20,borderRadius:10,background:T.accent+'18',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:10,fontWeight:700,color:T.accent}}>{i+1}</div>
-          <div style={{fontSize:12,lineHeight:1.5,color:T.text}}>{step}</div>
-        </div>
-      ))}
-    </div>;
-  })()}
-
-  {/* Notes pendant l'appel */}
-  <div style={{marginTop:16,borderTop:`1px solid ${T.border}`,paddingTop:12}}>
-    <div style={{fontSize:11,fontWeight:600,color:T.text3,marginBottom:6}}>📝 Notes pendant l'appel</div>
-    <textarea placeholder="Prendre des notes ici..." rows={3}
-      style={{width:'100%',fontSize:12,color:T.text,background:T.bg2||'#F8F7F5',border:`1px solid ${T.border}`,borderRadius:8,padding:'8px 10px',resize:'vertical',fontFamily:'inherit',outline:'none',boxSizing:'border-box'}}/>
-  </div>
-</div>
+<InteractionTemplatesPanel
+  T={T} I={I} Btn={Btn} Modal={Modal}
+  contact={ct}
+  callLogId={phoneActiveCall?.id || ''}
+  role={collab?.role || ''}
+  collaboratorId={collab?.id || ''}
+  pushNotification={(title, detail, type)=>showNotif && showNotif(detail || title, type==='error'?'danger':type)}
+/>
 )}
 
 {/* ══ INFO tab — Contact details, notes, tags, change stage ══ */}
