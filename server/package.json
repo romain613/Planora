@@ -1,0 +1,28 @@
+{
+  "name": "calendar360-server",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Calendar360 notification backend — Brevo email + SMS",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js",
+    "dev": "node --watch index.js",
+    "seed": "node seed.js"
+  },
+  "dependencies": {
+    "@deepgram/sdk": "^3.9.0",
+    "bcryptjs": "^2.4.3",
+    "better-sqlite3": "^12.6.2",
+    "compression": "^1.8.1",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2",
+    "express-rate-limit": "^7.5.0",
+    "googleapis": "^144.0.0",
+    "luxon": "^3.7.2",
+    "node-cron": "^3.0.3",
+    "pdfkit": "^0.16.0",
+    "twilio": "^5.12.2",
+    "ws": "^8.19.0"
+  }
+}
