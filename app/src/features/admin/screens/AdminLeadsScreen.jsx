@@ -62,6 +62,14 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
           const [editEnvId, setEditEnvId] = useState(null);
           const [expandedCampaign, setExpandedCampaign] = useState(null);
           const [leadsView, setLeadsView] = useState('inbox');
+          // V1.10.5 P3 — mapping intelligent : champs custom dynamiques + modal CreateField
+          const [contactFieldDefs, setContactFieldDefs] = useState([]);
+          const [showCreateFieldModal, setShowCreateFieldModal] = useState(null);
+          const [newFieldForm, setNewFieldForm] = useState({ label:'', fieldType:'text', scope:'company', label_url:'' });
+          // V1.10.6 — suppression enveloppe avec gestion leads assignés
+          const [deleteEnvDialog, setDeleteEnvDialog] = useState(null); // { env, preview }
+          const [deleteEnvLoading, setDeleteEnvLoading] = useState(false);
+          // suggestedMappingDetailed conservé sur showMapping (cf. handler gsheet-preview)
 
           // csvFile repurposed as search term (string), csvHeaders repurposed as import logs, gsheetPreview repurposed as import report
           const searchTerm = csvFile || '';
@@ -116,6 +124,17 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
           };
           useEffect(()=>{ if(selectedRuleEnv) loadRules(selectedRuleEnv); }, [selectedRuleEnv]);
 
+          // V1.10.5 P3 — Charge les définitions de champs custom de la company au mount
+          useEffect(()=>{
+            if (!company?.id) return;
+            api('/api/contact-fields?companyId=' + company.id).then(r => {
+              if (Array.isArray(r)) setContactFieldDefs(r);
+            }).catch(()=>{});
+          }, [company?.id]);
+
+          // Helper pour normaliser un label en fieldKey (mirror backend normalizeFieldKey)
+          const _normalizeFieldKey = (label) => String(label || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '_').replace(/_+/g, '_').replace(/^_|_$/g, '');
+
           const handleAddSource = () => {
             api('/api/leads/sources', { method:'POST', body:{ companyId:company.id, ...newSource } }).then(()=>{ setShowAddSource(false); setNewSource({name:'',type:'csv',config:{},sync_mode:'manual',gsheet_url:'',sync_envelope_id:''}); loadData(); });
           };
@@ -132,6 +151,47 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
             });
           };
           const handleDeleteEnvelope = (id) => { api(`/api/leads/envelopes/${id}`, { method:'DELETE' }).then(loadData); };
+
+          // V1.10.6 — Suppression enveloppe + leads (hard delete avec gestion assignés)
+          const requestDeleteEnvelope = async (env) => {
+            try {
+              const preview = await api(`/api/leads/envelopes/${env.id}/delete-preview`);
+              if (preview?.error) { pushNotification('Erreur', preview.error || 'Impossible de prévisualiser', 'error'); return; }
+              if ((preview.total || 0) === 0) {
+                if (!confirm(`Supprimer le flux "${env.name}" ?\n\nAucun lead à supprimer.`)) return;
+                await runDeleteEnvelopeCascade(env, false);
+              } else if ((preview.assigned || 0) === 0) {
+                if (!confirm(`Supprimer le flux "${env.name}" ?\n\n${preview.unassigned} leads non assignés seront supprimés définitivement (hard delete).\nLes contacts CRM ne seront pas touchés.`)) return;
+                await runDeleteEnvelopeCascade(env, false);
+              } else {
+                setDeleteEnvDialog({ env, preview });
+              }
+            } catch (e) { pushNotification('Erreur', 'Impossible de prévisualiser la suppression', 'error'); }
+          };
+
+          const runDeleteEnvelopeCascade = async (env, force) => {
+            setDeleteEnvLoading(true);
+            try {
+              const url = `/api/leads/envelopes/${env.id}?cascade=true${force ? '&force=true' : ''}`;
+              const res = await api(url, { method:'DELETE' });
+              if (res?.error) {
+                pushNotification('Erreur', res.error === 'leads_assigned' ? `${res.assigned} leads assignés — désassignation requise` : res.error, 'error');
+                setDeleteEnvLoading(false);
+                return false;
+              }
+              setEnvelopes(p => p.filter(e => e.id !== env.id));
+              setDeleteEnvDialog(null);
+              setDeleteEnvLoading(false);
+              const summary = `${res.deletedLeads || 0} leads supprimés${res.unassignedBeforeDelete ? ` (dont ${res.unassignedBeforeDelete} désassignés)` : ''}`;
+              pushNotification('Flux supprimé', `"${env.name}" — ${summary}`, 'success');
+              loadData();
+              return true;
+            } catch (e) {
+              setDeleteEnvLoading(false);
+              pushNotification('Erreur', 'Impossible de supprimer', 'error');
+              return false;
+            }
+          };
 
           const handleDispatch = (envId) => {
             setDispatchLoading(true);
@@ -180,8 +240,16 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
                 if(r?.headers) {
                   setShowImport(null);
                   const initMapping = {};
-                  if(r.suggestedMapping) { Object.entries(r.suggestedMapping).forEach(([idx,field])=>{ initMapping[idx]=field; }); setMappingForm(initMapping); }
-                  setShowMapping({headers:r.headers, type:'gsheet', sampleRows:r.sampleRows});
+                  // V1.10.5 P3 — priorité au mapping détaillé (custom:<key> auto-suggéré)
+                  if (r.suggestedMappingDetailed) {
+                    Object.entries(r.suggestedMappingDetailed).forEach(([idx, info]) => {
+                      if (info && info.field) initMapping[idx] = info.field;
+                    });
+                    setMappingForm(initMapping);
+                  } else if (r.suggestedMapping) {
+                    Object.entries(r.suggestedMapping).forEach(([idx,field])=>{ initMapping[idx]=field; }); setMappingForm(initMapping);
+                  }
+                  setShowMapping({headers:r.headers, type:'gsheet', sampleRows:r.sampleRows, suggestedMappingDetailed:r.suggestedMappingDetailed||null});
                 }
                 else { pushNotification('Erreur', "Impossible de lire le Google Sheet. Verifiez qu'il est public.", 'error'); }
               })
@@ -287,7 +355,11 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
             });
           };
 
-          const MAPPING_FIELDS = [{v:'first_name',l:'Prenom'},{v:'last_name',l:'Nom'},{v:'email',l:'Email'},{v:'phone',l:'Telephone'},{v:'company',l:'Entreprise'},{v:'date',l:'Date'},{v:'address',l:'Adresse'},{v:'city',l:'Ville'},{v:'situation',l:'Situation'},{v:'accompagnement',l:'Accompagnement'},{v:'qualification',l:'Qualification'},{v:'source',l:'Source / Origine'},{v:'message',l:'Message'},{v:'tags',l:'Tags'},{v:'notes',l:'Notes'},{v:'custom1',l:'Champ perso 1'},{v:'custom2',l:'Champ perso 2'},{v:'skip',l:'Ignorer'}];
+          // V1.10.5 P3 — MAPPING_FIELDS de base (standards uniquement). Le rendu modal
+          // construit dynamiquement la liste complète avec contactFieldDefs + customs détectés.
+          const MAPPING_FIELDS_STANDARDS = [{v:'first_name',l:'Prénom'},{v:'last_name',l:'Nom'},{v:'email',l:'Email'},{v:'phone',l:'Téléphone'},{v:'company',l:'Entreprise'},{v:'date',l:'Date'},{v:'address',l:'Adresse'},{v:'city',l:'Ville'},{v:'situation',l:'Situation'},{v:'accompagnement',l:'Accompagnement'},{v:'qualification',l:'Qualification'},{v:'source',l:'Source / Origine'},{v:'message',l:'Message'},{v:'tags',l:'Tags'},{v:'notes',l:'Notes'}];
+          // Compatibilité legacy avec ancien dropdown (usages hors modal mapping)
+          const MAPPING_FIELDS = [...MAPPING_FIELDS_STANDARDS,{v:'custom1',l:'Champ perso 1 (legacy)'},{v:'custom2',l:'Champ perso 2 (legacy)'},{v:'skip',l:'Ignorer'}];
           const STATUS_COLORS = {new:'#3B82F6',queued:'#F59E0B',assigned:'#22C55E',converted:'#7C3AED',archived:'#64748B',unassigned:'#EF4444',duplicate:'#EF4444',error:'#EF4444'};
           const STATUS_LABELS = {new:'Nouveau',queued:'En queue',assigned:'Assigne',converted:'Converti',archived:'Archive',unassigned:'Desassigne',duplicate:'Doublon',error:'Erreur'};
           const HISTORY_LABELS = {import:'Import',dispatched:'Distribution',dispatch_batch:'Distribution lot',source_created:'Source creee',envelope_created:'Campagne creee',lead_deleted:'Lead supprime'};
@@ -624,15 +696,7 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
                     });
                     setShowAddEnvelope(true);
                   }} style={{fontSize:12}}><I n="settings" s={13}/></Btn>
-                  <Btn onClick={async()=>{
-                    if(!confirm(`Supprimer le flux "${env.name}" et toutes ses règles de dispatch ?\n\nLes leads existants ne seront pas supprimés.`)) return;
-                    try {
-                      const res = await api(`/api/leads/envelopes/${env.id}`,{method:'DELETE'});
-                      if(res?.error){ pushNotification('Erreur',res.error,'error'); return; }
-                      setEnvelopes(p=>p.filter(e=>e.id!==env.id));
-                      pushNotification('Flux supprimé',`"${env.name}" a été supprimé`,'success');
-                    } catch(e){ pushNotification('Erreur','Impossible de supprimer','error'); }
-                  }} style={{fontSize:12,color:'#EF4444',borderColor:'#EF444430'}} title="Supprimer ce flux"><I n="trash-2" s={13}/></Btn>
+                  <Btn onClick={()=>requestDeleteEnvelope(env)} style={{fontSize:12,color:'#EF4444',borderColor:'#EF444430'}} title="Supprimer ce flux et ses leads"><I n="trash-2" s={13}/></Btn>
                 </div>
               </div>;
             })}
@@ -1135,8 +1199,16 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
                       if(r?.headers) {
                         setShowImport(null);
                         const initMapping = {};
-                        if(r.suggestedMapping) { Object.entries(r.suggestedMapping).forEach(([idx,field])=>{ initMapping[idx]=field; }); setMappingForm(initMapping); }
-                        setShowMapping({headers:r.headers, type:'gsheet', sampleRows:r.sampleRows});
+                        // V1.10.5 P3 — priorité au mapping détaillé (custom:<key> auto-suggéré)
+                        if (r.suggestedMappingDetailed) {
+                          Object.entries(r.suggestedMappingDetailed).forEach(([idx, info]) => {
+                            if (info && info.field) initMapping[idx] = info.field;
+                          });
+                          setMappingForm(initMapping);
+                        } else if (r.suggestedMapping) {
+                          Object.entries(r.suggestedMapping).forEach(([idx,field])=>{ initMapping[idx]=field; }); setMappingForm(initMapping);
+                        }
+                        setShowMapping({headers:r.headers, type:'gsheet', sampleRows:r.sampleRows, suggestedMappingDetailed:r.suggestedMappingDetailed||null});
                       } else {
                         setGsheetPreview({error:"Impossible de lire le Google Sheet. Verifiez qu'il est public."});
                       }
@@ -1165,20 +1237,69 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
                     {sources.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
                   </select>
                 </div>
-                {(typeof showMapping!=='undefined'?showMapping:{}).headers.map((h,i)=><div key={i} style={{display:'flex',alignItems:'center',gap:10}}>
-                  <span style={{width:130,fontSize:12,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{h}</span>
-                  <select value={mappingForm[i]||''} onChange={e=>(typeof setMappingForm==='function'?setMappingForm:function(){})({...mappingForm,[i]:e.target.value})} style={{flex:1,padding:6,borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,background:T.card,color:T.text}}>
-                    <option value="">Ignorer</option>
-                    {MAPPING_FIELDS.filter(f=>f.v!=='skip').map(f=><option key={f.v} value={f.v}>{f.l}</option>)}
-                  </select>
-                </div>)}
-                <div style={{display:'flex',gap:8,alignItems:'center',marginTop:4}}>
-                  <span style={{fontSize:12,fontWeight:600}}>Doublons :</span>
-                  <select value={(typeof mappingForm!=='undefined'?mappingForm:{})._duplicateMode||'skip'} onChange={e=>(typeof setMappingForm==='function'?setMappingForm:function(){})({...mappingForm,_duplicateMode:e.target.value})} style={{padding:6,borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,background:T.card,color:T.text}}>
-                    <option value="skip">Ignorer</option>
-                    <option value="update">Mettre a jour</option>
-                    <option value="duplicate">Creer un doublon</option>
-                  </select>
+                {/* V1.10.5 P3 — modal mapping intelligent : badge type + bouton Créer */}
+                {(typeof showMapping!=='undefined'?showMapping:{}).headers.map((h,i)=>{
+                  const _detail = ((typeof showMapping!=='undefined'?showMapping:{}).suggestedMappingDetailed||{})[i] || {};
+                  const _type = _detail.type || 'text';
+                  const _typeColors = { url:'#3B82F6', email:'#22C55E', date:'#F59E0B', number:'#8B5CF6', boolean:'#EC4899', phone:'#0EA5E9', text:'#64748B', empty:'#9CA3AF' };
+                  const _typeLabels = { url:'URL', email:'Email', date:'Date', number:'Nombre', boolean:'Oui/Non', phone:'Tél', text:'Texte', empty:'(vide)' };
+                  const _samples = ((typeof showMapping!=='undefined'?showMapping:{}).sampleRows||[]).map(r=>Array.isArray(r)?r[i]:'').filter(s=>s&&String(s).trim()!=='');
+                  const _sampleVal = _samples.length > 0 ? String(_samples[0]).slice(0, 60) + (String(_samples[0]).length > 60 ? '…' : '') : '—';
+                  const _curVal = mappingForm[i] || '';
+                  const _isCustomMapped = typeof _curVal === 'string' && _curVal.startsWith('custom:');
+                  return <div key={i} style={{display:'flex',flexDirection:'column',gap:4,padding:'8px 10px',borderRadius:8,background:T.bg,border:`1px solid ${T.border}`}}>
+                    <div style={{display:'flex',alignItems:'center',gap:8}}>
+                      <span style={{flex:1,fontSize:12,fontWeight:700,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{h || '(colonne sans header)'}</span>
+                      <span style={{fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:4,background:_typeColors[_type]+'20',color:_typeColors[_type]}}>{_typeLabels[_type]}</span>
+                    </div>
+                    <div style={{fontSize:10,color:T.text3,fontStyle:'italic',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>Ex : {_sampleVal}</div>
+                    <div style={{display:'flex',gap:6,alignItems:'center'}}>
+                      <select value={_curVal} onChange={e=>{
+                        const v = e.target.value;
+                        if (v === '__create__') {
+                          setShowCreateFieldModal({ idx: i, headerLabel: h || '', detectedType: _type });
+                          setNewFieldForm({ label: h || '', fieldType: _type === 'empty' ? 'text' : _type, scope: 'company', label_url: _type === 'url' ? ('Voir ' + (h || 'le lien')) : '' });
+                        } else {
+                          (typeof setMappingForm==='function'?setMappingForm:function(){})({...mappingForm,[i]:v});
+                        }
+                      }} style={{flex:1,padding:6,borderRadius:6,border:`1px solid ${_isCustomMapped?'#3B82F6':T.border}`,fontSize:12,background:T.card,color:T.text}}>
+                        <option value="">— Ignorer —</option>
+                        <optgroup label="Champs standards">
+                          {MAPPING_FIELDS_STANDARDS.map(f=><option key={f.v} value={f.v}>{f.l}</option>)}
+                        </optgroup>
+                        <optgroup label="Champs personnalisés existants">
+                          {(contactFieldDefs||[]).map(d=>(<option key={'cf_'+d.id} value={'custom:'+d.fieldKey}>{d.label || d.fieldKey} (custom)</option>))}
+                        </optgroup>
+                        {/* Custom détecté mais non encore créé */}
+                        {_detail.field && typeof _detail.field === 'string' && _detail.field.startsWith('custom:') && !(contactFieldDefs||[]).some(d=>'custom:'+d.fieldKey === _detail.field) && (
+                          <optgroup label="Détecté (sera créé)">
+                            <option value={_detail.field}>{_detail.field.slice(7)} (à créer auto)</option>
+                          </optgroup>
+                        )}
+                        <optgroup label="Actions">
+                          <option value="__create__">+ Créer un nouveau champ…</option>
+                        </optgroup>
+                      </select>
+                    </div>
+                  </div>;
+                })}
+                <div style={{display:'flex',flexDirection:'column',gap:4,marginTop:4}}>
+                  <div style={{display:'flex',gap:8,alignItems:'center'}}>
+                    <span style={{fontSize:12,fontWeight:600}}>Doublons :</span>
+                    {/* V1.10.5 P1 — names alignés backend (skip|merge|replace|allow). Default = merge (enrichissement) */}
+                    <select value={(typeof mappingForm!=='undefined'?mappingForm:{})._duplicateMode||'merge'} onChange={e=>(typeof setMappingForm==='function'?setMappingForm:function(){})({...mappingForm,_duplicateMode:e.target.value})} style={{padding:6,borderRadius:6,border:`1px solid ${T.border}`,fontSize:12,background:T.card,color:T.text}}>
+                      <option value="merge">Enrichir (recommandé) — mode merge</option>
+                      <option value="skip">Ignorer (skip)</option>
+                      <option value="replace">Remplacer complètement</option>
+                      <option value="allow">Importer même si doublon</option>
+                    </select>
+                  </div>
+                  <div style={{fontSize:10,color:T.text3,fontStyle:'italic',paddingLeft:8}}>
+                    {((typeof mappingForm!=='undefined'?mappingForm:{})._duplicateMode||'merge')==='merge' && 'Enrichit data_json + custom_fields_json sans modifier l\'assignation, le pipeline ni l\'enveloppe d\'origine'}
+                    {((typeof mappingForm!=='undefined'?mappingForm:{})._duplicateMode||'merge')==='skip' && 'Ignore tous les doublons (mode safe legacy)'}
+                    {((typeof mappingForm!=='undefined'?mappingForm:{})._duplicateMode||'merge')==='replace' && '⚠ Remplace les valeurs existantes (champs standards uniquement)'}
+                    {((typeof mappingForm!=='undefined'?mappingForm:{})._duplicateMode||'merge')==='allow' && '⚠ Crée un nouveau lead même en cas de doublon — déconseillé'}
+                  </div>
                 </div>
                 {(typeof showMapping!=='undefined'?showMapping:{}).sampleRows && <div style={{fontSize:11,color:T.text2,padding:8,background:T.bg,borderRadius:6,maxHeight:120,overflow:'auto'}}>
                   <strong>Apercu :</strong> {(typeof showMapping!=='undefined'?showMapping:{}).sampleRows.length} premieres lignes<br/>
@@ -1187,6 +1308,73 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
                 <Btn primary onClick={handleImport} disabled={dispatchLoading}>
                   {(typeof dispatchLoading!=='undefined'?dispatchLoading:null)?<><I n="loader" s={13} style={{animation:'spin 1s linear infinite'}}/> Import en cours...</>:<><I n="upload" s={13}/> Importer</>}
                 </Btn>
+              </div>
+            </Modal>}
+
+            {/* V1.10.5 P3 — MODAL CRÉER CHAMP PERSONNALISÉ */}
+            {showCreateFieldModal && <Modal open={true} title="Créer un champ personnalisé" onClose={()=>setShowCreateFieldModal(null)}>
+              <div style={{display:'flex',flexDirection:'column',gap:12}}>
+                <div style={{fontSize:12,color:T.text2}}>
+                  Colonne détectée : <b>{showCreateFieldModal.headerLabel}</b>
+                  {showCreateFieldModal.detectedType && showCreateFieldModal.detectedType !== 'empty' && <span style={{marginLeft:6,fontSize:10,padding:'2px 6px',borderRadius:4,background:T.bg,color:T.text3}}>type détecté : {showCreateFieldModal.detectedType}</span>}
+                </div>
+                <div>
+                  <label style={{fontSize:11,fontWeight:600,color:T.text2,display:'block',marginBottom:4}}>Nom du champ</label>
+                  <input value={newFieldForm.label} onChange={e=>setNewFieldForm({...newFieldForm,label:e.target.value})} placeholder="Ex: Permis B" style={{width:'100%',padding:8,borderRadius:6,border:`1px solid ${T.border}`,fontSize:13,background:T.card,color:T.text}}/>
+                  <div style={{fontSize:10,color:T.text3,marginTop:2}}>Clé technique : <code>{_normalizeFieldKey(newFieldForm.label) || '(à remplir)'}</code></div>
+                </div>
+                <div>
+                  <label style={{fontSize:11,fontWeight:600,color:T.text2,display:'block',marginBottom:4}}>Type</label>
+                  <select value={newFieldForm.fieldType} onChange={e=>setNewFieldForm({...newFieldForm,fieldType:e.target.value})} style={{width:'100%',padding:8,borderRadius:6,border:`1px solid ${T.border}`,fontSize:13,background:T.card,color:T.text}}>
+                    <option value="text">Texte court</option>
+                    <option value="textarea">Texte long</option>
+                    <option value="date">Date</option>
+                    <option value="number">Nombre</option>
+                    <option value="url">URL (lien externe)</option>
+                    <option value="email">Email</option>
+                    <option value="phone">Téléphone</option>
+                    <option value="boolean">Oui / Non</option>
+                    <option value="select">Choix unique</option>
+                  </select>
+                </div>
+                {newFieldForm.fieldType === 'url' && <div>
+                  <label style={{fontSize:11,fontWeight:600,color:T.text2,display:'block',marginBottom:4}}>Label public du lien</label>
+                  <input value={newFieldForm.label_url} onChange={e=>setNewFieldForm({...newFieldForm,label_url:e.target.value})} placeholder="Ex: Voir CV" style={{width:'100%',padding:8,borderRadius:6,border:`1px solid ${T.border}`,fontSize:13,background:T.card,color:T.text}}/>
+                </div>}
+                <div>
+                  <label style={{fontSize:11,fontWeight:600,color:T.text2,display:'block',marginBottom:4}}>Visibilité</label>
+                  <div style={{display:'flex',gap:12,fontSize:13}}>
+                    <label style={{display:'flex',alignItems:'center',gap:4,cursor:'pointer'}}><input type="radio" checked={newFieldForm.scope==='company'} onChange={()=>setNewFieldForm({...newFieldForm,scope:'company'})}/> Toute la company</label>
+                    <label style={{display:'flex',alignItems:'center',gap:4,cursor:'pointer'}}><input type="radio" checked={newFieldForm.scope==='collab'} onChange={()=>setNewFieldForm({...newFieldForm,scope:'collab'})}/> Personnel</label>
+                  </div>
+                </div>
+                <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:6}}>
+                  <Btn onClick={()=>setShowCreateFieldModal(null)}>Annuler</Btn>
+                  <Btn primary disabled={!newFieldForm.label || !_normalizeFieldKey(newFieldForm.label)} onClick={()=>{
+                    const fieldKey = _normalizeFieldKey(newFieldForm.label);
+                    if (!fieldKey) { pushNotification && pushNotification('Erreur', 'Nom invalide', 'danger'); return; }
+                    api('/api/contact-fields', { method:'POST', body:{ companyId: company.id, label: newFieldForm.label, fieldKey, fieldType: newFieldForm.fieldType, scope: newFieldForm.scope } })
+                      .then(r => {
+                        if (r?.success || r?.id) {
+                          // Ajoute la def à la liste locale (ou refetch)
+                          const newDef = { id: r.id, companyId: company.id, label: newFieldForm.label, fieldKey: r.fieldKey || fieldKey, fieldType: newFieldForm.fieldType, scope: newFieldForm.scope, options: [], createdBy: collab?.id || '' };
+                          setContactFieldDefs(prev => {
+                            const exists = (prev||[]).some(d => d.fieldKey === newDef.fieldKey);
+                            return exists ? prev : [...(prev||[]), newDef];
+                          });
+                          // Auto-applique le mapping vers cette nouvelle def
+                          if (typeof showCreateFieldModal.idx === 'number') {
+                            setMappingForm({...mappingForm, [showCreateFieldModal.idx]: 'custom:' + newDef.fieldKey});
+                          }
+                          setShowCreateFieldModal(null);
+                          pushNotification && pushNotification('Champ créé', `"${newFieldForm.label}" disponible`, 'success');
+                        } else {
+                          pushNotification && pushNotification('Erreur', r?.error || 'Création échouée', 'danger');
+                        }
+                      })
+                      .catch(e => pushNotification && pushNotification('Erreur', e.message || 'Erreur réseau', 'danger'));
+                  }}>+ Créer le champ</Btn>
+                </div>
               </div>
             </Modal>}
 
@@ -1375,6 +1563,54 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
                 <Btn primary onClick={handleManualDispatch} disabled={(typeof dispatchLoading!=='undefined'?dispatchLoading:null)||(typeof manualDispatchForm!=='undefined'?manualDispatchForm:{}).collaboratorIds.length===0}>
                   {(typeof dispatchLoading!=='undefined'?dispatchLoading:null)?<><I n="loader" s={13} style={{animation:'spin 1s linear infinite'}}/> Distribution en cours...</>:<><I n="send" s={13}/> Distribuer</>}
                 </Btn>
+              </div>
+            </Modal>}
+
+            {/* ═══ V1.10.6 — DELETE ENVELOPE WARNING (leads assignés) ═══ */}
+            {deleteEnvDialog && <Modal open={true} title="⚠️ Suppression bloquée — leads assignés" onClose={()=>!deleteEnvLoading && setDeleteEnvDialog(null)}>
+              <div style={{display:'flex',flexDirection:'column',gap:14,fontSize:13}}>
+                <div>
+                  L'enveloppe <b>"{deleteEnvDialog.env.name}"</b> contient :
+                </div>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                  <div style={{flex:1,minWidth:140,padding:'10px 12px',borderRadius:8,background:'#10B98112',border:'1px solid #10B98140'}}>
+                    <div style={{fontSize:24,fontWeight:700,color:'#10B981'}}>{deleteEnvDialog.preview.unassigned}</div>
+                    <div style={{fontSize:11,color:T.text2}}>leads non assignés</div>
+                    <div style={{fontSize:10,color:T.text3,marginTop:2}}>suppression directe</div>
+                  </div>
+                  <div style={{flex:1,minWidth:140,padding:'10px 12px',borderRadius:8,background:'#F59E0B12',border:'1px solid #F59E0B40'}}>
+                    <div style={{fontSize:24,fontWeight:700,color:'#F59E0B'}}>{deleteEnvDialog.preview.assigned}</div>
+                    <div style={{fontSize:11,color:T.text2}}>leads assignés à des contacts</div>
+                    <div style={{fontSize:10,color:T.text3,marginTop:2}}>désassignation requise</div>
+                  </div>
+                </div>
+                <div style={{padding:'10px 12px',borderRadius:8,background:'#FEF3C7',border:'1px solid #F59E0B40',fontSize:12,color:'#92400E'}}>
+                  ⚠ Pour supprimer cette enveloppe, les <b>{deleteEnvDialog.preview.assigned} leads assignés</b> seront automatiquement désassignés (le lien lead → contact sera retiré).
+                  <div style={{marginTop:8,paddingTop:8,borderTop:'1px solid #F59E0B30'}}>
+                    <b>Préservé strictement :</b><br/>
+                    ✓ contacts CRM (non supprimés)<br/>
+                    ✓ pipeline_stage / statut contact<br/>
+                    ✓ RDV, notes, historique<br/>
+                    ✓ aucune redistribution déclenchée
+                  </div>
+                </div>
+                {(deleteEnvDialog.preview.assignedSamples||[]).length>0 && <div style={{maxHeight:140,overflow:'auto',border:`1px solid ${T.border}`,borderRadius:8}}>
+                  <div style={{padding:'6px 10px',fontSize:11,fontWeight:600,color:T.text2,background:T.bg,borderBottom:`1px solid ${T.border}`}}>
+                    Aperçu (5 premiers) :
+                  </div>
+                  {(deleteEnvDialog.preview.assignedSamples||[]).map((s,i)=>(
+                    <div key={i} style={{padding:'6px 10px',fontSize:11,borderBottom:i<deleteEnvDialog.preview.assignedSamples.length-1?`1px solid ${T.border}`:'none',display:'flex',justifyContent:'space-between',gap:8}}>
+                      <span>{s.leadName || s.contactName || s.leadId}</span>
+                      <span style={{color:T.text3}}>{s.collabName || '—'}</span>
+                    </div>
+                  ))}
+                </div>}
+                <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:4}}>
+                  <Btn onClick={()=>!deleteEnvLoading && setDeleteEnvDialog(null)} disabled={deleteEnvLoading}>Annuler</Btn>
+                  <Btn primary onClick={()=>runDeleteEnvelopeCascade(deleteEnvDialog.env, true)} disabled={deleteEnvLoading} style={{background:'#EF4444',borderColor:'#EF4444'}}>
+                    {deleteEnvLoading ? <><I n="loader" s={13} style={{animation:'spin 1s linear infinite'}}/> Suppression…</> : <><I n="trash-2" s={13}/> Désassigner les {deleteEnvDialog.preview.assigned} leads + Supprimer</>}
+                  </Btn>
+                </div>
               </div>
             </Modal>}
           </div>;
