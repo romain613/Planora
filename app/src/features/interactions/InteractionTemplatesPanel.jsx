@@ -548,6 +548,22 @@ export default function InteractionTemplatesPanel({ T, I, Btn, Modal, contact, c
           <option value="questionnaire">Formulaires</option>
           <option value="checklist">Checklists</option>
         </select>
+        {isAdmin && <Btn onClick={async()=>{
+          try {
+            let token = '';
+            try { token = JSON.parse(localStorage.getItem('calendar360-session') || 'null')?.token || ''; } catch {}
+            const url = (window.location?.origin || '') + '/api/interaction-responses/export';
+            const resp = await fetch(url, { headers: token ? { 'Authorization': 'Bearer ' + token } : {} });
+            if (!resp.ok) { pushNotification('Erreur', `Export refusé (HTTP ${resp.status})`, 'error'); return; }
+            const blob = await resp.blob();
+            const dlUrl = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = dlUrl; a.download = `interaction-responses-${new Date().toISOString().slice(0,10)}.csv`;
+            document.body.appendChild(a); a.click(); document.body.removeChild(a);
+            URL.revokeObjectURL(dlUrl);
+            pushNotification('OK', 'Export CSV téléchargé', 'success');
+          } catch (e) { pushNotification('Erreur', 'Export impossible', 'error'); }
+        }} style={{fontSize:11,padding:'5px 10px'}} title="Exporter toutes les réponses en CSV (admin)"><I n="download" s={12}/> Export CSV</Btn>}
       </div>
 
       {loading && <div style={{textAlign:'center',padding:20,color:T.text3,fontSize:11}}>Chargement…</div>}
