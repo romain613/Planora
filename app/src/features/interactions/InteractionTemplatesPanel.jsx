@@ -204,6 +204,63 @@ function ChecklistEditor({ T, I, Btn, content, onChange }) {
   );
 }
 
+// ─── Helpers d'affichage (format lisible LABEL ✅ Oui) ─────────────────
+const YES_NO_DISPLAY = {
+  yes: { label: 'Oui', color: '#10B981', icon: '✅' },
+  no:  { label: 'Non', color: '#EF4444', icon: '❌' },
+  validated: { label: 'Validé', color: '#10B981', icon: '✅' },
+  refused:   { label: 'Refusé', color: '#EF4444', icon: '❌' },
+  neutral:   { label: 'Neutre', color: '#94A3B8', icon: '⚪' },
+};
+
+function formatAnswerValue(value) {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value === 'boolean') return value ? YES_NO_DISPLAY.yes : YES_NO_DISPLAY.no;
+  if (YES_NO_DISPLAY[value]) return YES_NO_DISPLAY[value];
+  if (Array.isArray(value)) return { label: value.join(', '), color: null, icon: null };
+  return { label: String(value), color: null, icon: null };
+}
+
+// ─── ResponseSummary — bloc 🧠 Résumé en haut du formulaire ──────────
+// Affiche LABEL    ✅ Oui  /  ❌ Non  /  ⚪ Neutre  ou valeur libre
+function ResponseSummary({ T, template, answers }) {
+  const rows = [];
+  const content = template.content || {};
+  if (template.type === 'questionnaire') {
+    for (const f of (content.fields || [])) {
+      const fmt = formatAnswerValue(answers[f.id]);
+      if (fmt) rows.push({ label: f.label, value: fmt });
+    }
+  } else if (template.type === 'checklist') {
+    for (const it of (content.items || [])) {
+      const fmt = formatAnswerValue(answers[it.id]);
+      if (fmt) rows.push({ label: it.label, value: fmt });
+    }
+  } else if (template.type === 'script') {
+    if (answers.notes) {
+      const truncated = String(answers.notes).slice(0, 100);
+      rows.push({ label: 'Notes', value: { label: truncated + (String(answers.notes).length > 100 ? '…' : ''), color: T.text, icon: null } });
+    }
+  }
+  if (rows.length === 0) return null;
+  return (
+    <div style={{padding:'14px 16px',borderRadius:10,background:T.bg,border:`1px solid ${T.border}`,marginBottom:10}}>
+      <div style={{fontSize:13,fontWeight:700,color:T.text2,marginBottom:10,display:'flex',alignItems:'center',gap:6}}>🧠 Résumé</div>
+      <div style={{display:'flex',flexDirection:'column',gap:8}}>
+        {rows.map((r, i) => (
+          <div key={i} style={{display:'flex',justifyContent:'space-between',gap:12,alignItems:'center'}}>
+            <div style={{color:T.text3,textTransform:'uppercase',fontSize:11,fontWeight:700,letterSpacing:0.4,flex:'0 0 auto'}}>{r.label}</div>
+            <div style={{color:r.value.color || T.text,fontWeight:600,fontSize:13,display:'flex',gap:6,alignItems:'center',whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:'60%'}}>
+              {r.value.icon && <span>{r.value.icon}</span>}
+              <span style={{overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{r.value.label}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ─── ResponseFiller — saisie réponse avec autosave 800ms ──────────────
 function ResponseFiller({ T, I, Btn, template, response, contactId, onSaved, onClose, onCompleted, pushNotification }) {
   const [answers, setAnswers] = useState(() => response?.answers || {});
@@ -256,21 +313,23 @@ function ResponseFiller({ T, I, Btn, template, response, contactId, onSaved, onC
   const content = template.content || {};
 
   return (
-    <div style={{display:'flex',flexDirection:'column',gap:10,fontSize:12}}>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'6px 8px',background:T.bg,borderRadius:6}}>
+    <div style={{display:'flex',flexDirection:'column',gap:14,fontSize:13}}>
+      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 14px',background:T.bg,borderRadius:10,border:`1px solid ${T.border}`}}>
         <div>
-          <div style={{fontSize:12,fontWeight:600,color:T.text}}>{template.title}</div>
-          <div style={{fontSize:10,color:T.text3}}>{TYPE_LABELS[template.type]} · {status === 'completed' ? '✓ terminé' : 'en cours'} {saving && '· saving…'} {savedAt && !saving && '· enregistré'}</div>
+          <div style={{fontSize:14,fontWeight:700,color:T.text}}>{template.title}</div>
+          <div style={{fontSize:11,color:T.text3,marginTop:2}}>{TYPE_LABELS[template.type]} · {status === 'completed' ? '✓ terminé' : 'en cours'} {saving && '· saving…'} {savedAt && !saving && '· enregistré'}</div>
         </div>
-        <Btn onClick={onClose} style={{fontSize:11}}><I n="x" s={11}/></Btn>
+        <Btn onClick={onClose} style={{fontSize:12}}><I n="x" s={13}/></Btn>
       </div>
+
+      <ResponseSummary T={T} template={template} answers={answers}/>
 
       {template.type === 'script' && <ScriptViewer T={T} I={I} content={content} answers={answers} setAnswer={setAnswer}/>}
       {template.type === 'questionnaire' && <QuestionnaireFiller T={T} I={I} content={content} answers={answers} setAnswer={setAnswer}/>}
       {template.type === 'checklist' && <ChecklistFiller T={T} I={I} content={content} answers={answers} setAnswer={setAnswer}/>}
 
-      <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:6}}>
-        {status !== 'completed' && <Btn primary onClick={complete}>Terminer</Btn>}
+      <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginTop:10}}>
+        {status !== 'completed' && <Btn primary onClick={complete} style={{fontSize:13,padding:'8px 18px'}}><I n="check" s={13}/> Terminer</Btn>}
       </div>
     </div>
   );
@@ -326,9 +385,9 @@ function QuestionnaireFiller({ T, I, content, answers, setAnswer }) {
             <label style={{fontSize:11,fontWeight:600,color:T.text2}}>{f.label}{f.required && <span style={{color:'#EF4444'}}> *</span>}</label>
             {f.type === 'text' && <input type="text" value={val||''} onChange={e=>setAnswer(f.id,e.target.value)} style={inputStyle(T)}/>}
             {f.type === 'textarea' && <textarea value={val||''} onChange={e=>setAnswer(f.id,e.target.value)} rows={3} style={{...inputStyle(T),resize:'vertical',fontFamily:'inherit'}}/>}
-            {f.type === 'yesno' && <div style={{display:'flex',gap:6}}>
-              <Pill T={T} active={val==='yes'} onClick={()=>setAnswer(f.id,'yes')}>Oui</Pill>
-              <Pill T={T} active={val==='no'} onClick={()=>setAnswer(f.id,'no')}>Non</Pill>
+            {f.type === 'yesno' && <div style={{display:'flex',gap:8}}>
+              <button onClick={()=>setAnswer(f.id,'yes')} style={{padding:'8px 16px',borderRadius:8,border:`1px solid ${val==='yes'?'#10B981':T.border}`,background:val==='yes'?'#10B98118':'transparent',color:val==='yes'?'#10B981':T.text2,fontSize:12,fontWeight:700,cursor:'pointer'}}>✅ Oui</button>
+              <button onClick={()=>setAnswer(f.id,'no')} style={{padding:'8px 16px',borderRadius:8,border:`1px solid ${val==='no'?'#EF4444':T.border}`,background:val==='no'?'#EF444418':'transparent',color:val==='no'?'#EF4444':T.text2,fontSize:12,fontWeight:700,cursor:'pointer'}}>❌ Non</button>
             </div>}
             {f.type === 'single' && <div style={{display:'flex',flexDirection:'column',gap:4}}>
               {(f.options||[]).map(opt=>(
@@ -360,17 +419,17 @@ function QuestionnaireFiller({ T, I, content, answers, setAnswer }) {
 
 function ChecklistFiller({ T, I, content, answers, setAnswer }) {
   return (
-    <div style={{display:'flex',flexDirection:'column',gap:6}}>
+    <div style={{display:'flex',flexDirection:'column',gap:8}}>
       {(content.items||[]).map((it,i)=>{
         const cur = answers[it.id] || 'neutral';
         return (
-          <div key={it.id||i} style={{display:'flex',gap:6,alignItems:'center',padding:'6px 8px',borderRadius:6,border:`1px solid ${T.border}`}}>
-            <div style={{flex:1,fontSize:12,color:T.text}}>{it.label}</div>
-            <div style={{display:'flex',gap:4}}>
+          <div key={it.id||i} style={{display:'flex',gap:10,alignItems:'center',padding:'10px 12px',borderRadius:8,border:`1px solid ${T.border}`,background:T.card}}>
+            <div style={{flex:1,fontSize:13,color:T.text,fontWeight:500}}>{it.label}</div>
+            <div style={{display:'flex',gap:6}}>
               {CHECKLIST_STATES.map(st => (
                 <button key={st.value} onClick={()=>setAnswer(it.id, st.value)}
-                  style={{padding:'4px 8px',borderRadius:6,border:`1px solid ${cur===st.value?st.color:T.border}`,background:cur===st.value?st.color+'18':'transparent',color:cur===st.value?st.color:T.text3,fontSize:10,fontWeight:600,cursor:'pointer'}}>
-                  {st.label}
+                  style={{padding:'6px 12px',borderRadius:8,border:`1px solid ${cur===st.value?st.color:T.border}`,background:cur===st.value?st.color+'1F':'transparent',color:cur===st.value?st.color:T.text3,fontSize:11,fontWeight:700,cursor:'pointer',transition:'all .15s'}}>
+                  {st.value === 'validated' ? '✅' : st.value === 'refused' ? '❌' : '⚪'} {st.label}
                 </button>
               ))}
             </div>
@@ -469,21 +528,21 @@ export default function InteractionTemplatesPanel({ T, I, Btn, Modal, contact, c
   }
 
   return (
-    <div style={{display:'flex',flexDirection:'column',gap:10}}>
-      {/* Barre d'action 3 boutons */}
-      <div style={{display:'flex',gap:6}}>
-        <Btn onClick={()=>setEditor({mode:'create',type:'script'})} style={{flex:1,fontSize:11}}><I n="file-text" s={12}/> + Script</Btn>
-        <Btn onClick={()=>setEditor({mode:'create',type:'questionnaire'})} style={{flex:1,fontSize:11}}><I n="help-circle" s={12}/> + Formulaire</Btn>
-        <Btn onClick={()=>setEditor({mode:'create',type:'checklist'})} style={{flex:1,fontSize:11}}><I n="check-square" s={12}/> + Checklist</Btn>
+    <div style={{display:'flex',flexDirection:'column',gap:16}}>
+      {/* Barre d'action 3 boutons — CTA grand format */}
+      <div style={{display:'flex',gap:8}}>
+        <Btn onClick={()=>setEditor({mode:'create',type:'script'})} style={{flex:1,fontSize:12,padding:'10px 12px',fontWeight:700}}><I n="file-text" s={14}/> + Script</Btn>
+        <Btn onClick={()=>setEditor({mode:'create',type:'questionnaire'})} style={{flex:1,fontSize:12,padding:'10px 12px',fontWeight:700}}><I n="help-circle" s={14}/> + Formulaire</Btn>
+        <Btn onClick={()=>setEditor({mode:'create',type:'checklist'})} style={{flex:1,fontSize:12,padding:'10px 12px',fontWeight:700}}><I n="check-square" s={14}/> + Checklist</Btn>
       </div>
 
       {/* Filtres */}
-      <div style={{display:'flex',gap:4,fontSize:10}}>
+      <div style={{display:'flex',gap:6,alignItems:'center'}}>
         <button onClick={()=>setFilter('all')} style={pillStyle(T, filter==='all')}>Tous</button>
         <button onClick={()=>setFilter('personal')} style={pillStyle(T, filter==='personal')}>Mes modèles</button>
         <button onClick={()=>setFilter('company')} style={pillStyle(T, filter==='company')}>Company</button>
         <div style={{flex:1}}/>
-        <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{fontSize:10,padding:'2px 4px',borderRadius:4,border:`1px solid ${T.border}`,background:T.bg,color:T.text}}>
+        <select value={filterType} onChange={e=>setFilterType(e.target.value)} style={{fontSize:11,padding:'5px 8px',borderRadius:6,border:`1px solid ${T.border}`,background:T.bg,color:T.text}}>
           <option value="">Tous types</option>
           <option value="script">Scripts</option>
           <option value="questionnaire">Formulaires</option>
@@ -496,7 +555,7 @@ export default function InteractionTemplatesPanel({ T, I, Btn, Modal, contact, c
       {/* Modèles activés par défaut */}
       {!loading && showByDefaultTpls.length > 0 && contact?.id && (
         <div>
-          <div style={{fontSize:10,fontWeight:600,color:T.text3,marginBottom:4}}>★ Activés par défaut</div>
+          <SectionHeading T={T} icon="star" label="Activés par défaut"/>
           {showByDefaultTpls.map(t => <TemplateRow key={t.id} T={T} I={I} Btn={Btn} t={t} contact={contact} responses={responses} collaboratorId={collaboratorId} isAdmin={isAdmin} onStart={()=>startFilling(t)} onEdit={()=>setEditor({mode:'edit',type:t.type,template:t})} onDuplicate={()=>duplicate(t)} onDelete={()=>deleteTemplate(t)} onToggleDefault={()=>toggleDefault(t)}/>)}
         </div>
       )}
@@ -504,9 +563,9 @@ export default function InteractionTemplatesPanel({ T, I, Btn, Modal, contact, c
       {/* Tous les modèles */}
       {!loading && (
         <div>
-          <div style={{fontSize:10,fontWeight:600,color:T.text3,marginBottom:4}}>Modèles disponibles ({templates.length})</div>
+          <SectionHeading T={T} icon="layers" label={`Modèles disponibles (${templates.length})`}/>
           {templates.length === 0 ? (
-            <div style={{textAlign:'center',padding:16,color:T.text3,fontSize:11,border:`1px dashed ${T.border}`,borderRadius:6}}>Aucun modèle. Créez-en un !</div>
+            <div style={{textAlign:'center',padding:24,color:T.text3,fontSize:13,border:`1px dashed ${T.border}`,borderRadius:10}}>Aucun modèle. Créez-en un !</div>
           ) : (
             templates.map(t => <TemplateRow key={t.id} T={T} I={I} Btn={Btn} t={t} contact={contact} responses={responses} collaboratorId={collaboratorId} isAdmin={isAdmin} onStart={contact?.id ? ()=>startFilling(t) : null} onEdit={()=>setEditor({mode:'edit',type:t.type,template:t})} onDuplicate={()=>duplicate(t)} onDelete={()=>deleteTemplate(t)} onToggleDefault={()=>toggleDefault(t)}/>)
           )}
@@ -516,17 +575,18 @@ export default function InteractionTemplatesPanel({ T, I, Btn, Modal, contact, c
       {/* Réponses du contact */}
       {!loading && contact?.id && responses.length > 0 && (
         <div>
-          <div style={{fontSize:10,fontWeight:600,color:T.text3,marginTop:8,marginBottom:4}}>Réponses du contact ({responses.length})</div>
+          <SectionHeading T={T} icon="check-circle" label={`Réponses du contact (${responses.length})`}/>
           {responses.map(r => (
             <div key={r.id} onClick={()=>{
               const t = templates.find(x => x.id === r.templateId);
               if (t) setFilling({ template: t, response: r });
-            }} style={{display:'flex',gap:6,alignItems:'center',padding:'6px 8px',marginBottom:3,borderRadius:6,background:T.bg,cursor:'pointer'}}>
+            }} style={{display:'flex',gap:10,alignItems:'center',padding:'12px 14px',marginBottom:8,borderRadius:10,background:T.bg,cursor:'pointer',border:`1px solid ${T.border}`,transition:'all .15s'}}>
+              <div style={{width:8,height:8,borderRadius:4,background:r.status === 'completed' ? '#10B981' : '#F59E0B',flexShrink:0}}/>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{fontSize:11,fontWeight:600,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.templateTitle || '—'}</div>
-                <div style={{fontSize:10,color:T.text3}}>{r.status === 'completed' ? '✓ terminé' : 'en cours'} · {r.collabName || ''}</div>
+                <div style={{fontSize:13,fontWeight:700,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{r.templateTitle || '—'}</div>
+                <div style={{fontSize:11,color:T.text3,marginTop:2}}>{r.status === 'completed' ? '✓ terminé' : '⋯ en cours'} · {r.collabName || ''}</div>
               </div>
-              <Btn style={{fontSize:10}}>{r.status === 'completed' ? 'Voir' : 'Reprendre'}</Btn>
+              <Btn primary style={{fontSize:12,padding:'7px 14px',fontWeight:700}}><I n={r.status === 'completed' ? 'eye' : 'play'} s={12}/> {r.status === 'completed' ? 'Voir' : 'Reprendre'}</Btn>
             </div>
           ))}
         </div>
@@ -540,22 +600,60 @@ export default function InteractionTemplatesPanel({ T, I, Btn, Modal, contact, c
 function TemplateRow({ T, I, Btn, t, contact, responses, collaboratorId, isAdmin, onStart, onEdit, onDuplicate, onDelete, onToggleDefault }) {
   const myResp = responses.find(r => r.templateId === t.id && r.collaboratorId === collaboratorId);
   const canEdit = isAdmin || (t.scope === 'personal' && t.createdByCollaboratorId === collaboratorId);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const ctaLabel = myResp ? (myResp.status === 'completed' ? 'Voir' : 'Reprendre') : 'Démarrer';
+  const ctaIcon = myResp ? (myResp.status === 'completed' ? 'eye' : 'play') : 'play';
+
   return (
-    <div style={{display:'flex',gap:6,alignItems:'center',padding:'6px 8px',marginBottom:3,borderRadius:6,border:`1px solid ${T.border}`}}>
-      <I n={TYPE_ICONS[t.type] || 'file'} s={14} style={{color:T.text3,flexShrink:0}}/>
-      <div style={{flex:1,minWidth:0}}>
-        <div style={{fontSize:11,fontWeight:600,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{t.title}{t.showByDefault && ' ★'}</div>
-        <div style={{fontSize:10,color:T.text3}}>{TYPE_LABELS[t.type]} · {t.scope}{t.responseCount ? ` · ${t.responseCount} rép.` : ''}</div>
+    <div style={{display:'flex',gap:10,alignItems:'center',padding:'12px 14px',marginBottom:8,borderRadius:10,border:`1px solid ${T.border}`,background:T.card,position:'relative'}}>
+      <div style={{width:32,height:32,borderRadius:8,background:T.accent+'14',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+        <I n={TYPE_ICONS[t.type] || 'file'} s={16} style={{color:T.accent}}/>
       </div>
-      {onStart && <Btn onClick={onStart} primary style={{fontSize:10}}>{myResp ? (myResp.status === 'completed' ? 'Voir' : 'Reprendre') : 'Démarrer'}</Btn>}
-      {canEdit && <Btn onClick={onEdit} style={{fontSize:10}}><I n="edit-2" s={11}/></Btn>}
-      <Btn onClick={onDuplicate} style={{fontSize:10}} title="Dupliquer"><I n="copy" s={11}/></Btn>
-      {canEdit && <Btn onClick={onToggleDefault} style={{fontSize:10}} title={t.showByDefault ? 'Retirer par défaut' : 'Activer par défaut'}><I n={t.showByDefault ? 'star' : 'star'} s={11} style={{color:t.showByDefault?'#F59E0B':T.text3}}/></Btn>}
-      {canEdit && <Btn onClick={onDelete} style={{fontSize:10,color:'#EF4444'}}><I n="trash-2" s={11}/></Btn>}
+      <div style={{flex:1,minWidth:0}}>
+        <div style={{fontSize:13,fontWeight:700,color:T.text,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',display:'flex',alignItems:'center',gap:6}}>
+          {t.title}
+          {t.showByDefault && <span style={{fontSize:11,color:'#F59E0B'}} title="Affiché par défaut">★</span>}
+        </div>
+        <div style={{fontSize:11,color:T.text3,marginTop:2}}>{TYPE_LABELS[t.type]} · {t.scope === 'company' ? 'Company' : 'Personnel'}{t.responseCount ? ` · ${t.responseCount} rép.` : ''}</div>
+      </div>
+      {onStart && <Btn primary onClick={onStart} style={{fontSize:12,padding:'7px 14px',fontWeight:700}}><I n={ctaIcon} s={12}/> {ctaLabel}</Btn>}
+      <div style={{position:'relative'}}>
+        <Btn onClick={()=>setMenuOpen(o=>!o)} style={{fontSize:12,padding:'7px 10px'}} title="Plus d'actions"><I n="more-horizontal" s={14}/></Btn>
+        {menuOpen && (
+          <>
+            <div onClick={()=>setMenuOpen(false)} style={{position:'fixed',inset:0,zIndex:9}}/>
+            <div style={{position:'absolute',top:'100%',right:0,marginTop:4,minWidth:180,background:T.card,border:`1px solid ${T.border}`,borderRadius:8,boxShadow:'0 4px 16px rgba(0,0,0,0.08)',zIndex:10,padding:4,display:'flex',flexDirection:'column',gap:2}}>
+              {canEdit && <MenuItem T={T} I={I} icon="edit-2" label="Modifier" onClick={()=>{ setMenuOpen(false); onEdit(); }}/>}
+              <MenuItem T={T} I={I} icon="copy" label="Dupliquer" onClick={()=>{ setMenuOpen(false); onDuplicate(); }}/>
+              {canEdit && <MenuItem T={T} I={I} icon="star" label={t.showByDefault ? 'Retirer par défaut' : 'Activer par défaut'} iconColor={t.showByDefault?'#F59E0B':T.text3} onClick={()=>{ setMenuOpen(false); onToggleDefault(); }}/>}
+              {canEdit && <div style={{height:1,background:T.border,margin:'2px 0'}}/>}
+              {canEdit && <MenuItem T={T} I={I} icon="trash-2" label="Supprimer" iconColor="#EF4444" textColor="#EF4444" onClick={()=>{ setMenuOpen(false); onDelete(); }}/>}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
 
+function MenuItem({ T, I, icon, label, iconColor, textColor, onClick }) {
+  return (
+    <button onClick={onClick} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:6,border:'none',background:'transparent',color:textColor||T.text,fontSize:12,fontWeight:500,cursor:'pointer',textAlign:'left',width:'100%'}}
+      onMouseEnter={e=>e.currentTarget.style.background=T.bg} onMouseLeave={e=>e.currentTarget.style.background='transparent'}>
+      <I n={icon} s={13} style={{color:iconColor||T.text3}}/> {label}
+    </button>
+  );
+}
+
 function pillStyle(T, active) {
-  return { padding:'3px 8px', borderRadius:10, border:`1px solid ${active?T.accent:T.border}`, background:active?T.accent+'18':'transparent', color:active?T.accent:T.text2, fontSize:10, fontWeight:600, cursor:'pointer' };
+  return { padding:'5px 12px', borderRadius:14, border:`1px solid ${active?T.accent:T.border}`, background:active?T.accent+'18':'transparent', color:active?T.accent:T.text2, fontSize:11, fontWeight:600, cursor:'pointer' };
+}
+
+function SectionHeading({ T, icon, label }) {
+  return (
+    <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:10,marginTop:4,paddingBottom:6,borderBottom:`1px solid ${T.border}`}}>
+      {icon && <span style={{color:T.text3,fontSize:14}}>{icon === 'star' ? '★' : icon === 'layers' ? '📋' : '✓'}</span>}
+      <div style={{fontSize:12,fontWeight:700,color:T.text2,textTransform:'uppercase',letterSpacing:0.4}}>{label}</div>
+    </div>
+  );
 }
