@@ -19,6 +19,8 @@ import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";
 import FicheReportingBlock from "./crm/fiche/FicheReportingBlock";
 import InteractionTemplatesPanel from "../../interactions/InteractionTemplatesPanel.jsx";
+import ContactInfoEnriched from "../../contacts/ContactInfoEnriched.jsx";
+import { FicheClientMsgScreen, FicheDocsLinkedScreen, FicheSuiviScreen } from "../screens";
 
 const CrmTab = () => {
   const ctx = useCollabContext();
@@ -1333,6 +1335,8 @@ const CrmTab = () => {
                     </div>
                   </div>;
                 })()}
+                {/* V1.11.3 — Données enrichies (sections lisibles, badges, liens) — synchronisé avec Pipeline Live > Info */}
+                <ContactInfoEnriched T={T} contact={ct}/>
                 <textarea value={ct.notes||""} onChange={e=>{
                   const v=e.target.value;
                   setSelectedCrmContact(p=>({...p,notes:v}));
