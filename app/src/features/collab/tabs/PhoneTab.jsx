@@ -14,6 +14,7 @@ import { PIPELINE_CARD_COLORS_DEFAULT, RDV_CATEGORIES, PIPELINE_LABELS, STATUS_C
 import { sendNotification, buildNotifyPayload } from "../../../shared/utils/notifications";
 import { api, recUrl, API_BASE, collectEnv } from "../../../shared/services/api";
 import InteractionTemplatesPanel from "../../interactions/InteractionTemplatesPanel.jsx";
+import ContactInfoEnriched from "../../contacts/ContactInfoEnriched.jsx";
 import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";
 import { FicheDocsPanelScreen } from "../screens"; // hotfix 2026-04-23 — Phase 14b missed import propagation
@@ -1761,10 +1762,8 @@ if (n === ph) matched.set(c.id, c);
       </div>
     )
   ) : null}
-  {/* Données source — inline compact sur même ligne */}
-  {(()=>{try{const cf=Array.isArray(ct.custom_fields)?ct.custom_fields:Array.isArray(ct.custom_fields_json)?ct.custom_fields_json:JSON.parse(ct.custom_fields_json||'[]');if(!cf||cf.length===0)return null;return <div style={{display:'flex',flexWrap:'wrap',gap:3,marginTop:4}}>
-      {cf.map((f,i)=>{const k=(f.key||f.label||'').toLowerCase();const label=k==='domaine'?'Source':k==='domain'?'Source':(f.key||f.label||'?');return <span key={i} style={{fontSize:8,padding:'1px 5px',borderRadius:4,background:T.card,border:`1px solid ${T.border}30`,color:T.text2}}><strong style={{color:T.accent}}>{label}:</strong> {f.value||'—'}</span>;})}
-  </div>;}catch{return null;}})()}
+  {/* V1.11.2 — Données enrichies (sections lisibles, badges, liens) */}
+  <ContactInfoEnriched T={T} contact={ct}/>
   {/* Bouton Enregistrer — sauvegarde manuelle explicite */}
   <div style={{marginTop:8,display:'flex',gap:6,alignItems:'center'}}>
     <div onClick={()=>{
