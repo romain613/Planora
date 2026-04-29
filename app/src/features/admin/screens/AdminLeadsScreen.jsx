@@ -69,6 +69,9 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
           // V1.10.6 — suppression enveloppe avec gestion leads assignés
           const [deleteEnvDialog, setDeleteEnvDialog] = useState(null); // { env, preview }
           const [deleteEnvLoading, setDeleteEnvLoading] = useState(false);
+          // V1.10.6.1 — suppression bulk leads (tableau détail) avec gestion assignés
+          const [bulkDeleteDialog, setBulkDeleteDialog] = useState(null); // { ids, preview }
+          const [bulkDeleteLoading, setBulkDeleteLoading] = useState(false);
           // suggestedMappingDetailed conservé sur showMapping (cf. handler gsheet-preview)
 
           // csvFile repurposed as search term (string), csvHeaders repurposed as import logs, gsheetPreview repurposed as import report
@@ -295,12 +298,47 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
               .catch(()=> pushNotification('Erreur', 'Erreur de connexion', 'error'));
           };
 
-          const handleBulkDelete = () => {
+          // V1.10.6.1 — handleBulkDelete : symétrique de requestDeleteEnvelope.
+          // Pre-check assigned/unassigned, modale custom si assignés, hard delete sinon.
+          const handleBulkDelete = async () => {
             if(selectedBulk.length===0) return;
-            if(!confirm('Supprimer '+selectedBulk.length+' leads definitivement ?')) return;
-            api('/api/leads/incoming/bulk-delete', { method:'POST', body:{ ids:selectedBulk } })
-              .then(r=>{ if(r?.error) { pushNotification('Erreur', r.error, 'error'); return; } setSelectedBulk([]); loadData(); pushNotification('Succes', selectedBulk.length+' leads supprimes', 'success'); })
-              .catch(()=> pushNotification('Erreur', 'Erreur de connexion', 'error'));
+            try {
+              const preview = await api('/api/leads/incoming/bulk-delete-preview', { method:'POST', body:{ ids:selectedBulk, companyId:company.id } });
+              if (preview?.error) { pushNotification('Erreur', preview.error, 'error'); return; }
+              if ((preview.total || 0) === 0) {
+                pushNotification('Info', 'Aucun lead à supprimer', 'info');
+                setSelectedBulk([]); return;
+              }
+              if ((preview.assigned || 0) === 0) {
+                if (!confirm(`Supprimer ${preview.unassigned} lead${preview.unassigned>1?'s':''} non assigné${preview.unassigned>1?'s':''} ?\n\nHard delete — irréversible. Les contacts CRM ne sont pas touchés.`)) return;
+                await runBulkDeleteCascade(false);
+              } else {
+                setBulkDeleteDialog({ ids: [...selectedBulk], preview });
+              }
+            } catch (e) { pushNotification('Erreur', 'Erreur de connexion', 'error'); }
+          };
+
+          const runBulkDeleteCascade = async (force) => {
+            setBulkDeleteLoading(true);
+            try {
+              const res = await api('/api/leads/incoming/bulk-delete', { method:'POST', body:{ ids:selectedBulk, companyId:company.id, force: !!force } });
+              if (res?.error) {
+                pushNotification('Erreur', res.error === 'leads_assigned' ? `${res.assigned} leads assignés — désassignation requise` : res.error, 'error');
+                setBulkDeleteLoading(false);
+                return false;
+              }
+              const summary = `${res.deleted || 0} leads supprimés${res.unassignedBeforeDelete ? ` (dont ${res.unassignedBeforeDelete} désassignés)` : ''}`;
+              pushNotification('Succès', summary, 'success');
+              setSelectedBulk([]);
+              setBulkDeleteDialog(null);
+              setBulkDeleteLoading(false);
+              loadData();
+              return true;
+            } catch (e) {
+              setBulkDeleteLoading(false);
+              pushNotification('Erreur', 'Erreur de connexion', 'error');
+              return false;
+            }
           };
 
           const handleBulkEnvelope = (envId) => {
@@ -1609,6 +1647,54 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
                   <Btn onClick={()=>!deleteEnvLoading && setDeleteEnvDialog(null)} disabled={deleteEnvLoading}>Annuler</Btn>
                   <Btn primary onClick={()=>runDeleteEnvelopeCascade(deleteEnvDialog.env, true)} disabled={deleteEnvLoading} style={{background:'#EF4444',borderColor:'#EF4444'}}>
                     {deleteEnvLoading ? <><I n="loader" s={13} style={{animation:'spin 1s linear infinite'}}/> Suppression…</> : <><I n="trash-2" s={13}/> Désassigner les {deleteEnvDialog.preview.assigned} leads + Supprimer</>}
+                  </Btn>
+                </div>
+              </div>
+            </Modal>}
+
+            {/* ═══ V1.10.6.1 — BULK DELETE WARNING (leads assignés) ═══ */}
+            {bulkDeleteDialog && <Modal open={true} title="⚠️ Suppression bloquée — leads assignés" onClose={()=>!bulkDeleteLoading && setBulkDeleteDialog(null)}>
+              <div style={{display:'flex',flexDirection:'column',gap:14,fontSize:13}}>
+                <div>
+                  Sélection : <b>{bulkDeleteDialog.preview.total} leads</b>
+                </div>
+                <div style={{display:'flex',gap:8,flexWrap:'wrap'}}>
+                  <div style={{flex:1,minWidth:140,padding:'10px 12px',borderRadius:8,background:'#10B98112',border:'1px solid #10B98140'}}>
+                    <div style={{fontSize:24,fontWeight:700,color:'#10B981'}}>{bulkDeleteDialog.preview.unassigned}</div>
+                    <div style={{fontSize:11,color:T.text2}}>leads non assignés</div>
+                    <div style={{fontSize:10,color:T.text3,marginTop:2}}>suppression directe</div>
+                  </div>
+                  <div style={{flex:1,minWidth:140,padding:'10px 12px',borderRadius:8,background:'#F59E0B12',border:'1px solid #F59E0B40'}}>
+                    <div style={{fontSize:24,fontWeight:700,color:'#F59E0B'}}>{bulkDeleteDialog.preview.assigned}</div>
+                    <div style={{fontSize:11,color:T.text2}}>leads assignés à des contacts</div>
+                    <div style={{fontSize:10,color:T.text3,marginTop:2}}>désassignation requise</div>
+                  </div>
+                </div>
+                <div style={{padding:'10px 12px',borderRadius:8,background:'#FEF3C7',border:'1px solid #F59E0B40',fontSize:12,color:'#92400E'}}>
+                  ⚠ Pour supprimer ces leads, les <b>{bulkDeleteDialog.preview.assigned} leads assignés</b> seront automatiquement désassignés (le lien lead → contact sera retiré).
+                  <div style={{marginTop:8,paddingTop:8,borderTop:'1px solid #F59E0B30'}}>
+                    <b>Préservé strictement :</b><br/>
+                    ✓ contacts CRM (non supprimés)<br/>
+                    ✓ pipeline_stage / statut contact<br/>
+                    ✓ RDV, notes, historique<br/>
+                    ✓ aucune redistribution déclenchée
+                  </div>
+                </div>
+                {(bulkDeleteDialog.preview.assignedSamples||[]).length>0 && <div style={{maxHeight:140,overflow:'auto',border:`1px solid ${T.border}`,borderRadius:8}}>
+                  <div style={{padding:'6px 10px',fontSize:11,fontWeight:600,color:T.text2,background:T.bg,borderBottom:`1px solid ${T.border}`}}>
+                    Aperçu (5 premiers) :
+                  </div>
+                  {(bulkDeleteDialog.preview.assignedSamples||[]).map((s,i)=>(
+                    <div key={i} style={{padding:'6px 10px',fontSize:11,borderBottom:i<bulkDeleteDialog.preview.assignedSamples.length-1?`1px solid ${T.border}`:'none',display:'flex',justifyContent:'space-between',gap:8}}>
+                      <span>{s.leadName || s.contactName || s.leadId}</span>
+                      <span style={{color:T.text3}}>{s.collabName || '—'}</span>
+                    </div>
+                  ))}
+                </div>}
+                <div style={{display:'flex',gap:8,justifyContent:'flex-end',marginTop:4}}>
+                  <Btn onClick={()=>!bulkDeleteLoading && setBulkDeleteDialog(null)} disabled={bulkDeleteLoading}>Annuler</Btn>
+                  <Btn primary onClick={()=>runBulkDeleteCascade(true)} disabled={bulkDeleteLoading} style={{background:'#EF4444',borderColor:'#EF4444'}}>
+                    {bulkDeleteLoading ? <><I n="loader" s={13} style={{animation:'spin 1s linear infinite'}}/> Suppression…</> : <><I n="trash-2" s={13}/> Désassigner les {bulkDeleteDialog.preview.assigned} leads + Supprimer</>}
                   </Btn>
                 </div>
               </div>

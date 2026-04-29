@@ -287,17 +287,101 @@ router.post('/incoming/bulk-status', requireAdmin, enforceCompany, requirePermis
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// Bulk delete
-router.post('/incoming/bulk-delete', requireAdmin, enforceCompany, requirePermission('leads.manage'), (req, res) => {
+// V1.10.6.1 — preview suppression bulk : compte unassigned vs assigned (contact_id rempli).
+// Permet au frontend de décider entre confirm direct ou modale "désassigner d'abord".
+// Symétrique à GET /envelopes/:id/delete-preview pour cohérence UX.
+router.post('/incoming/bulk-delete-preview', requireAdmin, enforceCompany, requirePermission('leads.view'), (req, res) => {
   try {
     const { ids, companyId } = req.body;
-    if (!ids || !Array.isArray(ids)) return res.status(400).json({ error: 'ids requis' });
-    // Security: only delete leads belonging to this company
-    const stmtDel = db.prepare('DELETE FROM incoming_leads WHERE id = ? AND companyId = ?');
-    const stmtAssign = db.prepare('DELETE FROM lead_assignments WHERE lead_id = ?');
-    const tx = db.transaction(() => { for (const id of ids) { stmtAssign.run(id); stmtDel.run(id, companyId); } });
+    if (!ids || !Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids requis' });
+    if (!companyId) return res.status(400).json({ error: 'companyId requis' });
+
+    const placeholders = ids.map(() => '?').join(',');
+    const total = db.prepare(`SELECT COUNT(*) AS n FROM incoming_leads WHERE id IN (${placeholders}) AND companyId = ?`).get(...ids, companyId).n;
+    const assigned = db.prepare(`SELECT COUNT(*) AS n FROM incoming_leads WHERE id IN (${placeholders}) AND companyId = ? AND contact_id IS NOT NULL AND contact_id != ''`).get(...ids, companyId).n;
+    const unassigned = total - assigned;
+
+    const samples = db.prepare(`
+      SELECT il.id AS leadId, il.first_name, il.last_name, il.contact_id,
+             c.name AS contactName, col.name AS collabName
+      FROM incoming_leads il
+      LEFT JOIN contacts c ON c.id = il.contact_id
+      LEFT JOIN collaborators col ON col.id = il.assigned_to
+      WHERE il.id IN (${placeholders}) AND il.companyId = ?
+        AND il.contact_id IS NOT NULL AND il.contact_id != ''
+      ORDER BY il.created_at ASC
+      LIMIT 5
+    `).all(...ids, companyId).map(r => ({
+      leadId: r.leadId,
+      leadName: [r.first_name, r.last_name].filter(Boolean).join(' '),
+      contactId: r.contact_id,
+      contactName: r.contactName || '',
+      collabName: r.collabName || ''
+    }));
+
+    res.json({ total, unassigned, assigned, assignedSamples: samples });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// V1.10.6.1 — Bulk hard delete avec désassignation safe optionnelle.
+// Symétrique à DELETE /envelopes/:id?cascade=true&force=true.
+//   - default (force=false) : si assigned > 0 → 409 leads_assigned avec count.
+//   - force=true            : transaction atomique → désassign safe + DELETE assignments + HARD DELETE leads
+// Désassignation safe = retire UNIQUEMENT le lien lead → contact (incoming_leads.contact_id, status,
+// assigned_to, assigned_at). NE TOUCHE PAS contacts.* (pipeline/RDV/notes préservés).
+// Diffère du POST /incoming/bulk-unassign qui supprime contacts si pipeline_stage='nouveau'.
+router.post('/incoming/bulk-delete', requireAdmin, enforceCompany, requirePermission('leads.manage'), (req, res) => {
+  try {
+    const { ids, companyId, force } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) return res.status(400).json({ error: 'ids requis' });
+    if (!companyId) return res.status(400).json({ error: 'companyId requis' });
+
+    const placeholders = ids.map(() => '?').join(',');
+    const totalLeads = db.prepare(`SELECT COUNT(*) AS n FROM incoming_leads WHERE id IN (${placeholders}) AND companyId = ?`).get(...ids, companyId).n;
+    const assignedCount = db.prepare(`SELECT COUNT(*) AS n FROM incoming_leads WHERE id IN (${placeholders}) AND companyId = ? AND contact_id IS NOT NULL AND contact_id != ''`).get(...ids, companyId).n;
+
+    if (assignedCount > 0 && !force) {
+      return res.status(409).json({
+        error: 'leads_assigned',
+        message: `${assignedCount} leads sont assignés à des contacts. Utiliser force=true après confirmation utilisateur.`,
+        totalLeads, assigned: assignedCount, unassigned: totalLeads - assignedCount
+      });
+    }
+
+    let unassignedDuringTx = 0;
+    let deletedLeadsCount = 0;
+    let deletedAssignmentsCount = 0;
+    const tx = db.transaction(() => {
+      if (assignedCount > 0 && force) {
+        // Désassignation safe : retire lien lead→contact, NE TOUCHE PAS contacts CRM
+        const r = db.prepare(`
+          UPDATE incoming_leads
+          SET contact_id = '', status = 'unassigned', assigned_to = '', assigned_at = ''
+          WHERE id IN (${placeholders}) AND companyId = ?
+            AND contact_id IS NOT NULL AND contact_id != ''
+        `).run(...ids, companyId);
+        unassignedDuringTx = r.changes || 0;
+      }
+      // DELETE lead_assignments
+      const ra = db.prepare(`DELETE FROM lead_assignments WHERE lead_id IN (${placeholders}) AND companyId = ?`).run(...ids, companyId);
+      deletedAssignmentsCount = ra.changes || 0;
+      // HARD DELETE leads
+      const rl = db.prepare(`DELETE FROM incoming_leads WHERE id IN (${placeholders}) AND companyId = ?`).run(...ids, companyId);
+      deletedLeadsCount = rl.changes || 0;
+    });
     tx();
-    res.json({ success: true, deleted: ids.length });
+
+    logHistory(companyId, 'leads_bulk_deleted', {
+      requestedIds: ids.length, totalLeads, assignedDetected: assignedCount,
+      unassignedDuringTx, deletedLeads: deletedLeadsCount, deletedAssignments: deletedAssignmentsCount, force: !!force
+    }, { user_id: req.auth?.userId, user_name: req.auth?.name });
+
+    res.json({
+      success: true,
+      deleted: deletedLeadsCount,
+      deletedAssignments: deletedAssignmentsCount,
+      unassignedBeforeDelete: unassignedDuringTx
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
