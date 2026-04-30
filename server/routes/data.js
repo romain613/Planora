@@ -125,6 +125,33 @@ router.get('/contacts', requireAuth, enforceCompany, requirePermission('contacts
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// V1.12.4 — GET /api/data/contacts/archived
+// Liste les contacts archives (archivedAt != '') pour la company.
+// IMPORTANT : declare AVANT '/contacts/:id' pour ne pas etre intercepte (match ordre Express).
+// Mode "dark" V1.12.4 : pas encore branche cote frontend (V1.12.8).
+// Scope :
+//   - admin/supra : tous les archives de la company
+//   - collab     : archives ou il est assignedTo OR sharedWithId OR shared_with_json
+router.get('/contacts/archived', requireAuth, enforceCompany, requirePermission('contacts.view'), (req, res) => {
+  try {
+    const companyId = req.query.companyId;
+    if (!companyId) return res.status(400).json({ error: 'companyId requis' });
+    if (!req.auth.isSupra && !req.auth.isAdmin) {
+      const rows = db.prepare(
+        "SELECT * FROM contacts WHERE companyId = ? AND archivedAt IS NOT NULL AND archivedAt != '' " +
+        "AND (assignedTo = ? OR sharedWithId = ? OR shared_with_json LIKE ?) " +
+        "ORDER BY archivedAt DESC"
+      ).all(companyId, req.auth.collaboratorId, req.auth.collaboratorId, '%' + req.auth.collaboratorId + '%');
+      return res.json(rows);
+    }
+    const rows = db.prepare(
+      "SELECT * FROM contacts WHERE companyId = ? AND archivedAt IS NOT NULL AND archivedAt != '' " +
+      "ORDER BY archivedAt DESC"
+    ).all(companyId);
+    res.json(rows);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ─── V3: GET SINGLE CONTACT — refetch unitaire propre ───
 router.get('/contacts/:id', requireAuth, requirePermission('contacts.view'), (req, res) => {
   try {
