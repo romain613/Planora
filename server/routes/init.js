@@ -118,7 +118,7 @@ router.get('/', (req, res) => {
     const workflows = getByCompany('workflows', companyId);
     const routings = getByCompany('routings', companyId);
     const polls = getByCompany('polls', companyId);
-    const contacts = getByCompany('contacts', companyId);
+    const contacts = getByCompany('contacts', companyId).filter(c => !c.archivedAt || c.archivedAt === ''); // V1.12.5.a — exclusion archivés
     const customTables = getByCompany('custom_tables', companyId);
 
     // Google Calendar events
@@ -256,7 +256,7 @@ router.get('/', (req, res) => {
         noShow: !!b.noShow, checkedIn: !!b.checkedIn, reconfirmed: !!b.reconfirmed,
       }));
 
-      const allContacts = getAll('contacts').map(ct => ({
+      const allContacts = getAll('contacts').filter(c => !c.archivedAt || c.archivedAt === '').map(ct => ({ // V1.12.5.a — exclusion archivés cross-company
         ...ct, companyName: companies.find(co => co.id === ct.companyId)?.name || '',
       }));
 
