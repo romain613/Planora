@@ -887,6 +887,45 @@ router.delete('/contacts/:id', requireAuth, requirePermission('contacts.delete')
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// V1.12.2 — POST /api/data/contacts/:id/archive
+// Archive un contact (soft-delete). Aucune suppression de donnees.
+// Mode "dark" V1.12.2 : pas encore branche cote frontend.
+// Decision MH Q1 (UI 2-step bookings futurs) sera implementee en V1.12.6.
+// Acces : requireAuth + requirePermission('contacts.delete') + companyId match + ownership
+// Idempotence : 409 ALREADY_ARCHIVED si deja archive.
+router.post('/contacts/:id/archive', requireAuth, requirePermission('contacts.delete'), (req, res) => {
+  try {
+    const id = req.params.id;
+    const reason = (req.body?.reason || '').toString().slice(0, 500);
+
+    const record = db.prepare('SELECT companyId, name, email, phone, assignedTo, archivedAt FROM contacts WHERE id = ?').get(id);
+    if (!record) return res.status(404).json({ error: 'NOT_FOUND' });
+    if (!req.auth.isSupra && record.companyId !== req.auth.companyId) {
+      return res.status(403).json({ error: 'Accès interdit' });
+    }
+    // SECURITE : non-admin ne peut archiver que SES contacts (pattern DELETE existant)
+    if (!req.auth.isAdmin && !req.auth.isSupra && record.assignedTo !== req.auth.collaboratorId) {
+      return res.status(403).json({ error: "Accès interdit — contact assigné à un autre collaborateur" });
+    }
+    // Idempotent : refuse si deja archive
+    if (record.archivedAt && record.archivedAt !== '') {
+      return res.status(409).json({ error: 'ALREADY_ARCHIVED', archivedAt: record.archivedAt });
+    }
+
+    const archivedAt = new Date().toISOString();
+    const archivedBy = req.auth.collaboratorId || '';
+    db.prepare('UPDATE contacts SET archivedAt = ?, archivedBy = ?, archivedReason = ? WHERE id = ?')
+      .run(archivedAt, archivedBy, reason, id);
+
+    logAudit(req, 'contact_archived', 'data', 'contact', id, 'Contact archive: ' + (record.name || ''), {
+      email: record.email, phone: record.phone, reason: reason || null
+    });
+    console.log(`[CONTACTS] Contact ${id} ARCHIVED by ${archivedBy} reason="${reason}"`);
+
+    res.json({ success: true, action: 'archived', archivedAt, archivedBy, archivedReason: reason });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ─── PIPELINE STAGES (custom statuses) ───
 router.get('/pipeline-stages', requireAuth, enforceCompany, requirePermission('pipeline.view'), (req, res) => {
   try {
