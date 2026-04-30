@@ -240,7 +240,13 @@ const RdvReportingTab = () => {
             const status = b.bookingReportingStatus || '';
             const peerId = subTab === 'received' ? b.bookedByCollaboratorId : b.agendaOwnerId;
             const peerLabel = subTab === 'received' ? 'Transmis par' : 'Pour';
-            const canReport = subTab === 'received' && !status;
+            // V1.11.4 — Garde defensive : "Faire le reporting" affiche uniquement si
+            // collab connecte est receveur ET non-transmetteur (anti-regression au cas ou
+            // le backend renverrait des donnees incoherentes en mode admin/supra).
+            const canReport = subTab === 'received'
+              && !status
+              && b.agendaOwnerId === collab.id
+              && b.bookedByCollaboratorId !== collab.id;
             const reporterId = b.bookingReportedBy || '';
             const reportedAt = b.bookingReportedAt || '';
             return (
