@@ -62,8 +62,12 @@ router.put('/executor/:contactId', requireAuth, enforceCompany, (req, res) => {
     if (executorCollabId === sourceCollabId) return res.status(400).json({ error: 'Impossible de transférer à soi-même' });
 
     // Verify contact exists and belongs to company
-    const contact = db.prepare('SELECT id, assignedTo, name, pipeline_stage FROM contacts WHERE id = ? AND companyId = ?').get(contactId, companyId);
+    const contact = db.prepare('SELECT id, assignedTo, name, pipeline_stage, archivedAt FROM contacts WHERE id = ? AND companyId = ?').get(contactId, companyId);
     if (!contact) return res.status(404).json({ error: 'Contact introuvable' });
+    // V1.12.6 — refus transfert si contact archive
+    if (contact.archivedAt && contact.archivedAt !== '') {
+      return res.status(409).json({ error: 'CONTACT_ARCHIVED', contactId, archivedAt: contact.archivedAt });
+    }
 
     // Verify target collaborator exists in same company AND not archived (Wave D)
     const targetCollab = db.prepare('SELECT id, name, archivedAt FROM collaborators WHERE id = ? AND companyId = ?').get(executorCollabId, companyId);
@@ -173,6 +177,12 @@ router.get('/followers/:contactId', requireAuth, enforceCompany, (req, res) => {
 router.post('/source/:contactId', requireAuth, enforceCompany, (req, res) => {
   try {
     const { sourceCollabId, trackingMode, sourceColorKey } = req.body;
+    const companyId = req.auth.companyId || req.auth._activeCompanyId || req.body.companyId;
+    // V1.12.6 — refus si contact archive
+    const ct = db.prepare('SELECT archivedAt FROM contacts WHERE id = ? AND companyId = ?').get(req.params.contactId, companyId);
+    if (ct?.archivedAt && ct.archivedAt !== '') {
+      return res.status(409).json({ error: 'CONTACT_ARCHIVED', contactId: req.params.contactId, archivedAt: ct.archivedAt });
+    }
     const result = addSourceFollower(
       req.params.contactId,
       sourceCollabId || req.auth.collaboratorId,
@@ -201,6 +211,12 @@ router.put('/follower/:followerId', requireAuth, (req, res) => {
 router.put('/executor-stage/:contactId', requireAuth, enforceCompany, (req, res) => {
   try {
     const { stage, label } = req.body;
+    const companyId = req.auth.companyId || req.auth._activeCompanyId || req.body.companyId;
+    // V1.12.6 — refus si contact archive
+    const ct = db.prepare('SELECT archivedAt FROM contacts WHERE id = ? AND companyId = ?').get(req.params.contactId, companyId);
+    if (ct?.archivedAt && ct.archivedAt !== '') {
+      return res.status(409).json({ error: 'CONTACT_ARCHIVED', contactId: req.params.contactId, archivedAt: ct.archivedAt });
+    }
     const result = updateExecutorStage(req.params.contactId, req.auth.companyId, stage, label);
     res.json(result);
   } catch (e) {

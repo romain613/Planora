@@ -33,6 +33,7 @@ const ERR_MAP = {
   SLOT_CONFLICT: 409,
   TARGET_COLLAB_ARCHIVED: 409,
   ACTOR_COLLAB_ARCHIVED: 409,
+  CONTACT_ARCHIVED: 409,
 };
 
 // ─── POST /api/contact-share/send ──────────────────────────────────────────
@@ -51,6 +52,14 @@ router.post('/send', requireAuth, enforceCompany, (req, res) => {
     const actorCollaboratorId = req.auth.collaboratorId;
     const companyId = req.auth.companyId || req.auth._activeCompanyId || req.body.companyId;
     if (!actorCollaboratorId) return res.status(401).json({ error: 'AUTH_REQUIRED' });
+
+    // V1.12.6 — refus partage si contact archive
+    if (contactId) {
+      const ct = db.prepare('SELECT archivedAt FROM contacts WHERE id = ? AND companyId = ?').get(contactId, companyId);
+      if (ct?.archivedAt && ct.archivedAt !== '') {
+        return res.status(409).json({ error: 'CONTACT_ARCHIVED', contactId, archivedAt: ct.archivedAt });
+      }
+    }
 
     const result = sendContactToCollab(db, {
       contactId,
@@ -88,6 +97,12 @@ router.post('/desync/:contactId', requireAuth, enforceCompany, (req, res) => {
     const actorCollaboratorId = req.auth.collaboratorId;
     const companyId = req.auth.companyId || req.auth._activeCompanyId;
     if (!actorCollaboratorId) return res.status(401).json({ error: 'AUTH_REQUIRED' });
+
+    // V1.12.6 — refus desync si contact archive
+    const ct = db.prepare('SELECT archivedAt FROM contacts WHERE id = ? AND companyId = ?').get(contactId, companyId);
+    if (ct?.archivedAt && ct.archivedAt !== '') {
+      return res.status(409).json({ error: 'CONTACT_ARCHIVED', contactId, archivedAt: ct.archivedAt });
+    }
 
     const result = desyncContactShare(db, { contactId, actorCollaboratorId, companyId });
     res.json(result);

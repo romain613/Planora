@@ -603,7 +603,7 @@ router.put('/contacts/:id', requireAuth, requirePermission('contacts.edit'), (re
     const authCompanyId = req.auth?.companyId;
     // Securite: verifier que le contact appartient a la company du user
     if (authCompanyId) {
-      const existing = db.prepare('SELECT companyId, assignedTo, shared_with_json FROM contacts WHERE id = ?').get(id);
+      const existing = db.prepare('SELECT companyId, assignedTo, shared_with_json, archivedAt FROM contacts WHERE id = ?').get(id);
       if (!existing) return res.status(404).json({ error: 'Contact non trouvé' });
       if (existing.companyId !== authCompanyId) return res.status(403).json({ error: 'Accès interdit: contact hors company' });
       // Isolation collaborateur : collab ne peut modifier que ses contacts
@@ -612,6 +612,10 @@ router.put('/contacts/:id', requireAuth, requirePermission('contacts.edit'), (re
         if (existing.assignedTo !== req.auth.collaboratorId && !sw.includes(req.auth.collaboratorId)) {
           return res.status(403).json({ error: 'Acces interdit: contact non assigne' });
         }
+      }
+      // V1.12.6 — refus modification si contact archive (utiliser POST /:id/restore pour restaurer)
+      if (existing.archivedAt && existing.archivedAt !== '') {
+        return res.status(409).json({ error: 'CONTACT_ARCHIVED', archivedAt: existing.archivedAt });
       }
     }
     const data = { ...req.body };
@@ -798,10 +802,14 @@ router.put('/contacts/:id/share', requireAuth, enforceCompany, (req, res) => {
     if (!collaboratorId) return res.status(400).json({ error: 'collaboratorId requis' });
     if (!['add', 'remove'].includes(action)) return res.status(400).json({ error: 'mode invalide (add|remove)' });
 
-    const contact = db.prepare('SELECT id, companyId, assignedTo, shared_with_json, name FROM contacts WHERE id = ?').get(id);
+    const contact = db.prepare('SELECT id, companyId, assignedTo, shared_with_json, name, archivedAt FROM contacts WHERE id = ?').get(id);
     if (!contact) return res.status(404).json({ error: 'CONTACT_NOT_FOUND' });
     if (!req.auth.isSupra && contact.companyId !== req.auth.companyId) {
       return res.status(403).json({ error: 'CONTACT_WRONG_COMPANY' });
+    }
+    // V1.12.6 — refus partage si contact archive
+    if (contact.archivedAt && contact.archivedAt !== '') {
+      return res.status(409).json({ error: 'CONTACT_ARCHIVED', archivedAt: contact.archivedAt });
     }
 
     const targetCollab = db.prepare("SELECT id, companyId, archivedAt FROM collaborators WHERE id = ?").get(collaboratorId);

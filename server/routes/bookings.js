@@ -91,7 +91,7 @@ router.post('/', requireAuth, enforceCompany, requirePermission('bookings.create
     // d'auto-création/dedup (V5-BOOKING ci-dessous) reste actif et inchangé.
     if (b.contactId) {
       const existingContact = db.prepare(
-        'SELECT id, companyId, assignedTo, shared_with_json, name FROM contacts WHERE id = ?'
+        'SELECT id, companyId, assignedTo, shared_with_json, name, archivedAt FROM contacts WHERE id = ?'
       ).get(b.contactId);
       if (!existingContact) {
         console.warn(`[BOOKING REJECTED] CONTACT_NOT_FOUND contactId=${b.contactId} collab=${req.auth.collaboratorId||''} company=${req.auth.companyId||''}`);
@@ -100,6 +100,11 @@ router.post('/', requireAuth, enforceCompany, requirePermission('bookings.create
       if (!req.auth.isSupra && existingContact.companyId !== (req.auth.companyId || '')) {
         console.warn(`[BOOKING REJECTED] CONTACT_WRONG_COMPANY contactId=${b.contactId} contactCompany=${existingContact.companyId} authCompany=${req.auth.companyId||''}`);
         return res.status(403).json({ error: 'CONTACT_WRONG_COMPANY', contactId: b.contactId });
+      }
+      // V1.12.6 — refus booking si contact archive
+      if (existingContact.archivedAt && existingContact.archivedAt !== '') {
+        console.warn(`[BOOKING REJECTED] CONTACT_ARCHIVED contactId=${b.contactId} archivedAt=${existingContact.archivedAt}`);
+        return res.status(409).json({ error: 'CONTACT_ARCHIVED', contactId: b.contactId, archivedAt: existingContact.archivedAt });
       }
     }
     // R1 + R5 — source de vérité unique du check conflit (helper partagé)
