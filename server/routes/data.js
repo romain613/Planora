@@ -944,9 +944,9 @@ router.post('/contacts/:id/restore', requireAuth, requirePermission('contacts.ed
     if (!req.auth.isAdmin && !req.auth.isSupra && record.assignedTo !== req.auth.collaboratorId) {
       return res.status(403).json({ error: "Accès interdit — contact assigné à un autre collaborateur" });
     }
-    // Refus si pas archive
+    // Refus si pas archive (409 state conflict, symetrie avec /archive 409 ALREADY_ARCHIVED)
     if (!record.archivedAt || record.archivedAt === '') {
-      return res.status(400).json({ error: 'NOT_ARCHIVED' });
+      return res.status(409).json({ error: 'NOT_ARCHIVED' });
     }
 
     const previousArchivedAt = record.archivedAt;
