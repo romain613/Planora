@@ -124,13 +124,13 @@ router.post('/', requireAuth, enforceCompany, requirePermission('bookings.create
       let existingContact = null;
       // Dedup par email
       if (b.visitorEmail) {
-        existingContact = db.prepare('SELECT id FROM contacts WHERE LOWER(email) = LOWER(?) AND companyId = ? AND assignedTo = ?').get(b.visitorEmail.trim(), companyId, collabId);
+        existingContact = db.prepare("SELECT id FROM contacts WHERE LOWER(email) = LOWER(?) AND companyId = ? AND assignedTo = ? AND (archivedAt IS NULL OR archivedAt = '')").get(b.visitorEmail.trim(), companyId, collabId);
       }
       // Dedup par telephone
       if (!existingContact && b.visitorPhone) {
         const cleanPh = (b.visitorPhone || '').replace(/[^\d]/g, '').slice(-9);
         if (cleanPh.length >= 9) {
-          const candidates = db.prepare("SELECT id, phone, mobile FROM contacts WHERE companyId = ? AND assignedTo = ? AND (phone != '' OR mobile != '')").all(companyId, collabId);
+          const candidates = db.prepare("SELECT id, phone, mobile FROM contacts WHERE companyId = ? AND assignedTo = ? AND (phone != '' OR mobile != '') AND (archivedAt IS NULL OR archivedAt = '')").all(companyId, collabId);
           for (const c of candidates) {
             const cp = (c.phone || c.mobile || '').replace(/[^\d]/g, '').slice(-9);
             if (cp === cleanPh) { existingContact = c; break; }
