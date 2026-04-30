@@ -324,6 +324,14 @@ try { db.exec("ALTER TABLE contacts ADD COLUMN assignedTo TEXT DEFAULT ''"); } c
 try { db.exec("ALTER TABLE contacts ADD COLUMN shared_with_json TEXT DEFAULT '[]'"); } catch {}
 try { db.exec("CREATE INDEX IF NOT EXISTS idx_contacts_assigned ON contacts (assignedTo)"); } catch {}
 
+// V1.12.1 — Archive 3 etats (Actif / Archive / Efface). Migration additive idempotente.
+// archivedAt = '' -> contact actif. archivedAt != '' (ISO timestamp) -> archive.
+// Filter strict applique dans tous les SELECT/POST critiques en V1.12.5.x.
+try { db.exec("ALTER TABLE contacts ADD COLUMN archivedAt TEXT DEFAULT ''"); } catch {}
+try { db.exec("ALTER TABLE contacts ADD COLUMN archivedBy TEXT DEFAULT ''"); } catch {}
+try { db.exec("ALTER TABLE contacts ADD COLUMN archivedReason TEXT DEFAULT ''"); } catch {}
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_contacts_active ON contacts(companyId, archivedAt)"); } catch {}
+
 // Timezone support
 try { db.exec("ALTER TABLE collaborators ADD COLUMN timezone TEXT"); } catch {}
 // Chat permission per collaborator (1 = enabled, 0 = disabled)
