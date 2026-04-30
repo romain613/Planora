@@ -30,7 +30,7 @@ export function getOrCreateConversation({ companyId, collaboratorId, clientPhone
 
   // Auto-match contact by phone if not provided
   if (!contactId) {
-    const ct = db.prepare("SELECT id FROM contacts WHERE companyId = ? AND phone LIKE ?")
+    const ct = db.prepare("SELECT id FROM contacts WHERE companyId = ? AND phone LIKE ? AND (archivedAt IS NULL OR archivedAt = '')")
       .get(companyId, '%' + last9 + '%');
     contactId = ct?.id || null;
   }
@@ -155,7 +155,7 @@ router.get('/', requireAuth, enforceCompany, (req, res) => {
       params.push(status);
     }
     if (search) {
-      query += ' AND (clientPhone LIKE ? OR contactId IN (SELECT id FROM contacts WHERE name LIKE ?))';
+      query += " AND (clientPhone LIKE ? OR contactId IN (SELECT id FROM contacts WHERE name LIKE ? AND (archivedAt IS NULL OR archivedAt = '')))";
       params.push('%' + search + '%', '%' + search + '%');
     }
 

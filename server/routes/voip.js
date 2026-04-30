@@ -1167,9 +1167,9 @@ router.get('/lookup', requireAuth, enforceCompany, (req, res) => {
     // SECURITE: non-admin ne peut lookup que SES contacts (assignedTo ou shared_with)
     let contact;
     if (req.auth.role === 'admin' || req.auth.isSupra) {
-      contact = db.prepare('SELECT * FROM contacts WHERE companyId = ? AND phone LIKE ?').get(companyId, '%' + last9 + '%');
+      contact = db.prepare("SELECT * FROM contacts WHERE companyId = ? AND phone LIKE ? AND (archivedAt IS NULL OR archivedAt = '')").get(companyId, '%' + last9 + '%');
     } else {
-      contact = db.prepare("SELECT * FROM contacts WHERE companyId = ? AND phone LIKE ? AND (assignedTo = ? OR shared_with_json LIKE ?)").get(companyId, '%' + last9 + '%', req.auth.collaboratorId, '%' + req.auth.collaboratorId + '%');
+      contact = db.prepare("SELECT * FROM contacts WHERE companyId = ? AND phone LIKE ? AND (assignedTo = ? OR shared_with_json LIKE ?) AND (archivedAt IS NULL OR archivedAt = '')").get(companyId, '%' + last9 + '%', req.auth.collaboratorId, '%' + req.auth.collaboratorId + '%');
     }
     // Retourner uniquement id, name, phone (pas toutes les données)
     const safe = contact ? { id: contact.id, name: contact.name, phone: contact.phone, pipeline_stage: contact.pipeline_stage } : null;

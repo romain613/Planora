@@ -12,7 +12,7 @@ router.get('/:token', (req, res) => {
       SELECT c.*, co.name as companyName, co.slug as companySlug
       FROM contacts c
       JOIN companies co ON c.companyId = co.id
-      WHERE c.clientToken = ? AND c.clientPortalEnabled = 1
+      WHERE c.clientToken = ? AND c.clientPortalEnabled = 1 AND (c.archivedAt IS NULL OR c.archivedAt = '')
     `).get(req.params.token);
     if (!contact) return res.status(404).json({ error: 'Espace introuvable' });
 
@@ -99,7 +99,7 @@ router.get('/:token', (req, res) => {
 router.post('/:token/message', (req, res) => {
   try {
     const contact = db.prepare(
-      'SELECT id, companyId, clientPortalEnabled FROM contacts WHERE clientToken = ? AND clientPortalEnabled = 1'
+      "SELECT id, companyId, clientPortalEnabled FROM contacts WHERE clientToken = ? AND clientPortalEnabled = 1 AND (archivedAt IS NULL OR archivedAt = '')"
     ).get(req.params.token);
     if (!contact) return res.status(404).json({ error: 'Espace introuvable' });
 
