@@ -328,13 +328,13 @@ router.post('/contacts', requireAuth, enforceCompany, requirePermission('contact
     }
     // Anti-doublon : si un contact avec le meme email OU phone existe deja dans la company → rejeter
     if (c.email) {
-      const dupEmail = db.prepare("SELECT id FROM contacts WHERE companyId = ? AND email = ? AND email != '' AND COALESCE(pipeline_stage, '') != 'perdu'").get(c.companyId, c.email.trim().toLowerCase());
+      const dupEmail = db.prepare("SELECT id FROM contacts WHERE companyId = ? AND email = ? AND email != '' AND COALESCE(pipeline_stage, '') != 'perdu' AND (archivedAt IS NULL OR archivedAt = '')").get(c.companyId, c.email.trim().toLowerCase());
       if (dupEmail) return res.json({ success: true, id: dupEmail.id, _duplicate: true });
     }
     if (c.phone) {
       const cleanPhone = c.phone.replace(/[^\d+]/g, '').slice(-9);
       if (cleanPhone.length >= 6) {
-        const candidates = db.prepare("SELECT id, phone FROM contacts WHERE companyId = ? AND phone != '' AND COALESCE(pipeline_stage, '') != 'perdu'").all(c.companyId);
+        const candidates = db.prepare("SELECT id, phone FROM contacts WHERE companyId = ? AND phone != '' AND COALESCE(pipeline_stage, '') != 'perdu' AND (archivedAt IS NULL OR archivedAt = '')").all(c.companyId);
         const dup = candidates.find(ct => ct.phone.replace(/[^\d+]/g, '').slice(-9) === cleanPhone);
         if (dup) return res.json({ success: true, id: dup.id, _duplicate: true });
       }
@@ -356,14 +356,14 @@ router.post('/contacts/check-duplicates', requireAuth, enforceCompany, (req, res
     if (emails && emails.length) {
       const placeholders = emails.map(() => '?').join(',');
       // V1.11.5 — exclure pipeline_stage='perdu' (alignement POST /contacts) — soft-delete strict
-      const rows = db.prepare(`SELECT LOWER(email) as em FROM contacts WHERE companyId = ? AND LOWER(email) IN (${placeholders}) AND email != '' AND COALESCE(pipeline_stage, '') != 'perdu'`).all(companyId, ...emails.map(e => e.toLowerCase().trim()));
+      const rows = db.prepare(`SELECT LOWER(email) as em FROM contacts WHERE companyId = ? AND LOWER(email) IN (${placeholders}) AND email != '' AND COALESCE(pipeline_stage, '') != 'perdu' AND (archivedAt IS NULL OR archivedAt = '')`).all(companyId, ...emails.map(e => e.toLowerCase().trim()));
       rows.forEach(r => dupEmails.add(r.em));
     }
     if (phones && phones.length) {
       const cleaned = phones.map(p => (p || '').replace(/[\s\-\.\(\)]/g, '')).filter(Boolean);
       if (cleaned.length) {
         // V1.11.5 — exclure pipeline_stage='perdu' (alignement POST /contacts) — soft-delete strict
-        const allPhones = db.prepare("SELECT phone FROM contacts WHERE companyId = ? AND phone != '' AND COALESCE(pipeline_stage, '') != 'perdu'").all(companyId);
+        const allPhones = db.prepare("SELECT phone FROM contacts WHERE companyId = ? AND phone != '' AND COALESCE(pipeline_stage, '') != 'perdu' AND (archivedAt IS NULL OR archivedAt = '')").all(companyId);
         const existSet = new Set(allPhones.map(r => r.phone.replace(/[\s\-\.\(\)]/g, '')));
         cleaned.forEach((cp, i) => { if (existSet.has(cp)) dupPhones.add(phones[i]); });
       }
@@ -393,7 +393,7 @@ router.post('/contacts/check-duplicate-single', requireAuth, enforceCompany, (re
       if (cleanEmail) {
         // V1.11.5 — exclure pipeline_stage='perdu' (alignement POST /contacts) — soft-delete strict
         emailMatch = db.prepare(
-          "SELECT id, name, email, phone, mobile, assignedTo, shared_with_json, pipeline_stage, companyId FROM contacts WHERE companyId = ? AND LOWER(email) = ? AND email != '' AND COALESCE(pipeline_stage, '') != 'perdu'"
+          "SELECT id, name, email, phone, mobile, assignedTo, shared_with_json, pipeline_stage, companyId FROM contacts WHERE companyId = ? AND LOWER(email) = ? AND email != '' AND COALESCE(pipeline_stage, '') != 'perdu' AND (archivedAt IS NULL OR archivedAt = '')"
         ).get(companyId, cleanEmail);
         if (emailMatch) matches.push({ ...emailMatch, matchedBy: 'email' });
       }
@@ -404,7 +404,7 @@ router.post('/contacts/check-duplicate-single', requireAuth, enforceCompany, (re
       if (cleanPhone.length >= 6) {
         // V1.11.5 — exclure pipeline_stage='perdu' (alignement POST /contacts) — soft-delete strict
         const candidates = db.prepare(
-          "SELECT id, name, email, phone, mobile, assignedTo, shared_with_json, pipeline_stage, companyId FROM contacts WHERE companyId = ? AND (phone != '' OR mobile != '') AND COALESCE(pipeline_stage, '') != 'perdu'"
+          "SELECT id, name, email, phone, mobile, assignedTo, shared_with_json, pipeline_stage, companyId FROM contacts WHERE companyId = ? AND (phone != '' OR mobile != '') AND COALESCE(pipeline_stage, '') != 'perdu' AND (archivedAt IS NULL OR archivedAt = '')"
         ).all(companyId);
         for (const c of candidates) {
           const cp = (c.phone || c.mobile || '').replace(/[^\d]/g, '').slice(-9);
@@ -485,7 +485,7 @@ router.post('/contacts/import-batch', requireAuth, enforceCompany, requirePermis
     }
 
     // Build dedup index from existing contacts (email + phone)
-    const allContacts = db.prepare("SELECT id, email, phone FROM contacts WHERE companyId = ?").all(companyId);
+    const allContacts = db.prepare("SELECT id, email, phone FROM contacts WHERE companyId = ? AND (archivedAt IS NULL OR archivedAt = '')").all(companyId);
     const emailIndex = new Map();
     const phoneIndex = new Map();
     for (const c of allContacts) {
