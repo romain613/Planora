@@ -857,68 +857,115 @@ router.put('/contacts/:id/share', requireAuth, enforceCompany, (req, res) => {
   }
 });
 
-// ─── BULK DELETE CONTACTS — accepts both POST and DELETE ───
+// ─── BULK DELETE CONTACTS — V1.12.7 REDEFINI : mode='archive' (default) | mode='permanent' (admin only) ───
+// Avant V1.12.7 : hard delete batch.
+// Apres :
+//   - mode='archive' (DEFAULT) : archive batch (UPDATE archivedAt), skip deja archives, non destructif
+//   - mode='permanent' : hard delete batch (admin/supra ONLY + body.confirm + tous deja archives)
 router.post('/contacts/bulk-delete', requireAuth, enforceCompany, requirePermission('contacts.delete'), (req, res) => {
   try {
-    const { contactIds, all, companyId } = req.body;
+    const { contactIds, all, companyId, mode = 'archive', confirm } = req.body;
     if (!companyId) return res.status(400).json({ error: 'companyId requis' });
+    if (!['archive', 'permanent'].includes(mode)) return res.status(400).json({ error: 'mode invalide (archive|permanent)' });
 
-    let idsToDelete = [];
+    // ── Resolution liste IDs (logique inchangee, scope collab/admin) ──
+    let idsToProcess = [];
     if (all) {
-      // SECURITE: non-admin ne peut supprimer en masse que SES contacts
       if (req.auth.isAdmin || req.auth.isSupra) {
-        idsToDelete = db.prepare('SELECT id FROM contacts WHERE companyId = ?').all(companyId).map(r => r.id);
+        idsToProcess = db.prepare('SELECT id FROM contacts WHERE companyId = ?').all(companyId).map(r => r.id);
       } else {
-        idsToDelete = db.prepare('SELECT id FROM contacts WHERE companyId = ? AND assignedTo = ?').all(companyId, req.auth.collaboratorId).map(r => r.id);
+        idsToProcess = db.prepare('SELECT id FROM contacts WHERE companyId = ? AND assignedTo = ?').all(companyId, req.auth.collaboratorId).map(r => r.id);
       }
     } else if (Array.isArray(contactIds) && contactIds.length > 0) {
-      // SECURITE: non-admin ne peut supprimer que SES contacts dans la liste
       if (!req.auth.isAdmin && !req.auth.isSupra) {
-        const ownIds = db.prepare(`SELECT id FROM contacts WHERE companyId = ? AND assignedTo = ? AND id IN (${contactIds.map(()=>'?').join(',')})`).all(companyId, req.auth.collaboratorId, ...contactIds).map(r=>r.id);
-        idsToDelete = ownIds;
+        idsToProcess = db.prepare(`SELECT id FROM contacts WHERE companyId = ? AND assignedTo = ? AND id IN (${contactIds.map(()=>'?').join(',')})`).all(companyId, req.auth.collaboratorId, ...contactIds).map(r=>r.id);
       } else {
-        idsToDelete = contactIds;
+        idsToProcess = contactIds;
       }
     } else {
       return res.status(400).json({ error: 'contactIds array or all:true requis' });
     }
 
-    // Recuperer les noms AVANT suppression pour le log
-    const deletedNames = idsToDelete.length <= 50
-      ? db.prepare(`SELECT id, name FROM contacts WHERE id IN (${idsToDelete.map(()=>'?').join(',')}) AND companyId = ?`).all(...idsToDelete, companyId).map(c => c.name)
-      : [];
     const origin = req.body.origin || 'unknown';
-
-    let deleted = 0;
-    for (let i = 0; i < idsToDelete.length; i += 100) {
-      const batch = idsToDelete.slice(i, i + 100);
-      const placeholders = batch.map(() => '?').join(',');
-      // V1.7.2 — soft-cancel confirmed bookings linked to these contacts before DELETE
-      db.prepare(`UPDATE bookings SET status='cancelled' WHERE contactId IN (${placeholders}) AND status='confirmed'`).run(...batch);
-      db.prepare(`DELETE FROM contacts WHERE id IN (${placeholders}) AND companyId = ?`).run(...batch, companyId);
-      deleted += batch.length;
-    }
     const who = req.auth?.name || req.auth?.collaboratorId || 'unknown';
-    logAudit(req, 'contacts_bulk_deleted', 'data', 'contact', '', `${deleted} contacts supprimes depuis ${origin} par ${who}`, { count: deleted, origin, who, names: deletedNames.slice(0, 20), ids: idsToDelete.slice(0, 20) });
-    console.log(`[CONTACTS BULK-DELETE] company=${companyId} deleted=${deleted} by=${who} origin=${origin} names=[${deletedNames.slice(0,5).join(', ')}]`);
-    res.json({ success: true, deleted, total: idsToDelete.length });
+
+    // ─────────────────────────── MODE ARCHIVE (DEFAULT) ───────────────────────────
+    if (mode === 'archive') {
+      const archivedAt = new Date().toISOString();
+      const archivedBy = req.auth.collaboratorId || '';
+      let archived = 0, skipped = 0;
+      for (let i = 0; i < idsToProcess.length; i += 100) {
+        const batch = idsToProcess.slice(i, i + 100);
+        const placeholders = batch.map(() => '?').join(',');
+        // Skip deja archives via WHERE archivedAt = '' (idempotent)
+        const result = db.prepare(`UPDATE contacts SET archivedAt = ?, archivedBy = ?, archivedReason = '' WHERE id IN (${placeholders}) AND companyId = ? AND (archivedAt IS NULL OR archivedAt = '')`).run(archivedAt, archivedBy, ...batch, companyId);
+        archived += result.changes;
+      }
+      skipped = idsToProcess.length - archived;
+      logAudit(req, 'contacts_bulk_archived', 'data', 'contact', '', `${archived} contacts archives depuis ${origin} par ${who} (${skipped} skipped)`, { count: archived, skipped, origin, who, ids: idsToProcess.slice(0, 20) });
+      console.log(`[CONTACTS BULK-ARCHIVE] company=${companyId} archived=${archived} skipped=${skipped} by=${who} origin=${origin}`);
+      return res.json({ success: true, action: 'archived', archived, skipped, total: idsToProcess.length });
+    }
+
+    // ─────────────────────────── MODE PERMANENT (admin only + confirm) ───────────────────────────
+    if (!req.auth.isAdmin && !req.auth.isSupra) {
+      return res.status(403).json({ error: 'PERMISSION_DENIED', message: 'Hard delete reserve admin/supra' });
+    }
+    if (confirm !== 'CONFIRM_HARD_DELETE') {
+      return res.status(400).json({ error: 'BODY_CONFIRMATION_REQUIRED', message: "body.confirm doit etre 'CONFIRM_HARD_DELETE'" });
+    }
+    // Verifier que TOUS les ids ciblees sont deja archives
+    if (idsToProcess.length === 0) return res.json({ success: true, action: 'hard_deleted', deleted: 0, total: 0 });
+    const placeholdersAll = idsToProcess.map(() => '?').join(',');
+    const notArchived = db.prepare(`SELECT id, name FROM contacts WHERE id IN (${placeholdersAll}) AND companyId = ? AND (archivedAt IS NULL OR archivedAt = '')`).all(...idsToProcess, companyId);
+    if (notArchived.length > 0) {
+      return res.status(409).json({ error: 'NOT_ALL_ARCHIVED', notArchivedIds: notArchived.map(c => c.id), notArchivedCount: notArchived.length, message: 'Tous les contacts doivent etre archives avant hard delete' });
+    }
+    // Cascade hard delete
+    let deleted = 0;
+    const tx = db.transaction(() => {
+      for (let i = 0; i < idsToProcess.length; i += 100) {
+        const batch = idsToProcess.slice(i, i + 100);
+        const placeholders = batch.map(() => '?').join(',');
+        db.prepare(`DELETE FROM contact_followers WHERE contactId IN (${placeholders})`).run(...batch);
+        db.prepare(`DELETE FROM recommended_actions WHERE contactId IN (${placeholders})`).run(...batch);
+        db.prepare(`DELETE FROM contact_ai_memory WHERE contactId IN (${placeholders})`).run(...batch);
+        db.prepare(`DELETE FROM contact_documents WHERE contactId IN (${placeholders})`).run(...batch);
+        const r = db.prepare(`DELETE FROM contacts WHERE id IN (${placeholders}) AND companyId = ?`).run(...batch, companyId);
+        deleted += r.changes;
+      }
+    });
+    tx();
+    logAudit(req, 'contacts_bulk_hard_deleted', 'data', 'contact', '', `${deleted} contacts hard deleted depuis ${origin} par ${who}`, { count: deleted, origin, who, ids: idsToProcess.slice(0, 20), cascade: ['contact_followers', 'recommended_actions', 'contact_ai_memory', 'contact_documents'] });
+    console.log(`[CONTACTS BULK-HARD-DELETE] company=${companyId} deleted=${deleted} by=${who} origin=${origin}`);
+    res.json({ success: true, action: 'hard_deleted', deleted, total: idsToProcess.length });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// V1.12.7 — DELETE /api/data/contacts/:id REDEFINI = alias archive (soft delete).
+// Avant V1.12.7 : hard delete + cancel bookings. Apres : archive seulement (UPDATE archivedAt).
+// Pour hard delete strict admin-only voir DELETE /:id/permanent.
+// Comportement bookings : INCHANGE (pas de cancel auto en V1.12.7 — UI 2-step V1.12.8 gerera).
 router.delete('/contacts/:id', requireAuth, requirePermission('contacts.delete'), (req, res) => {
   try {
     const id = req.params.id;
-    const record = db.prepare('SELECT companyId, name, email, phone, assignedTo FROM contacts WHERE id = ?').get(id);
-    if (!record) return res.status(404).json({ error: 'Not found' });
+    const record = db.prepare('SELECT companyId, name, email, phone, assignedTo, archivedAt FROM contacts WHERE id = ?').get(id);
+    if (!record) return res.status(404).json({ error: 'NOT_FOUND' });
     if (!req.auth.isSupra && record.companyId !== req.auth.companyId) return res.status(403).json({ error: 'Accès interdit' });
-    // SECURITE: non-admin ne peut supprimer que SES contacts
-    if (!req.auth.isAdmin && !req.auth.isSupra && record.assignedTo !== req.auth.collaboratorId) return res.status(403).json({ error: 'Accès interdit — contact assigné à un autre collaborateur' });
-    // V1.7.2 — soft-cancel confirmed bookings linked to this contact before DELETE
-    db.prepare("UPDATE bookings SET status='cancelled' WHERE contactId = ? AND status='confirmed'").run(id);
-    remove('contacts', id);
-    logAudit(req, 'contact_deleted', 'data', 'contact', id, 'Contact supprime: ' + (record.name || ''), { email: record.email, phone: record.phone });
-    console.log(`[CONTACTS] Contact ${id} DELETED definitively`);
-    res.json({ success: true, action: 'deleted' });
+    if (!req.auth.isAdmin && !req.auth.isSupra && record.assignedTo !== req.auth.collaboratorId) return res.status(403).json({ error: "Accès interdit — contact assigné à un autre collaborateur" });
+    if (record.archivedAt && record.archivedAt !== '') {
+      return res.status(409).json({ error: 'ALREADY_ARCHIVED', archivedAt: record.archivedAt });
+    }
+    const archivedAt = new Date().toISOString();
+    const archivedBy = req.auth.collaboratorId || '';
+    const reason = (req.body?.reason || '').toString().slice(0, 500);
+    db.prepare('UPDATE contacts SET archivedAt = ?, archivedBy = ?, archivedReason = ? WHERE id = ?')
+      .run(archivedAt, archivedBy, reason, id);
+    logAudit(req, 'contact_archived', 'data', 'contact', id, 'Contact archive (via DELETE alias): ' + (record.name || ''), {
+      email: record.email, phone: record.phone, reason: reason || null, via: 'DELETE /:id'
+    });
+    console.log(`[CONTACTS] Contact ${id} ARCHIVED via DELETE /:id alias by ${archivedBy} reason="${reason}"`);
+    res.json({ success: true, action: 'archived', archivedAt, archivedBy, archivedReason: reason });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -997,6 +1044,115 @@ router.post('/contacts/:id/restore', requireAuth, requirePermission('contacts.ed
     console.log(`[CONTACTS] Contact ${id} RESTORED by ${req.auth.collaboratorId || ''} (was archived ${previousArchivedAt})`);
 
     res.json({ success: true, action: 'restored', id, name: record.name || '' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// V1.12.7 — DELETE /api/data/contacts/:id/permanent
+// Hard delete strict admin/supra ONLY. Pre-conditions :
+//   - Auth admin/supra (403 sinon)
+//   - Contact existe (404)
+//   - Contact deja archive (409 NOT_ARCHIVED sinon — force archiver d'abord)
+//   - body.confirm === 'CONFIRM_HARD_DELETE' (400 sinon — securite)
+// Cascade DELETE : contacts + contact_followers + recommended_actions + contact_ai_memory + contact_documents.
+// KEEP : bookings, call_logs, sms_messages, notifications, pipeline_history, conversations, audit_logs, etc.
+router.delete('/contacts/:id/permanent', requireAuth, requirePermission('contacts.delete'), (req, res) => {
+  try {
+    const id = req.params.id;
+    if (!req.auth.isAdmin && !req.auth.isSupra) {
+      return res.status(403).json({ error: 'PERMISSION_DENIED', message: 'Hard delete reserve admin/supra' });
+    }
+    if (req.body?.confirm !== 'CONFIRM_HARD_DELETE') {
+      return res.status(400).json({ error: 'BODY_CONFIRMATION_REQUIRED', message: "body.confirm doit etre 'CONFIRM_HARD_DELETE'" });
+    }
+    const record = db.prepare('SELECT companyId, name, email, phone, archivedAt FROM contacts WHERE id = ?').get(id);
+    if (!record) return res.status(404).json({ error: 'NOT_FOUND' });
+    if (!req.auth.isSupra && record.companyId !== req.auth.companyId) {
+      return res.status(403).json({ error: 'Accès interdit' });
+    }
+    if (!record.archivedAt || record.archivedAt === '') {
+      return res.status(409).json({ error: 'NOT_ARCHIVED', message: 'Contact doit etre archive avant hard delete' });
+    }
+    // Cascade DELETE en transaction
+    const tx = db.transaction(() => {
+      db.prepare('DELETE FROM contact_followers WHERE contactId = ?').run(id);
+      db.prepare('DELETE FROM recommended_actions WHERE contactId = ?').run(id);
+      db.prepare('DELETE FROM contact_ai_memory WHERE contactId = ?').run(id);
+      db.prepare('DELETE FROM contact_documents WHERE contactId = ?').run(id);
+      db.prepare('DELETE FROM contacts WHERE id = ?').run(id);
+    });
+    tx();
+    logAudit(req, 'contact_hard_deleted', 'data', 'contact', id, 'Contact HARD DELETED: ' + (record.name || ''), {
+      email: record.email, phone: record.phone,
+      previousArchivedAt: record.archivedAt,
+      cascade: ['contact_followers', 'recommended_actions', 'contact_ai_memory', 'contact_documents']
+    });
+    console.log(`[CONTACTS] Contact ${id} HARD DELETED by ${req.auth.collaboratorId || ''} (was archived ${record.archivedAt})`);
+    res.json({
+      success: true, action: 'hard_deleted', id, name: record.name || '',
+      deletedFromTables: ['contact_followers', 'recommended_actions', 'contact_ai_memory', 'contact_documents', 'contacts']
+    });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// V1.12.7 — GET /api/data/contacts/:id/delete-preview
+// Retourne preview impact avant suppression. Pas de mutation.
+// canHardDelete = true si (admin/supra) ET (contact archived).
+router.get('/contacts/:id/delete-preview', requireAuth, requirePermission('contacts.view'), (req, res) => {
+  try {
+    const id = req.params.id;
+    const record = db.prepare('SELECT id, name, companyId, assignedTo, archivedAt FROM contacts WHERE id = ?').get(id);
+    if (!record) return res.status(404).json({ error: 'NOT_FOUND' });
+    if (!req.auth.isSupra && record.companyId !== req.auth.companyId) {
+      return res.status(403).json({ error: 'Accès interdit' });
+    }
+    if (!req.auth.isAdmin && !req.auth.isSupra && record.assignedTo !== req.auth.collaboratorId) {
+      return res.status(403).json({ error: "Accès interdit — contact assigné à un autre collaborateur" });
+    }
+    const cnt = (table) => {
+      try { return db.prepare(`SELECT COUNT(*) as c FROM ${table} WHERE contactId = ?`).get(id)?.c || 0; }
+      catch { return 0; }
+    };
+    const linkedCounts = {
+      bookings: cnt('bookings'),
+      call_logs: cnt('call_logs'),
+      call_contexts: cnt('call_contexts'),
+      call_form_responses: cnt('call_form_responses'),
+      call_transcript_archive: cnt('call_transcript_archive'),
+      sms_messages: cnt('sms_messages'),
+      conversations: cnt('conversations'),
+      client_messages: cnt('client_messages'),
+      pipeline_history: cnt('pipeline_history'),
+      contact_status_history: cnt('contact_status_history'),
+      notifications: cnt('notifications'),
+      interaction_responses: cnt('interaction_responses'),
+      ai_copilot_analyses: cnt('ai_copilot_analyses'),
+      system_anomaly_logs: cnt('system_anomaly_logs'),
+      contact_followers: cnt('contact_followers'),
+      recommended_actions: cnt('recommended_actions'),
+      contact_ai_memory: cnt('contact_ai_memory'),
+      contact_documents: cnt('contact_documents')
+    };
+    const willBeDeleted = ['contact_followers', 'recommended_actions', 'contact_ai_memory', 'contact_documents', 'contacts'];
+    const willBePreserved = [
+      'bookings', 'call_logs', 'call_contexts', 'call_form_responses', 'call_transcript_archive',
+      'sms_messages', 'conversations', 'client_messages', 'pipeline_history', 'contact_status_history',
+      'notifications', 'interaction_responses', 'ai_copilot_analyses', 'system_anomaly_logs', 'audit_logs'
+    ];
+    const archived = !!(record.archivedAt && record.archivedAt !== '');
+    const isAdminOrSupra = !!(req.auth.isAdmin || req.auth.isSupra);
+    const canHardDelete = archived && isAdminOrSupra;
+    res.json({
+      contactId: record.id,
+      contactName: record.name || '',
+      archived,
+      archivedAt: record.archivedAt || '',
+      linkedCounts,
+      willBeDeleted,
+      willBePreserved,
+      canHardDelete,
+      requiresAdmin: !isAdminOrSupra,
+      requiresArchive: !archived
+    });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
