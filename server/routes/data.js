@@ -926,6 +926,45 @@ router.post('/contacts/:id/archive', requireAuth, requirePermission('contacts.de
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// V1.12.3 — POST /api/data/contacts/:id/restore
+// Desarchive un contact (annule l'archive, ne touche pas aux autres champs).
+// Mode "dark" V1.12.3 : pas encore branche cote frontend (V1.12.8).
+// Acces : requireAuth + requirePermission('contacts.edit') + companyId match + ownership
+// Symetrique avec /archive : 400 NOT_ARCHIVED si contact deja actif.
+router.post('/contacts/:id/restore', requireAuth, requirePermission('contacts.edit'), (req, res) => {
+  try {
+    const id = req.params.id;
+
+    const record = db.prepare('SELECT companyId, name, email, phone, assignedTo, archivedAt, archivedBy, archivedReason FROM contacts WHERE id = ?').get(id);
+    if (!record) return res.status(404).json({ error: 'NOT_FOUND' });
+    if (!req.auth.isSupra && record.companyId !== req.auth.companyId) {
+      return res.status(403).json({ error: 'Accès interdit' });
+    }
+    // SECURITE : non-admin ne peut restaurer que SES contacts (symetrie avec /archive)
+    if (!req.auth.isAdmin && !req.auth.isSupra && record.assignedTo !== req.auth.collaboratorId) {
+      return res.status(403).json({ error: "Accès interdit — contact assigné à un autre collaborateur" });
+    }
+    // Refus si pas archive
+    if (!record.archivedAt || record.archivedAt === '') {
+      return res.status(400).json({ error: 'NOT_ARCHIVED' });
+    }
+
+    const previousArchivedAt = record.archivedAt;
+    const previousArchivedBy = record.archivedBy || '';
+    const previousArchivedReason = record.archivedReason || '';
+    db.prepare("UPDATE contacts SET archivedAt = '', archivedBy = '', archivedReason = '' WHERE id = ?")
+      .run(id);
+
+    logAudit(req, 'contact_restored', 'data', 'contact', id, 'Contact restaure: ' + (record.name || ''), {
+      email: record.email, phone: record.phone,
+      previousArchivedAt, previousArchivedBy, previousArchivedReason: previousArchivedReason || null
+    });
+    console.log(`[CONTACTS] Contact ${id} RESTORED by ${req.auth.collaboratorId || ''} (was archived ${previousArchivedAt})`);
+
+    res.json({ success: true, action: 'restored', id, name: record.name || '' });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 // ─── PIPELINE STAGES (custom statuses) ───
 router.get('/pipeline-stages', requireAuth, enforceCompany, requirePermission('pipeline.view'), (req, res) => {
   try {
