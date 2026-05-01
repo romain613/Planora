@@ -58,6 +58,7 @@ router.post('/', requireAuth, enforceCompany, async (req, res) => {
       chat_enabled: c.chat_enabled !== undefined ? c.chat_enabled : 1,
       sms_enabled: c.sms_enabled || 0,
       can_delete_contacts: c.can_delete_contacts || 0,
+      can_hard_delete_contacts: c.can_hard_delete_contacts || 0,
       secure_ia_phone: c.secure_ia_phone || 0,
       secure_ia_words_json: c.secure_ia_words_json || '[]',
       ai_copilot_enabled: c.ai_copilot_enabled || 0,
@@ -158,7 +159,7 @@ router.put('/:id', requireAuth, async (req, res) => {
       data.password = await bcrypt.hash(data.password, 10);
     }
     // Whitelist allowed fields to prevent SQL injection via key names
-    const allowedFields = ['name','email','role','priority','color','code','password','phone','maxWeek','maxMonth','slackId','timezone','chat_enabled','sms_enabled','can_delete_contacts','google_tokens_json','google_email','google_last_sync','google_events_private','companyId','secure_ia_phone','secure_ia_words_json','ai_copilot_enabled','ai_copilot_role','ai_copilot_objective','ai_copilot_target','ai_copilot_level','ai_role_type','ai_service_type','ai_main_mission','ai_call_type_default','ai_call_goal_default','ai_target_default','ai_language','ai_tone_style','ai_script_trame'];
+    const allowedFields = ['name','email','role','priority','color','code','password','phone','maxWeek','maxMonth','slackId','timezone','chat_enabled','sms_enabled','can_delete_contacts','can_hard_delete_contacts','google_tokens_json','google_email','google_last_sync','google_events_private','companyId','secure_ia_phone','secure_ia_words_json','ai_copilot_enabled','ai_copilot_role','ai_copilot_objective','ai_copilot_target','ai_copilot_level','ai_role_type','ai_service_type','ai_main_mission','ai_call_type_default','ai_call_goal_default','ai_target_default','ai_language','ai_tone_style','ai_script_trame'];
     const safeData = {};
     for (const k of Object.keys(data)) {
       if (allowedFields.includes(k)) safeData[k] = data[k];
@@ -198,7 +199,7 @@ router.put('/:id', requireAuth, async (req, res) => {
     values.push(req.params.id);
     db.prepare(`UPDATE collaborators SET ${sets} WHERE id = ?`).run(...values);
     // Audit + entity history
-    trackChanges('collaborator', req.params.id, beforeUpdate, safeData, req.auth?.collaboratorId || '', req.auth?.companyId || '', ['name','email','role','phone','roleId','can_delete_contacts','chat_enabled','sms_enabled','ai_copilot_enabled','secure_ia_phone']);
+    trackChanges('collaborator', req.params.id, beforeUpdate, safeData, req.auth?.collaboratorId || '', req.auth?.companyId || '', ['name','email','role','phone','roleId','can_delete_contacts','can_hard_delete_contacts','chat_enabled','sms_enabled','ai_copilot_enabled','secure_ia_phone']);
     logAudit(req, 'collaborator_updated', 'admin', 'collaborator', req.params.id, 'Collaborateur modifie: ' + (beforeUpdate?.name || ''), { fields: Object.keys(safeData) });
     res.json({ success: true, aiChangesLogged: aiChanges.length });
   } catch (err) {

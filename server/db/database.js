@@ -340,6 +340,8 @@ try { db.exec("ALTER TABLE collaborators ADD COLUMN chat_enabled INTEGER DEFAULT
 try { db.exec("ALTER TABLE collaborators ADD COLUMN sms_enabled INTEGER DEFAULT 0"); } catch {}
 // Permission suppression contacts (0 = interdit, 1 = autorise)
 try { db.exec("ALTER TABLE collaborators ADD COLUMN can_delete_contacts INTEGER DEFAULT 0"); } catch {}
+// V1.12.9 — Permission hard delete (suppression definitive irreversible des contacts archives)
+try { db.exec("ALTER TABLE collaborators ADD COLUMN can_hard_delete_contacts INTEGER DEFAULT 0"); } catch {}
 // Secure IA Phone — AI-powered forbidden words detection
 try { db.exec("ALTER TABLE collaborators ADD COLUMN secure_ia_phone INTEGER DEFAULT 0"); } catch {}
 try { db.exec("ALTER TABLE collaborators ADD COLUMN secure_ia_words_json TEXT DEFAULT '[]'"); } catch {}

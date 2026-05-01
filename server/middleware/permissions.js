@@ -10,7 +10,7 @@ const CACHE_TTL = 60_000;
  */
 export const ALL_PERMISSIONS = [
   // Contacts
-  'contacts.view', 'contacts.create', 'contacts.edit', 'contacts.delete', 'contacts.export', 'contacts.import',
+  'contacts.view', 'contacts.create', 'contacts.edit', 'contacts.delete', 'contacts.hard_delete', 'contacts.export', 'contacts.import',
   // Bookings
   'bookings.view', 'bookings.create', 'bookings.edit', 'bookings.delete',
   // Calendars
@@ -53,8 +53,9 @@ function getDefaultMemberPermissions(collaboratorId) {
 
   // Map legacy toggles
   try {
-    const collab = db.prepare('SELECT can_delete_contacts, chat_enabled, sms_enabled, ai_copilot_enabled, ai_copilot_level, secure_ia_phone FROM collaborators WHERE id = ?').get(collaboratorId);
+    const collab = db.prepare('SELECT can_delete_contacts, can_hard_delete_contacts, chat_enabled, sms_enabled, ai_copilot_enabled, ai_copilot_level, secure_ia_phone FROM collaborators WHERE id = ?').get(collaboratorId);
     if (collab?.can_delete_contacts) perms.add('contacts.delete');
+    if (collab?.can_hard_delete_contacts) perms.add('contacts.hard_delete');
     if (collab?.chat_enabled) { perms.add('chat.send'); perms.add('chat.view'); }
     if (collab?.sms_enabled) perms.add('sms.send');
     if (collab?.ai_copilot_enabled || (collab?.ai_copilot_level && collab.ai_copilot_level !== 'off')) perms.add('ai_copilot.use');
