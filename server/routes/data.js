@@ -1047,20 +1047,17 @@ router.post('/contacts/:id/restore', requireAuth, requirePermission('contacts.ed
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// V1.12.7 — DELETE /api/data/contacts/:id/permanent
-// Hard delete strict admin/supra ONLY. Pre-conditions :
-//   - Auth admin/supra (403 sinon)
+// V1.12.9.b — DELETE /api/data/contacts/:id/permanent
+// Hard delete autorise admin/supra OU collab avec contacts.hard_delete. Pre-conditions :
+//   - Permission contacts.hard_delete (admin/supra bypass via wildcard '*' ; collab via can_hard_delete_contacts=1)
 //   - Contact existe (404)
 //   - Contact deja archive (409 NOT_ARCHIVED sinon — force archiver d'abord)
 //   - body.confirm === 'CONFIRM_HARD_DELETE' (400 sinon — securite)
 // Cascade DELETE : contacts + contact_followers + recommended_actions + contact_ai_memory + contact_documents.
 // KEEP : bookings, call_logs, sms_messages, notifications, pipeline_history, conversations, audit_logs, etc.
-router.delete('/contacts/:id/permanent', requireAuth, requirePermission('contacts.delete'), (req, res) => {
+router.delete('/contacts/:id/permanent', requireAuth, requirePermission('contacts.hard_delete'), (req, res) => {
   try {
     const id = req.params.id;
-    if (!req.auth.isAdmin && !req.auth.isSupra) {
-      return res.status(403).json({ error: 'PERMISSION_DENIED', message: 'Hard delete reserve admin/supra' });
-    }
     if (req.body?.confirm !== 'CONFIRM_HARD_DELETE') {
       return res.status(400).json({ error: 'BODY_CONFIRMATION_REQUIRED', message: "body.confirm doit etre 'CONFIRM_HARD_DELETE'" });
     }
