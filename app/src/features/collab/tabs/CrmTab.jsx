@@ -917,7 +917,22 @@ const CrmTab = () => {
       const sc = getCollabLeadScore(ct);
       const contactBookings = (bookings||[]).filter(b=>b.contactId===ct.id && b.collaboratorId===collab.id).sort((a,b) => (b.date||'').localeCompare(a.date||'') || (b.time||'').localeCompare(a.time||''));
       const contactCalls = ((typeof voipCallLogs!=='undefined'?voipCallLogs:null)||[]).filter(cl=>cl.contactId===ct.id);
+      // V1.12.8.c — lecture seule si contact archivé
+      const isArchived = ct.archivedAt && ct.archivedAt !== '';
       return (<>
+        {/* V1.12.8.c — banner contact archivé */}
+        {isArchived && (
+          <div style={{padding:'10px 14px',background:'#64748B12',border:'1px dashed #64748B',borderRadius:8,marginBottom:14,display:'flex',alignItems:'flex-start',gap:10}}>
+            <I n="archive" s={18} style={{color:'#64748B',marginTop:2}}/>
+            <div style={{flex:1}}>
+              <div style={{fontSize:12,fontWeight:700,color:'#64748B'}}>📦 Contact archivé</div>
+              <div style={{fontSize:11,color:T.text3,marginTop:2,lineHeight:1.5}}>
+                Archivé le {new Date(ct.archivedAt).toLocaleDateString('fr-FR')}{ct.archivedReason ? ' · '+ct.archivedReason : ''}.<br/>
+                Lecture seule. Cliquez « Restaurer » pour modifier.
+              </div>
+            </div>
+          </div>
+        )}
         {!ct._linked && (
           <div style={{padding:"10px 16px",borderRadius:10,background:T.accent+"10",border:`1px solid ${T.accent}33`,marginBottom:16,display:"flex",alignItems:"center",justifyContent:"space-between"}}>
             <span style={{fontSize:12,color:T.accent,fontWeight:600}}>Ce contact n'est pas encore dans le CRM</span>
@@ -1039,6 +1054,7 @@ const CrmTab = () => {
                 const activeIcon=displayAction?.icon||savedAction?.icon||'zap';
                 const activeLabel=savedAction?(ct.next_action_label||savedAction.label):priorityAction?.label||'Aucune action';
                 const handleSetAction=(typeId)=>{
+                  if(isArchived){showNotif("Contact archivé — Restaurer pour modifier","warning");return;}
                   const at=ACTION_TYPES.find(a=>a.id===typeId);
                   if(!at)return;
                   const updates={next_action_type:typeId,next_action_label:at.label,next_action_done:0,next_action_set_by:collab?.id||'',next_action_set_at:new Date().toISOString()};
@@ -1046,6 +1062,7 @@ const CrmTab = () => {
                   showNotif('Action définie : '+at.label,'success');
                 };
                 const handleDoneAction=()=>{
+                  if(isArchived){showNotif("Contact archivé — Restaurer pour modifier","warning");return;}
                   handleCollabUpdateContact(ct.id,{next_action_done:1,lastVisit:new Date().toISOString()});
                   showNotif('✅ Action terminée','success');
                 };
@@ -1085,10 +1102,11 @@ const CrmTab = () => {
         {/* Pipeline stage selector + Quick actions */}
         {ct._linked && (
           <div style={{display:"flex",gap:8,marginBottom:20,paddingBottom:16,borderBottom:`1px solid ${T.border}`,flexWrap:"wrap",alignItems:"center"}}>
-            <select value={ct.pipeline_stage||"nouveau"} onChange={e=>{
+            <select disabled={isArchived} value={ct.pipeline_stage||"nouveau"} onChange={e=>{
+              if(isArchived)return;
               const ns=e.target.value;
               handlePipelineStageChange(ct.id,ns);
-            }} style={{padding:"6px 12px",borderRadius:8,border:`1.5px solid ${stg.color}`,background:stg.color+"12",color:T.text,fontSize:12,fontWeight:600,fontFamily:"inherit",cursor:"pointer"}}>
+            }} style={{padding:"6px 12px",borderRadius:8,border:`1.5px solid ${stg.color}`,background:stg.color+"12",color:T.text,fontSize:12,fontWeight:600,fontFamily:"inherit",cursor:isArchived?"not-allowed":"pointer",opacity:isArchived?0.5:1}}>
               {PIPELINE_STAGES.map(st=><option key={st.id} value={st.id}>{st.label}</option>)}
             </select>
             {ct.email&&<Btn small onClick={()=>window.open("mailto:"+ct.email)}><I n="mail" s={13}/> Email</Btn>}
@@ -1136,8 +1154,8 @@ const CrmTab = () => {
                   {ct.contract_date && <div><div style={{fontSize:9,color:T.text3,fontWeight:600}}>DATE</div><div style={{fontSize:13,fontWeight:600,color:T.text}}>{new Date(ct.contract_date).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})}{ct.contract_date.includes('T')?' à '+new Date(ct.contract_date).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}):''}</div></div>}
                 </div>
                 <div style={{borderTop:`1px solid ${T.border}`,paddingTop:8,display:'flex',gap:6,flexWrap:'wrap'}}>
-                  <Btn small onClick={()=>{const amt=prompt('Nouveau montant du contrat (€) :',ct.contract_amount||'');if(amt===null)return;const v=parseFloat(amt);if(isNaN(v)||v<0){showNotif('Montant invalide','danger');return;}handleCollabUpdateContact(ct.id,{contract_amount:v});showNotif(`Montant mis à jour : ${v.toLocaleString('fr-FR')} €`,'success');}} style={{background:T.accentBg,color:T.accent,border:`1px solid ${T.accent}30`}}><I n="edit-3" s={12}/> Modifier montant</Btn>
-                  <Btn small style={{background:'#EF444415',color:'#EF4444',border:'1px solid #EF444430'}} onClick={()=>{const reason=prompt('Raison de l\'annulation du contrat :');if(reason===null)return;if(!reason.trim()){showNotif('Motif obligatoire','danger');return;}api(`/api/data/contacts/${ct.id}/cancel-contract`,{method:'PUT',body:{reason:reason.trim()}}).then(r=>{if(r?.success){setContacts(p=>p.map(c=>c.id===ct.id?{...c,contract_status:'cancelled',contract_cancel_reason:reason.trim()}:c));if((typeof selectedCrmContact!=='undefined'?selectedCrmContact:null)?.id===ct.id)(typeof setSelectedCrmContact==='function'?setSelectedCrmContact:function(){})(p=>p?{...p,contract_status:'cancelled',contract_cancel_reason:reason.trim()}:p);showNotif('Contrat annulé','success');}else{showNotif(r?.error||'Erreur','danger');}}).catch(()=>showNotif('Erreur réseau','danger'));}}><I n="x-circle" s={12}/> Annuler le contrat</Btn>
+                  <Btn small disabled={isArchived} onClick={()=>{if(isArchived)return;const amt=prompt('Nouveau montant du contrat (€) :',ct.contract_amount||'');if(amt===null)return;const v=parseFloat(amt);if(isNaN(v)||v<0){showNotif('Montant invalide','danger');return;}handleCollabUpdateContact(ct.id,{contract_amount:v});showNotif(`Montant mis à jour : ${v.toLocaleString('fr-FR')} €`,'success');}} style={{background:T.accentBg,color:T.accent,border:`1px solid ${T.accent}30`,opacity:isArchived?0.5:1,cursor:isArchived?'not-allowed':'pointer'}}><I n="edit-3" s={12}/> Modifier montant</Btn>
+                  <Btn small disabled={isArchived} style={{background:'#EF444415',color:'#EF4444',border:'1px solid #EF444430',opacity:isArchived?0.5:1,cursor:isArchived?'not-allowed':'pointer'}} onClick={()=>{if(isArchived)return;const reason=prompt('Raison de l\'annulation du contrat :');if(reason===null)return;if(!reason.trim()){showNotif('Motif obligatoire','danger');return;}api(`/api/data/contacts/${ct.id}/cancel-contract`,{method:'PUT',body:{reason:reason.trim()}}).then(r=>{if(r?.success){setContacts(p=>p.map(c=>c.id===ct.id?{...c,contract_status:'cancelled',contract_cancel_reason:reason.trim()}:c));if((typeof selectedCrmContact!=='undefined'?selectedCrmContact:null)?.id===ct.id)(typeof setSelectedCrmContact==='function'?setSelectedCrmContact:function(){})(p=>p?{...p,contract_status:'cancelled',contract_cancel_reason:reason.trim()}:p);showNotif('Contrat annulé','success');}else{showNotif(r?.error||'Erreur','danger');}}).catch(()=>showNotif('Erreur réseau','danger'));}}><I n="x-circle" s={12}/> Annuler le contrat</Btn>
                 </div>
               </div>
             )}
@@ -1258,7 +1276,7 @@ const CrmTab = () => {
               <>
                 {/* ── Coordonnées — même structure que pipeline ── */}
                 {(()=>{
-                  const _cu=(field,val)=>{setSelectedCrmContact(p=>({...p,[field]:val}));setContacts(p=>p.map(c=>c.id===ct.id?{...c,[field]:val}:c));_T.crmSync?.({[field]:val});clearTimeout(collabNotesTimerRef.current);collabNotesTimerRef.current=setTimeout(()=>api(`/api/data/contacts/${ct.id}`,{method:'PUT',body:{[field]:val,companyId:company?.id}}),500);};
+                  const _cu=(field,val)=>{if(isArchived){showNotif("Contact archivé — Restaurer pour modifier","warning");return;}setSelectedCrmContact(p=>({...p,[field]:val}));setContacts(p=>p.map(c=>c.id===ct.id?{...c,[field]:val}:c));_T.crmSync?.({[field]:val});clearTimeout(collabNotesTimerRef.current);collabNotesTimerRef.current=setTimeout(()=>api(`/api/data/contacts/${ct.id}`,{method:'PUT',body:{[field]:val,companyId:company?.id}}),500);};
                   const _cf=(icon,field,placeholder,opts={})=><div style={{display:'flex',alignItems:'center',gap:6,padding:'6px 10px',borderRadius:8,border:`1px solid ${T.border}40`,background:T.card,...(opts.full?{gridColumn:'1 / -1'}:{})}}>
                     <I n={icon} s={13} style={{color:T.text3,flexShrink:0}}/>
                     <input value={ct[field]||''} onChange={e=>_cu(field,e.target.value)} onBlur={()=>{if((field==='phone'||field==='mobile')&&ct[field]){const n=ct[field].replace(/\s/g,'');let ph=ct[field];if(/^0[1-9]\d{8}$/.test(n)){ph='+33'+n.slice(1);_cu(field,ph);}else if(/^[1-9]\d{8}$/.test(n)){ph='+33'+n;_cu(field,ph);}}}} placeholder={placeholder} style={{fontSize:13,border:'none',padding:'2px 0',background:'transparent',color:ct[field]?T.text:'#CBD5E1',fontFamily:'inherit',outline:'none',width:'100%'}}/>
@@ -1316,12 +1334,13 @@ const CrmTab = () => {
                 <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:12}}>
                   <span style={{fontSize:11,fontWeight:700,color:T.text3}}>Note client :</span>
                   {[1,2,3,4,5].map(star => <span key={star} onClick={()=>{
+                    if(isArchived){showNotif("Contact archivé — Restaurer pour modifier","warning");return;}
                     const v = ct.rating === star ? 0 : star;
                     setSelectedCrmContact(p=>({...p,rating:v}));
                     setContacts(p=>p.map(c=>c.id===ct.id?{...c,rating:v}:c));
                     _T.crmSync?.({rating:v});
                     api(`/api/data/contacts/${ct.id}`,{method:'PUT',body:{rating:v,companyId:company?.id}});
-                  }} style={{cursor:'pointer',fontSize:18,color:star<=(ct.rating||0)?'#F59E0B':'#D1D5DB'}}>{star<=(ct.rating||0)?'★':'☆'}</span>)}
+                  }} style={{cursor:isArchived?'not-allowed':'pointer',fontSize:18,color:star<=(ct.rating||0)?'#F59E0B':'#D1D5DB',opacity:isArchived?0.5:1}}>{star<=(ct.rating||0)?'★':'☆'}</span>)}
                 </div>
 
                 {/* Tags */}
@@ -1330,7 +1349,7 @@ const CrmTab = () => {
                   {(Array.isArray(ct.tags)?ct.tags:(() => { try { return JSON.parse(ct.tags_json||'[]'); } catch { return []; } })()).map((tag,i)=>
                     <span key={i} style={{fontSize:10,padding:'2px 8px',borderRadius:6,background:T.accentBg,color:T.accent,fontWeight:600}}>{tag}</span>
                   )}
-                  <span onClick={()=>{const t=prompt('Nouveau tag :');if(!t) return;const tags=[...(ct.tags||[]),t];setSelectedCrmContact(p=>({...p,tags}));setContacts(p=>p.map(c=>c.id===ct.id?{...c,tags}:c));api(`/api/data/contacts/${ct.id}`,{method:'PUT',body:{tags_json:JSON.stringify(tags),companyId:company?.id}});}} style={{fontSize:10,padding:'2px 8px',borderRadius:6,border:'1px dashed '+T.border,color:T.accent,cursor:'pointer',fontWeight:600}}>+ Tag</span>
+                  {!isArchived && <span onClick={()=>{const t=prompt('Nouveau tag :');if(!t) return;const tags=[...(ct.tags||[]),t];setSelectedCrmContact(p=>({...p,tags}));setContacts(p=>p.map(c=>c.id===ct.id?{...c,tags}:c));api(`/api/data/contacts/${ct.id}`,{method:'PUT',body:{tags_json:JSON.stringify(tags),companyId:company?.id}});}} style={{fontSize:10,padding:'2px 8px',borderRadius:6,border:'1px dashed '+T.border,color:T.accent,cursor:'pointer',fontWeight:600}}>+ Tag</span>}
                 </div>
 
                 {/* Custom Fields (company + collab) */}
@@ -1398,15 +1417,16 @@ const CrmTab = () => {
                 })()}
                 {/* V1.11.3 — Données enrichies (sections lisibles, badges, liens) — synchronisé avec Pipeline Live > Info */}
                 <ContactInfoEnriched T={T} contact={ct}/>
-                <textarea value={ct.notes||""} onChange={e=>{
+                <textarea readOnly={isArchived} value={ct.notes||""} onChange={e=>{
+                  if(isArchived)return;
                   const v=e.target.value;
                   setSelectedCrmContact(p=>({...p,notes:v}));
                   setContacts(p=>p.map(c=>c.id===ct.id?{...c,notes:v}:c));
                   _T.crmSync?.({notes:v});
                   clearTimeout(collabNotesTimerRef.current);
                   collabNotesTimerRef.current=setTimeout(()=>api(`/api/data/contacts/${ct.id}`,{method:"PUT",body:{notes:v,companyId:company?.id}}),800);
-                }} placeholder="Notes, infos commerciales, suivi..." style={{width:"100%",minHeight:70,maxHeight:140,border:`1px solid ${T.border}`,borderRadius:8,padding:10,fontSize:12,fontFamily:"inherit",resize:"vertical",background:T.bg,color:T.text,outline:"none"}}/>
-                <p style={{fontSize:10,color:T.text3,marginTop:4}}>Sauvegarde automatique</p>
+                }} placeholder={isArchived?"Notes (lecture seule — contact archivé)":"Notes, infos commerciales, suivi..."} style={{width:"100%",minHeight:70,maxHeight:140,border:`1px solid ${T.border}`,borderRadius:8,padding:10,fontSize:12,fontFamily:"inherit",resize:"vertical",background:isArchived?T.surface:T.bg,color:T.text,outline:"none",cursor:isArchived?'not-allowed':'text'}}/>
+                <p style={{fontSize:10,color:T.text3,marginTop:4}}>{isArchived?'📦 Lecture seule (contact archivé)':'Sauvegarde automatique'}</p>
 
                 {/* V4: Debug mode — Historique des statuts */}
                 <HookIsolator>{()=>{
@@ -1685,11 +1705,12 @@ const CrmTab = () => {
                   const isSharedWith=Array.isArray(ct.shared_with)&&ct.shared_with.includes(co.id);
                   return (
                     <div key={co.id} onClick={()=>{
+                      if(isArchived){showNotif("Contact archivé — Restaurer pour modifier","warning");return;}
                       const newShared=isSharedWith?(ct.shared_with||[]).filter(id=>id!==co.id):[...(ct.shared_with||[]),co.id];
                       handleCollabUpdateContact(ct.id,{shared_with:newShared});
                       setSelectedCrmContact(p=>({...p,shared_with:newShared}));
                       showNotif(isSharedWith?`Partage retiré pour ${co.name}`:`Contact partagé avec ${co.name}`);
-                    }} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",borderRadius:10,cursor:"pointer",background:isSharedWith?T.accent+"08":T.bg,border:`1.5px solid ${isSharedWith?T.accent+"44":T.border}`,transition:"all .2s"}} onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>{if(!isSharedWith)e.currentTarget.style.borderColor=T.border;}}>
+                    }} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 14px",borderRadius:10,cursor:isArchived?"not-allowed":"pointer",background:isSharedWith?T.accent+"08":T.bg,border:`1.5px solid ${isSharedWith?T.accent+"44":T.border}`,transition:"all .2s",opacity:isArchived?0.5:1}} onMouseEnter={e=>{if(!isArchived)e.currentTarget.style.borderColor=T.accent;}} onMouseLeave={e=>{if(!isSharedWith)e.currentTarget.style.borderColor=T.border;}}>
                       <Avatar name={co.name} color={co.color||T.accent} size={32}/>
                       <div style={{flex:1}}>
                         <div style={{fontSize:13,fontWeight:600,color:T.text}}>{co.name}</div>
