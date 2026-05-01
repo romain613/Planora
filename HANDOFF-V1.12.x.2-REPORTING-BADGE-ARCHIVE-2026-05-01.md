@@ -192,19 +192,37 @@ Bundle prod : index-BPStrsKS.js
 
 ---
 
-## 10. Tests UI fonctionnels MH (à valider)
+## 10. Tests UI fonctionnels MH
 
-| # | Test | Étapes | Attendu |
-|---|---|---|---|
-| F1 | Reporting Thomas Reçus | Login Thomas → Reporting RDV → onglet "Reçus" | 0 RDV (cancelled masqués V1.12.x.1) |
-| F2 | Reporting Thomas Transmis | onglet "Transmis" | 1+ RDV confirmés visibles |
-| F3 | **Badge archivé visible** | Si un RDV transmis a contact archivé | Badge gris "📦 Contact archivé" à côté du nom |
-| F4 | **Tooltip archivé** | Hover sur badge | Tooltip "Ce contact est archivé mais ce RDV reste visible..." |
-| F5 | Régression contact actif | RDV avec contact actif | Pas de badge, ligne normale |
-| F6 | **Confirm Archiver simple** | Archiver contact SANS RDV futur | Message "Archiver X ?\n\nLe contact sera masqué mais récupérable." |
-| F7 | **Confirm Archiver avec RDV** | Archiver contact AVEC N RDV confirmés futurs | Message enrichi mentionne N RDV + Agenda/Reporting + traçabilité |
-| F8 | Régression Pipeline / Agenda | Vérifier autres surfaces | INCHANGÉES |
-| F9 | Régression onglet Archivés V1.12.8.b | Onglet Archivés CRM | INCHANGÉ |
+| # | Test | Étapes | Attendu | Validation MH |
+|---|---|---|---|:---:|
+| F1 | Reporting Thomas Reçus | Login Thomas → Reporting RDV → onglet "Reçus" | 0 RDV (cancelled masqués V1.12.x.1) | — |
+| F2 | Reporting Thomas Transmis | onglet "Transmis" | 1+ RDV confirmés visibles | — |
+| F3 | **Badge archivé visible** | Si un RDV transmis a contact archivé | Badge gris "📦 Contact archivé" à côté du nom | ✅ **Validé visuellement par MH 2026-05-01** |
+| F4 | **Tooltip archivé** | Hover sur badge | Tooltip "Ce contact est archivé mais ce RDV reste visible..." | — |
+| F5 | Régression contact actif | RDV avec contact actif | Pas de badge, ligne normale | — |
+| F6 | **Confirm Archiver simple** | Archiver contact SANS RDV futur | Message "Archiver X ?\n\nLe contact sera masqué mais récupérable." | — |
+| F7 | **Confirm Archiver avec RDV** | Archiver contact AVEC N RDV confirmés futurs | Message enrichi mentionne N RDV + Agenda/Reporting + traçabilité | — |
+| F8 | Régression Pipeline / Agenda | Vérifier autres surfaces | INCHANGÉES | — |
+| F9 | Régression onglet Archivés V1.12.8.b | Onglet Archivés CRM | INCHANGÉ | — |
+
+---
+
+## 10.bis. Sécurisation post-validation 2026-05-01
+
+Post validation visuelle MH du badge "📦 Contact archivé" (F3 PASS), procédure de sécurisation :
+
+| Étape | Résultat |
+|---|:---:|
+| Git status propre vis-à-vis V1.12.x.2 | ✅ HEAD `3aad1931` = origin/clean-main |
+| Tag `v1.12.x.2-reporting-badge-archive` présent | ✅ |
+| Healthcheck prod | ✅ status=ok uptime 3423s (57min) |
+| PM2 stability | ✅ online / unstable_restarts 0 / restarts 104 |
+| Bundle prod servi | ✅ `index-BPStrsKS.js` |
+| Backup post-validation DB | ✅ md5 `6e90d278` (drift normal vs pré, activité user) |
+| Backup post-validation bookings.js | ✅ md5 `b804f93b` (identique post-deploy = code inchangé hors scope) |
+| Backup post-validation httpdocs | ✅ md5 `f7f38359` (identique post-deploy = code inchangé hors scope) |
+| Path backup validated | `/var/backups/planora/v112x2-validated/` |
 
 ---
 
