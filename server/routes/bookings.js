@@ -539,13 +539,20 @@ router.get('/reporting', requireAuth, enforceCompany, (req, res) => {
     // Branche admin/supra supprimee : "received"/"sent" sont par definition une
     // vue perspective du collab connecte. Une vue admin cross-collab doit aller
     // dans un endpoint dedie (futur ?role=admin-overview), pas melangee ici.
+    // V1.12.x.1 — clean reporting :
+    //   P1 status='confirmed' (cancelled = pas de reporting)
+    //   P2 INNER JOIN contacts (exclure ghosts hard deleted pre-V1.12.7)
+    //   PRESERVE V1.12.5.d : pas de filtre archivedAt (contacts archivés OK pour
+    //                        preserver historique reporting + capacite receiver)
     const targetCol = role === 'received' ? 'agendaOwnerId' : 'bookedByCollaboratorId';
     const rows = db.prepare(
       `SELECT b.* FROM bookings b
        JOIN calendars c ON b.calendarId = c.id
+       INNER JOIN contacts ct ON b.contactId = ct.id
        WHERE c.companyId = ?
          AND b.bookingType = 'share_transfer'
          AND b.${targetCol} = ?
+         AND b.status = 'confirmed'
        ORDER BY b.date DESC, b.time DESC`
     ).all(companyId, cid);
 
