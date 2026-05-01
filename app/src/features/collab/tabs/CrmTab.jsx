@@ -96,6 +96,21 @@ const CrmTab = () => {
   collabContactTags, collabPaginatedContacts,
   } = ctx;
 
+  // V1.12.8.b — sous-onglet Archivés (state + lazy fetch)
+  const [crmActiveSubtab, setCrmActiveSubtab] = useState('active');
+  const [archivedContacts, setArchivedContacts] = useState([]);
+  const [loadingArchived, setLoadingArchived] = useState(false);
+  useEffect(() => {
+    if (crmActiveSubtab !== 'archived' || !company?.id) return;
+    setLoadingArchived(true);
+    api(`/api/data/contacts/archived?companyId=${company.id}`).then(rows => {
+      setArchivedContacts(Array.isArray(rows) ? rows : []);
+    }).catch(() => {
+      showNotif('Erreur chargement archivés', 'danger');
+      setArchivedContacts([]);
+    }).finally(() => setLoadingArchived(false));
+  }, [crmActiveSubtab, company?.id]);
+
   return (
     <>
 <div>
@@ -159,6 +174,45 @@ const CrmTab = () => {
     </div>
   </div>
   <p style={{fontSize:13,color:T.text2,marginBottom:16}}>Fiche contact avec historique complet, tags, notes, documents, satisfaction. <strong>{myCrmContacts.length}</strong> contact{myCrmContacts.length>1?"s":""}</p>
+
+  {/* V1.12.8.b — Toggle Actifs / Archivés */}
+  <div style={{display:'flex',gap:8,marginBottom:14,borderBottom:`1px solid ${T.border}`,paddingBottom:10}}>
+    <Btn small onClick={()=>setCrmActiveSubtab('active')} style={{background:crmActiveSubtab==='active'?T.accent+'18':'transparent',color:crmActiveSubtab==='active'?T.accent:T.text2,borderColor:crmActiveSubtab==='active'?T.accent:T.border,fontWeight:crmActiveSubtab==='active'?700:500}}>Actifs ({myCrmContacts.length})</Btn>
+    <Btn small onClick={()=>setCrmActiveSubtab('archived')} style={{background:crmActiveSubtab==='archived'?T.accent+'18':'transparent',color:crmActiveSubtab==='archived'?T.accent:T.text2,borderColor:crmActiveSubtab==='archived'?T.accent:T.border,fontWeight:crmActiveSubtab==='archived'?700:500}}>📦 Archivés ({archivedContacts.length})</Btn>
+  </div>
+
+  {/* V1.12.8.b — bloc conditionnel : ARCHIVÉS ou ACTIFS */}
+  {crmActiveSubtab === 'archived' ? (
+    <Card style={{padding:24}}>
+      {loadingArchived ? (
+        <div style={{textAlign:'center',padding:40}}><Spinner/></div>
+      ) : archivedContacts.length === 0 ? (
+        <EmptyState icon="archive" title="Aucun contact archivé" message="Les contacts archivés apparaîtront ici." />
+      ) : (
+        <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:12}}>
+          {archivedContacts.map(ct => (
+            <Card key={ct.id} onClick={()=>{setSelectedCrmContact(ct);setCollabFicheTab("notes");}}
+              style={{padding:14,cursor:'pointer',opacity:0.65,border:`1px dashed ${T.border}`,position:'relative',transition:'opacity .15s'}}
+              onMouseEnter={e=>e.currentTarget.style.opacity=0.85}
+              onMouseLeave={e=>e.currentTarget.style.opacity=0.65}>
+              <div style={{position:'absolute',top:8,right:8,fontSize:9,fontWeight:700,padding:'2px 6px',borderRadius:4,background:'#64748B18',color:'#64748B'}}>📦 Archivé</div>
+              <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:6}}>
+                <Avatar name={ct.name||'?'} color="#64748B" size={32}/>
+                <div style={{minWidth:0,flex:1}}>
+                  <div style={{fontWeight:700,fontSize:13,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ct.name||'Sans nom'}</div>
+                  <div style={{fontSize:11,color:T.text3,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{ct.email||ct.phone||''}</div>
+                </div>
+              </div>
+              <div style={{fontSize:10,color:T.text3,marginTop:6,paddingTop:6,borderTop:`1px solid ${T.border}`}}>
+                Archivé le {ct.archivedAt ? new Date(ct.archivedAt).toLocaleDateString('fr-FR') : '—'}
+                {ct.archivedReason ? ' · '+ct.archivedReason : ''}
+              </div>
+            </Card>
+          ))}
+        </div>
+      )}
+    </Card>
+  ) : (<>
 
   {/* Pipeline Stats Bar */}
   <Card style={{padding:16,marginBottom:16}}>
@@ -809,6 +863,8 @@ const CrmTab = () => {
       </div>
     </div>
   )}
+  </>)}
+  {/* V1.12.8.b — fin du bloc conditionnel actifs/archivés */}
 </div>
 
 {/* ── MODAL NOUVEAU STATUT ── */}
