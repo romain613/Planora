@@ -1500,9 +1500,9 @@ return <div key={ev.id} style={{fontSize:11,color:T.text3,textAlign:'center',pad
 <Btn small onClick={()=>setPipeBulkModal('sms')} style={{width:'100%'}}><I n="message-square" s={12}/> SMS groupé ({withPhone.length})</Btn>
 </div>}
 
-{/* Supprimer */}
+{/* V1.12.8.a-fixup — Archiver bulk Pipeline Live */}
 <div style={{marginTop:16,paddingTop:12,borderTop:`1px solid ${T.border}`}}>
-<Btn small ghost danger onClick={()=>{if(!confirm(`Supprimer ${selContacts.length} contacts ? Irréversible.`))return;api('/api/data/contacts/bulk-delete',{method:'POST',body:{contactIds:pipeSelectedIds,companyId:company?.id}}).then(()=>{setContacts(p=>p.filter(c=>!(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).includes(c.id)));showNotif(`${selContacts.length} contacts supprimés`,'success');(typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})([]);}).catch(()=>showNotif('Erreur','danger'));}} style={{width:'100%'}}><I n="trash-2" s={12}/> Supprimer {selContacts.length} contacts</Btn>
+<Btn small ghost danger onClick={()=>{if(!confirm(`Archiver ${selContacts.length} contact${selContacts.length>1?'s':''} ?\n\nLes contacts seront masqués mais récupérables.`))return;api('/api/data/contacts/bulk-delete',{method:'POST',body:{contactIds:pipeSelectedIds,companyId:company?.id}}).then((r)=>{setContacts(p=>p.filter(c=>!(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).includes(c.id)));const archivedCount=r?.archived||selContacts.length;showNotif(`${archivedCount} contact${archivedCount>1?'s':''} archivé${archivedCount>1?'s':''} (récupérable${archivedCount>1?'s':''})`,'success');(typeof setPipeSelectedIds==='function'?setPipeSelectedIds:function(){})([]);}).catch(()=>showNotif('Erreur archivage','danger'));}} style={{width:'100%'}}><I n="archive" s={12}/> Archiver {selContacts.length} contact{selContacts.length>1?'s':''}</Btn>
 </div>
       </div>
     </div>);
@@ -5305,14 +5305,17 @@ setPipeSelectedIds([]);
 <option value="">Couleur…</option>
 {[...PIPELINE_CARD_COLORS_DEFAULT,...JSON.parse(localStorage.getItem('pipeline_custom_colors')||'[]')].map(pc=><option key={pc.color+pc.label} value={pc.color||'none'}>● {pc.label}</option>)}
 </select>
+{/* V1.12.8.a-fixup — Archiver bulk pipeline secondaire */}
 <Btn small ghost danger onClick={() => {
-if(!confirm(`Supprimer ${(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length} contact${(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length>1?'s':''} ?`)) return;
-api('/api/data/contacts/bulk-delete',{method:'POST',body:{contactIds:(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:null),companyId:company?.id}}).then(()=>{
+const _n=(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:[]).length;
+if(!confirm(`Archiver ${_n} contact${_n>1?'s':''} ?\n\nLes contacts seront masqués mais récupérables.`)) return;
+api('/api/data/contacts/bulk-delete',{method:'POST',body:{contactIds:(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:null),companyId:company?.id}}).then((r)=>{
   setContacts(p=>p.filter(c=>!(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).includes(c.id)));
-  showNotif(`${(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length} contact${(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length>1?'s':''} supprimé${(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length>1?'s':''}`,'success');
+  const archivedCount=r?.archived||_n;
+  showNotif(`${archivedCount} contact${archivedCount>1?'s':''} archivé${archivedCount>1?'s':''} (récupérable${archivedCount>1?'s':''})`,'success');
   setPipeSelectedIds([]);
-}).catch(()=>showNotif('Erreur suppression','danger'));
-}}><I n="trash-2" s={11}/></Btn>
+}).catch(()=>showNotif('Erreur archivage','danger'));
+}} title="Archiver"><I n="archive" s={11}/></Btn>
 <span onClick={() => setPipeSelectedIds([])} style={{marginLeft:"auto",cursor:"pointer",fontSize:11,color:T.text3,fontWeight:600}}>✕ Tout désélectionner</span>
       </Card>
     )}

@@ -341,31 +341,31 @@ const CrmTab = () => {
         return deletableIds.length>0?<Btn small style={{color:"#EF4444",borderColor:"#EF444430",background:"#EF444410"}} onClick={async()=>{
           if(deletableIds.length === 0) { showNotif('Ces contacts ne vous sont pas assignes — suppression impossible','danger'); return; }
           if(skippedCount > 0) showNotif(skippedCount + ' contact(s) ignore(s) — non assignes a vous','warning');
-          if(!confirm('Supprimer définitivement '+deletableIds.length+' contact(s) ?'))return;
+          if(!confirm('Archiver '+deletableIds.length+' contact(s) ?\n\nLes contacts seront masqués mais récupérables.'))return;
           contactsLocalEditRef.current = Date.now();
           const r=await api("/api/data/contacts/bulk-delete",{method:"POST",body:{contactIds:deletableIds,companyId:company.id,origin:'crm'}});
           if(r?.success){
-            if(r.deleted === 0 && deletableIds.length > 0) {
+            const archivedCount=r.archived||0;
+            if(archivedCount === 0 && deletableIds.length > 0) {
               showNotif('Impossible : ce contact ne vous est pas assigné','danger');
             } else {
               const deletedSet=new Set(deletableIds);
               setContacts(p=>p.filter(c=>!deletedSet.has(c.id)));
               if(contactsRef) contactsRef.current = (contactsRef.current||[]).filter(c=>!deletedSet.has(c.id));
-              showNotif((r.deleted||0)+' supprimé'+(r.deleted>1?'s':'')+(r.archived>0?', '+(r.archived)+' archivé'+(r.archived>1?'s':'')+' (historique conservé)':''));
+              showNotif(archivedCount+' contact'+(archivedCount>1?'s':'')+' archivé'+(archivedCount>1?'s':'')+' (récupérable'+(archivedCount>1?'s':'')+')');
               contactsLocalEditRef.current = Date.now();
               setTimeout(()=>{contactsLocalEditRef.current=0;},60000);
             }
-          }else{showNotif('Erreur suppression','danger');}
+          }else{showNotif('Erreur archivage','danger');}
           setCollabCrmSelectedIds([]);setCollabCrmAdvFilters(p=>({...p,_selectAll:false}));
-        }}><I n="trash-2" s={12}/> Supprimer ({deletableIds.length})</Btn>:null;
+        }}><I n="archive" s={12}/> Archiver ({deletableIds.length})</Btn>:null;
       })() : null}
-      {/* Supprimer tout — admin only bulk delete via API */}
+      {/* V1.12.8.a-fixup — Archiver tout (bulk archive batch via backend mode='archive' default) */}
       {collab?.can_delete_contacts && (typeof collabCrmAdvFilters!=='undefined'?collabCrmAdvFilters:{})._selectAll && <Btn small style={{color:"#fff",background:"#EF4444",borderColor:"#EF444430"}} onClick={async()=>{
-        if(!confirm('ATTENTION : Supprimer TOUS les '+filteredCollabCrm.length+' contacts ? Cette action est irréversible.'))return;
-        if(!confirm('Dernière confirmation : supprimer définitivement '+filteredCollabCrm.length+' contacts ?'))return;
+        if(!confirm('Archiver TOUS les '+filteredCollabCrm.length+' contacts ?\n\nLes contacts seront masqués mais récupérables.'))return;
         const r=await api("/api/data/contacts/bulk-delete",{method:"POST",body:{contactIds:filteredCollabCrm.map(c=>c.id),companyId:company.id,origin:'crm_bulk_all'}});
-        if(r?.success){setContacts(p=>p.filter(c=>!filteredCollabCrm.some(fc=>fc.id===c.id)));showNotif((r.deleted||0)+' supprimés, '+(r.archived||0)+' archivés');setCollabCrmSelectedIds([]);setCollabCrmAdvFilters(p=>({...p,_selectAll:false}));}else{showNotif('Erreur suppression','danger');}
-      }}><I n="trash-2" s={12}/> Supprimer tout ({filteredCollabCrm.length})</Btn>}
+        if(r?.success){setContacts(p=>p.filter(c=>!filteredCollabCrm.some(fc=>fc.id===c.id)));showNotif((r.archived||0)+' contact'+((r.archived||0)>1?'s':'')+' archivé'+((r.archived||0)>1?'s':'')+' (récupérable'+((r.archived||0)>1?'s':'')+')');setCollabCrmSelectedIds([]);setCollabCrmAdvFilters(p=>({...p,_selectAll:false}));}else{showNotif('Erreur archivage','danger');}
+      }}><I n="archive" s={12}/> Archiver tout ({filteredCollabCrm.length})</Btn>}
       <span onClick={()=>{setCollabCrmSelectedIds([]);setCollabCrmAdvFilters(p=>({...p,_selectAll:false}));}} style={{marginLeft:"auto",cursor:"pointer",fontSize:12,color:T.text3,fontWeight:500}}>✕ Désélectionner</span>
     </Card>
   )}
@@ -496,18 +496,20 @@ const CrmTab = () => {
           {[...PIPELINE_CARD_COLORS_DEFAULT,...JSON.parse(localStorage.getItem('pipeline_custom_colors')||'[]')].map(pc=><option key={pc.color+pc.label} value={pc.color||'none'}>● {pc.label}</option>)}
         </select>
         <Btn small ghost danger onClick={() => {
-          if(!confirm(`Supprimer ${(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length} contact${(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length>1?'s':''} ? Cette action est irréversible.`)) return;
+          const _n=(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:[]).length;
+          if(!confirm(`Archiver ${_n} contact${_n>1?'s':''} ?\n\nLes contacts seront masqués mais récupérables.`)) return;
           const _delIds = [...pipeSelectedIds];
-          api('/api/data/contacts/bulk-delete',{method:'POST',body:{contactIds:_delIds,companyId:company?.id,origin:'pipeline'}}).then(()=>{
+          api('/api/data/contacts/bulk-delete',{method:'POST',body:{contactIds:_delIds,companyId:company?.id,origin:'pipeline'}}).then((r)=>{
             const deletedSet = new Set(_delIds);
             setContacts(p=>p.filter(c=>!deletedSet.has(c.id)));
             if(contactsRef) contactsRef.current = (contactsRef.current||[]).filter(c=>!deletedSet.has(c.id));
             contactsLocalEditRef.current = Date.now();
             setTimeout(()=>{contactsLocalEditRef.current=0;},60000);
-            showNotif(`${_delIds.length} contact${_delIds.length>1?'s':''} supprimé${_delIds.length>1?'s':''}`,'success');
+            const archivedCount=r?.archived||_delIds.length;
+            showNotif(`${archivedCount} contact${archivedCount>1?'s':''} archivé${archivedCount>1?'s':''} (récupérable${archivedCount>1?'s':''})`,'success');
             setPipeSelectedIds([]);
-          }).catch(()=>showNotif('Erreur suppression','danger'));
-        }}><I n="trash-2" s={12}/> Supprimer</Btn>
+          }).catch(()=>showNotif('Erreur archivage','danger'));
+        }}><I n="archive" s={12}/> Archiver</Btn>
         <span onClick={() => setPipeSelectedIds([])} style={{marginLeft:"auto",cursor:"pointer",fontSize:12,color:T.text3,fontWeight:600}}>✕ Tout désélectionner</span>
       </Card>
     )}
