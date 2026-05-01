@@ -544,9 +544,14 @@ router.get('/reporting', requireAuth, enforceCompany, (req, res) => {
     //   P2 INNER JOIN contacts (exclure ghosts hard deleted pre-V1.12.7)
     //   PRESERVE V1.12.5.d : pas de filtre archivedAt (contacts archivés OK pour
     //                        preserver historique reporting + capacite receiver)
+    // V1.12.x.2 — expose 3 champs archive du contact pour badge Reporting frontend
     const targetCol = role === 'received' ? 'agendaOwnerId' : 'bookedByCollaboratorId';
     const rows = db.prepare(
-      `SELECT b.* FROM bookings b
+      `SELECT b.*,
+              ct.archivedAt AS contactArchivedAt,
+              ct.archivedBy AS contactArchivedBy,
+              ct.archivedReason AS contactArchivedReason
+       FROM bookings b
        JOIN calendars c ON b.calendarId = c.id
        INNER JOIN contacts ct ON b.contactId = ct.id
        WHERE c.companyId = ?

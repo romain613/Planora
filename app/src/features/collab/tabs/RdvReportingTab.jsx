@@ -260,6 +260,14 @@ const RdvReportingTab = () => {
                   <div style={{ flex:1, minWidth:200 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:4 }}>
                       <span style={{ fontSize:14, fontWeight:700, color:T.text }}>{contactName(b)}</span>
+                      {/* V1.12.x.2 — badge contact archivé (RDV reste visible pour traçabilité) */}
+                      {b.contactArchivedAt && b.contactArchivedAt !== '' && (
+                        <span
+                          title="Ce contact est archivé mais ce RDV reste visible pour conserver la traçabilité."
+                          style={{ fontSize:9, fontWeight:700, padding:'2px 6px', borderRadius:4, background:'#64748B18', color:'#64748B', display:'inline-flex', alignItems:'center', gap:3, cursor:'help' }}>
+                          📦 Contact archivé
+                        </span>
+                      )}
                       {contactPhone(b) && (
                         <span style={{ fontSize:11, color:T.text3, display:'inline-flex', alignItems:'center', gap:3 }}>
                           <I n="phone" s={11}/> {contactPhone(b)}
