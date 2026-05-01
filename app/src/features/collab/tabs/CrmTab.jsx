@@ -20,6 +20,7 @@ import { useCollabContext } from "../context/CollabContext";
 import FicheReportingBlock from "./crm/fiche/FicheReportingBlock";
 import InteractionTemplatesPanel from "../../interactions/InteractionTemplatesPanel.jsx";
 import ContactInfoEnriched from "../../contacts/ContactInfoEnriched.jsx";
+import HardDeleteContactModal from "../modals/HardDeleteContactModal";
 import { FicheClientMsgScreen, FicheDocsLinkedScreen, FicheSuiviScreen } from "../screens";
 
 const CrmTab = () => {
@@ -100,6 +101,8 @@ const CrmTab = () => {
   const [crmActiveSubtab, setCrmActiveSubtab] = useState('active');
   const [archivedContacts, setArchivedContacts] = useState([]);
   const [loadingArchived, setLoadingArchived] = useState(false);
+  // V1.12.9.d — modale hard delete (target = contact courant)
+  const [hardDeleteTarget, setHardDeleteTarget] = useState(null);
   useEffect(() => {
     if (crmActiveSubtab !== 'archived' || !company?.id) return;
     setLoadingArchived(true);
@@ -110,6 +113,17 @@ const CrmTab = () => {
       setArchivedContacts([]);
     }).finally(() => setLoadingArchived(false));
   }, [crmActiveSubtab, company?.id]);
+
+  // V1.12.9.d — listener hard delete : retirer du sub-tab Archivés sans refetch
+  useEffect(() => {
+    const onHardDeleted = (e) => {
+      const id = e?.detail?.id;
+      if (!id) return;
+      setArchivedContacts(p => p.filter(c => c.id !== id));
+    };
+    window.addEventListener('crmContactHardDeleted', onHardDeleted);
+    return () => window.removeEventListener('crmContactHardDeleted', onHardDeleted);
+  }, []);
 
   return (
     <>
@@ -1119,6 +1133,8 @@ const CrmTab = () => {
             {collab?.can_delete_contacts && (!ct.archivedAt || ct.archivedAt==='') ? <Btn small onClick={async()=>{const _today=new Date().toISOString().split('T')[0];const _futureBks=(bookings||[]).filter(bk=>bk.contactId===ct.id&&bk.status==='confirmed'&&(bk.date||'')>=_today);const _msg=_futureBks.length>0?`Archiver "${ct.name}" ?\n\n${_futureBks.length} RDV confirmé${_futureBks.length>1?'s':''} lié${_futureBks.length>1?'s':''} resteront visibles dans Agenda et Reporting (traçabilité préservée).\n\nLe contact sera masqué du CRM/Pipeline mais récupérable.`:`Archiver "${ct.name}" ?\n\nLe contact sera masqué mais récupérable.`;if(confirm(_msg)){contactsLocalEditRef.current=Date.now();setContacts(p=>p.filter(c=>c.id!==ct.id));const r=await api("/api/data/contacts/"+ct.id,{method:"DELETE"});if(r?.action==='archived'){showNotif("Contact archivé (récupérable)");setPipelineRightContact(null);setSelectedCrmContact(null);}else{showNotif(r?.error||"Erreur archivage","danger");}setTimeout(()=>{contactsLocalEditRef.current=0;},30000);}}} style={{color:'#EF4444',borderColor:'#EF444430'}}><I n="archive" s={13}/> Archiver</Btn> : null}
             {/* V1.12.8.a — Restaurer (POST /:id/restore) si contact archivé */}
             {ct.archivedAt && ct.archivedAt!=='' ? <Btn small onClick={async()=>{contactsLocalEditRef.current=Date.now();const r=await api("/api/data/contacts/"+ct.id+"/restore",{method:"POST"});if(r?.action==='restored'){showNotif("Contact restauré");const updated={...ct,archivedAt:'',archivedBy:'',archivedReason:''};setContacts(p=>{const exists=p.some(c=>c.id===ct.id);return exists?p.map(c=>c.id===ct.id?updated:c):[...p,updated];});setPipelineRightContact(null);setSelectedCrmContact(null);}else{showNotif(r?.error||"Erreur restauration","danger");}setTimeout(()=>{contactsLocalEditRef.current=0;},30000);}} style={{color:'#22C55E',borderColor:'#22C55E30'}}><I n="rotate-ccw" s={13}/> Restaurer</Btn> : null}
+            {/* V1.12.9.d — Supprimer définitivement (admin/supra/can_hard_delete_contacts uniquement, contact archivé uniquement) */}
+            {ct.archivedAt && ct.archivedAt!=='' && (collab?.role === 'admin' || collab?.role === 'supra' || collab?.can_hard_delete_contacts) ? <Btn small onClick={()=>setHardDeleteTarget(ct)} style={{color:'#fff',background:'#DC2626',borderColor:'#DC2626'}}><I n="alert-triangle" s={13}/> Supprimer définitivement</Btn> : null}
           </div>
         )}
         {!ct._linked && (
@@ -1780,6 +1796,15 @@ const CrmTab = () => {
     })()}
   </div>
 </div>)} {/* hotfix 2026-04-23 — null guard selectedCrmContact */}
+    {/* V1.12.9.d — modale suppression définitive (rendu top-level pour overlay correct) */}
+    {hardDeleteTarget && (
+      <HardDeleteContactModal
+        contact={hardDeleteTarget}
+        onClose={() => setHardDeleteTarget(null)}
+        onSuccess={(id) => { setContacts(p=>p.filter(c=>c.id!==id)); setSelectedCrmContact(null); setPipelineRightContact(null); }}
+        showNotif={showNotif}
+      />
+    )}
     </>
   );
 };

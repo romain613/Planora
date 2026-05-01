@@ -8,8 +8,10 @@ import { T } from "../../../../../theme";
 import { I, Btn } from "../../../../../shared/ui";
 import { api } from "../../../../../shared/services/api";
 import { useCollabContext } from "../../../context/CollabContext";
+import HardDeleteContactModal from "../../../modals/HardDeleteContactModal";
 
 const FicheActionsBar = ({ ct, stg }) => {
+  const [hardDeleteOpen, setHardDeleteOpen] = React.useState(false);
   const {
     PIPELINE_STAGES,
     collab, calendars, bookings,
@@ -26,6 +28,8 @@ const FicheActionsBar = ({ ct, stg }) => {
   // V1.12.8.c — lecture seule si contact archivé
   const isArchived = ct.archivedAt && ct.archivedAt !== '';
   const lockedStyle = isArchived ? { opacity: 0.5, cursor: 'not-allowed' } : {};
+  // V1.12.9.d — autorisation hard delete (admin/supra OU collab can_hard_delete_contacts=1)
+  const canHardDelete = !!(collab?.role === 'admin' || collab?.role === 'supra' || collab?.can_hard_delete_contacts);
 
   return (
     <>
@@ -48,6 +52,8 @@ const FicheActionsBar = ({ ct, stg }) => {
           {collab?.can_delete_contacts && (!ct.archivedAt || ct.archivedAt==='') ? <Btn small onClick={async()=>{const _today=new Date().toISOString().split('T')[0];const _futureBks=(bookings||[]).filter(bk=>bk.contactId===ct.id&&bk.status==='confirmed'&&(bk.date||'')>=_today);const _msg=_futureBks.length>0?`Archiver "${ct.name}" ?\n\n${_futureBks.length} RDV confirmé${_futureBks.length>1?'s':''} lié${_futureBks.length>1?'s':''} resteront visibles dans Agenda et Reporting (traçabilité préservée).\n\nLe contact sera masqué du CRM/Pipeline mais récupérable.`:`Archiver "${ct.name}" ?\n\nLe contact sera masqué mais récupérable.`;if(confirm(_msg)){contactsLocalEditRef.current=Date.now();setContacts(p=>p.filter(c=>c.id!==ct.id));const r=await api("/api/data/contacts/"+ct.id,{method:"DELETE"});if(r?.action==='archived'){showNotif("Contact archivé (récupérable)");setPipelineRightContact(null);setSelectedCrmContact(null);}else{showNotif(r?.error||"Erreur archivage","danger");}setTimeout(()=>{contactsLocalEditRef.current=0;},30000);}}} style={{color:'#EF4444',borderColor:'#EF444430'}}><I n="archive" s={13}/> Archiver</Btn> : null}
           {/* V1.12.8.a — Restaurer (POST /:id/restore) si contact archivé */}
           {ct.archivedAt && ct.archivedAt!=='' ? <Btn small onClick={async()=>{contactsLocalEditRef.current=Date.now();const r=await api("/api/data/contacts/"+ct.id+"/restore",{method:"POST"});if(r?.action==='restored'){showNotif("Contact restauré");const updated={...ct,archivedAt:'',archivedBy:'',archivedReason:''};setContacts(p=>{const exists=p.some(c=>c.id===ct.id);return exists?p.map(c=>c.id===ct.id?updated:c):[...p,updated];});setPipelineRightContact(null);setSelectedCrmContact(null);}else{showNotif(r?.error||"Erreur restauration","danger");}setTimeout(()=>{contactsLocalEditRef.current=0;},30000);}} style={{color:'#22C55E',borderColor:'#22C55E30'}}><I n="rotate-ccw" s={13}/> Restaurer</Btn> : null}
+          {/* V1.12.9.d — Supprimer définitivement (admin/supra/can_hard_delete_contacts uniquement, contact archivé uniquement) */}
+          {isArchived && canHardDelete ? <Btn small onClick={()=>setHardDeleteOpen(true)} style={{color:'#fff',background:'#DC2626',borderColor:'#DC2626'}}><I n="alert-triangle" s={13}/> Supprimer définitivement</Btn> : null}
         </div>
       )}
       {!ct._linked && (
@@ -55,6 +61,14 @@ const FicheActionsBar = ({ ct, stg }) => {
           {ct.email&&<Btn small onClick={()=>window.open("mailto:"+ct.email)}><I n="mail" s={13}/> Email</Btn>}
           {ct.phone&&<Btn small onClick={()=>prefillKeypad(ct.phone)}><I n="phone" s={13}/> Appeler</Btn>}
         </div>
+      )}
+      {hardDeleteOpen && (
+        <HardDeleteContactModal
+          contact={ct}
+          onClose={() => setHardDeleteOpen(false)}
+          onSuccess={(id) => { setContacts(p=>p.filter(c=>c.id!==id)); setSelectedCrmContact(null); setPipelineRightContact(null); }}
+          showNotif={showNotif}
+        />
       )}
     </>
   );
