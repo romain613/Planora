@@ -1605,7 +1605,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
 
   const handleStartEditCollab = (c) => {
     setEditingCollabId(c.id);
-    setEditCollabForm({ name: c.name, email: c.email, role: c.role, phone: c.phone || '', color: c.color, timezone: c.timezone || '', maxWeek: c.maxWeek || 20, maxMonth: c.maxMonth || 80, chat_enabled: c.chat_enabled !== undefined ? c.chat_enabled : 1, sms_enabled: c.sms_enabled || 0, google_events_private: c.google_events_private !== undefined ? c.google_events_private : 1, secure_ia_phone: c.secure_ia_phone || 0, secure_ia_words_json: c.secure_ia_words_json || '[]', _secureIaWords: (() => { try { return JSON.parse(c.secure_ia_words_json || '[]'); } catch { return []; } })(), ai_copilot_enabled: c.ai_copilot_enabled || 0, ai_copilot_role: c.ai_copilot_role || '', ai_copilot_objective: c.ai_copilot_objective || '', ai_copilot_target: c.ai_copilot_target || '', can_delete_contacts: c.can_delete_contacts || 0 });
+    setEditCollabForm({ name: c.name, email: c.email, role: c.role, phone: c.phone || '', color: c.color, timezone: c.timezone || '', maxWeek: c.maxWeek || 20, maxMonth: c.maxMonth || 80, chat_enabled: c.chat_enabled !== undefined ? c.chat_enabled : 1, sms_enabled: c.sms_enabled || 0, google_events_private: c.google_events_private !== undefined ? c.google_events_private : 1, secure_ia_phone: c.secure_ia_phone || 0, secure_ia_words_json: c.secure_ia_words_json || '[]', _secureIaWords: (() => { try { return JSON.parse(c.secure_ia_words_json || '[]'); } catch { return []; } })(), ai_copilot_enabled: c.ai_copilot_enabled || 0, ai_copilot_role: c.ai_copilot_role || '', ai_copilot_objective: c.ai_copilot_objective || '', ai_copilot_target: c.ai_copilot_target || '', can_delete_contacts: c.can_delete_contacts || 0, can_hard_delete_contacts: c.can_hard_delete_contacts || 0 });
   };
 
   const handleSaveEditCollab = () => {
@@ -2878,7 +2878,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                         </div>
                       </div>
                       {/* Delete contacts permission toggle */}
-                      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14, padding:"10px 14px", borderRadius:10, background:(typeof editCollabForm!=='undefined'?editCollabForm:{}).can_delete_contacts?"#FEF2F2":T.bg, border:`1px solid ${(typeof editCollabForm!=='undefined'?editCollabForm:{}).can_delete_contacts?"#FCA5A5":T.border}`, cursor:"pointer", transition:"all .15s" }} onClick={()=>(typeof setEditCollabForm==='function'?setEditCollabForm:function(){})(p=>({...p,can_delete_contacts:p.can_delete_contacts?0:1}))}>
+                      <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14, padding:"10px 14px", borderRadius:10, background:(typeof editCollabForm!=='undefined'?editCollabForm:{}).can_delete_contacts?"#FEF2F2":T.bg, border:`1px solid ${(typeof editCollabForm!=='undefined'?editCollabForm:{}).can_delete_contacts?"#FCA5A5":T.border}`, cursor:"pointer", transition:"all .15s" }} onClick={()=>(typeof setEditCollabForm==='function'?setEditCollabForm:function(){})(p=>{ const next=p.can_delete_contacts?0:1; return { ...p, can_delete_contacts: next, can_hard_delete_contacts: next?p.can_hard_delete_contacts:0 }; })}>
                         <div style={{ width:38, height:22, borderRadius:11, background:(typeof editCollabForm!=='undefined'?editCollabForm:{}).can_delete_contacts?"#EF4444":T.border, position:"relative", transition:"background .2s", flexShrink:0 }}>
                           <div style={{ width:18, height:18, borderRadius:9, background:"#fff", position:"absolute", top:2, left:(typeof editCollabForm!=='undefined'?editCollabForm:{}).can_delete_contacts?18:2, transition:"left .2s", boxShadow:"0 1px 3px rgba(0,0,0,0.2)" }}/>
                         </div>
@@ -2886,6 +2886,17 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                         <div>
                           <div style={{ fontSize:13, fontWeight:600, color:(typeof editCollabForm!=='undefined'?editCollabForm:{}).can_delete_contacts?"#EF4444":T.text2 }}>Suppression de contacts</div>
                           <div style={{ fontSize:11, color:T.text3 }}>{(typeof editCollabForm!=='undefined'?editCollabForm:{}).can_delete_contacts?"Le collaborateur peut supprimer des contacts":"Suppression de contacts désactivée"}</div>
+                        </div>
+                      </div>
+                      {/* V1.12.9.c — Hard delete permission toggle (couple ON-only si can_delete_contacts=1) */}
+                      <div title="Action irréversible — à attribuer uniquement aux utilisateurs de confiance" style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14, padding:"10px 14px", borderRadius:10, background:(typeof editCollabForm!=='undefined'?editCollabForm:{}).can_hard_delete_contacts?"#7F1D1D11":T.bg, border:`1px solid ${(typeof editCollabForm!=='undefined'?editCollabForm:{}).can_hard_delete_contacts?"#DC2626":T.border}`, cursor:(typeof editCollabForm!=='undefined'?editCollabForm:{}).can_delete_contacts?"pointer":"not-allowed", opacity:(typeof editCollabForm!=='undefined'?editCollabForm:{}).can_delete_contacts?1:0.5, transition:"all .15s" }} onClick={()=>{ const f=(typeof editCollabForm!=='undefined'?editCollabForm:{}); if(!f.can_delete_contacts) return; (typeof setEditCollabForm==='function'?setEditCollabForm:function(){})(p=>({...p,can_hard_delete_contacts:p.can_hard_delete_contacts?0:1})); }}>
+                        <div style={{ width:38, height:22, borderRadius:11, background:(typeof editCollabForm!=='undefined'?editCollabForm:{}).can_hard_delete_contacts?"#DC2626":T.border, position:"relative", transition:"background .2s", flexShrink:0 }}>
+                          <div style={{ width:18, height:18, borderRadius:9, background:"#fff", position:"absolute", top:2, left:(typeof editCollabForm!=='undefined'?editCollabForm:{}).can_hard_delete_contacts?18:2, transition:"left .2s", boxShadow:"0 1px 3px rgba(0,0,0,0.2)" }}/>
+                        </div>
+                        <I n="alert-triangle" s={16} style={{ color:(typeof editCollabForm!=='undefined'?editCollabForm:{}).can_hard_delete_contacts?"#DC2626":T.text3 }}/>
+                        <div>
+                          <div style={{ fontSize:13, fontWeight:600, color:(typeof editCollabForm!=='undefined'?editCollabForm:{}).can_hard_delete_contacts?"#DC2626":T.text2 }}>Peut supprimer définitivement les contacts archivés</div>
+                          <div style={{ fontSize:11, color:T.text3 }}>{(typeof editCollabForm!=='undefined'?editCollabForm:{}).can_hard_delete_contacts?"⚠️ Action irréversible — à attribuer uniquement aux utilisateurs de confiance":((typeof editCollabForm!=='undefined'?editCollabForm:{}).can_delete_contacts?"Suppression définitive désactivée":"Activez d'abord la suppression de contacts")}</div>
                         </div>
                       </div>
                       {/* Google Calendar events visibility toggle */}
