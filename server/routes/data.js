@@ -340,10 +340,43 @@ router.post('/contacts', requireAuth, enforceCompany, requirePermission('contact
         if (dup) return res.json({ success: true, id: dup.id, _duplicate: true });
       }
     }
+    // V1.13.1.a — Force-create restrictions (admin/supra only) + audit log + raison/justification
+    // Lenient phase : reason/justification optionnels en V1.13.1.a, deviendront enforced quand
+    // frontend V1.13.1.c les enverra systematiquement.
+    const FORCE_CREATE_REASONS = ['real_second_person', 'test_data', 'data_correction', 'other'];
+    if (c._forceCreate) {
+      if (!req.auth.isAdmin && !req.auth.isSupra) {
+        return res.status(403).json({
+          error: 'FORCE_CREATE_ADMIN_ONLY',
+          message: 'La creation forcee de doublon est reservee admin/supra'
+        });
+      }
+      if (c._forceCreateReason && !FORCE_CREATE_REASONS.includes(c._forceCreateReason)) {
+        return res.status(400).json({
+          error: 'FORCE_REASON_INVALID',
+          allowed: FORCE_CREATE_REASONS,
+          received: c._forceCreateReason
+        });
+      }
+    }
     const id = 'ct_' + Date.now() + '_' + Math.random().toString(36).slice(2, 8);
     const cfj = c.custom_fields_json || '[]';
     console.log('[CONTACT INSERT]', c.name, 'custom_fields_json length:', cfj.length, 'value:', cfj.substring(0,80));
     insert('contacts', { id, companyId: c.companyId, name: c.name, email: c.email || '', phone: c.phone || '', totalBookings: c.totalBookings || 0, lastVisit: c.lastVisit || '', tags_json: JSON.stringify(c.tags || []), notes: c.notes || '', rating: c.rating || null, docs_json: JSON.stringify(c.docs || []), pipeline_stage: c.pipeline_stage || 'nouveau', assignedTo: c.assignedTo || '', shared_with_json: JSON.stringify(c.shared_with || []), source: c.source || 'manual', contact_type: c.contact_type || 'btc', siret: c.siret || '', firstname: c.firstname || '', lastname: c.lastname || '', company: c.company || '', mobile: c.mobile || '', website: c.website || '', address: c.address || '', custom_fields_json: cfj, createdAt: c.createdAt || new Date().toISOString() });
+    // V1.13.1.a — Audit force-create (toujours logge si _forceCreate=true)
+    if (c._forceCreate) {
+      logAudit(req, 'contact_force_created_duplicate', 'data', 'contact', id,
+        'Contact cree en doublon explicite: ' + (c.name || ''),
+        {
+          reason: c._forceCreateReason || 'unspecified',
+          justification: c._forceCreateJustification || '',
+          email: c.email || '',
+          phone: c.phone || '',
+          actor: req.auth.collaboratorId || ''
+        }
+      );
+      console.log(`[CONTACT FORCE-CREATE] id=${id} reason=${c._forceCreateReason||'none'} by=${req.auth.collaboratorId||''}`);
+    }
     res.json({ success: true, id });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
