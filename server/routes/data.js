@@ -327,15 +327,20 @@ router.post('/contacts', requireAuth, enforceCompany, requirePermission('contact
       return res.status(400).json({ error: 'Format téléphone invalide (6-20 chiffres attendus)' });
     }
     // V1.13.0 — Anti-doublon : bypass si _forceCreate=true (utilisateur a vu modal DuplicateOnCreate et choisi 'Créer quand même')
+    // V1.13.1.e — SCOPE COLLABORATEUR (assignedTo) au lieu de company-wide.
+    // Permet a 2 collabs differents d'avoir leur propre fiche pour la meme personne.
+    // Le scope est defini par c.assignedTo (deja calcule plus haut, force a self pour
+    // non-admin, optionnellement set par admin pour autre collab).
     // Sinon comportement legacy : retourne ID existant + _duplicate:true (compat ScheduleRdvModal V1.8.22)
     if (!c._forceCreate && c.email) {
-      const dupEmail = db.prepare("SELECT id FROM contacts WHERE companyId = ? AND email = ? AND email != '' AND COALESCE(pipeline_stage, '') != 'perdu' AND (archivedAt IS NULL OR archivedAt = '')").get(c.companyId, c.email.trim().toLowerCase());
+      const dupEmail = db.prepare("SELECT id FROM contacts WHERE companyId = ? AND email = ? AND email != '' AND COALESCE(pipeline_stage, '') != 'perdu' AND (archivedAt IS NULL OR archivedAt = '') AND assignedTo = ?").get(c.companyId, c.email.trim().toLowerCase(), c.assignedTo || '');
       if (dupEmail) return res.json({ success: true, id: dupEmail.id, _duplicate: true });
     }
     if (!c._forceCreate && c.phone) {
       const cleanPhone = c.phone.replace(/[^\d+]/g, '').slice(-9);
       if (cleanPhone.length >= 6) {
-        const candidates = db.prepare("SELECT id, phone FROM contacts WHERE companyId = ? AND phone != '' AND COALESCE(pipeline_stage, '') != 'perdu' AND (archivedAt IS NULL OR archivedAt = '')").all(c.companyId);
+        // V1.13.1.e — scope collaborateur sur phone
+        const candidates = db.prepare("SELECT id, phone FROM contacts WHERE companyId = ? AND phone != '' AND COALESCE(pipeline_stage, '') != 'perdu' AND (archivedAt IS NULL OR archivedAt = '') AND assignedTo = ?").all(c.companyId, c.assignedTo || '');
         const dup = candidates.find(ct => ct.phone.replace(/[^\d+]/g, '').slice(-9) === cleanPhone);
         if (dup) return res.json({ success: true, id: dup.id, _duplicate: true });
       }

@@ -102,6 +102,7 @@ const DuplicateMatchCard = ({
   onShare,
   onArchive,
   onHardDelete,
+  onCreateMyOwn,
 }) => {
   const [expanded, setExpanded] = useState(false);
   const target = fullTarget || match;
@@ -205,6 +206,12 @@ const DuplicateMatchCard = ({
         {isOtherCollab && onShare && (
           <Btn small onClick={()=>onShare(target.id)} style={{ color:'#fff', background:'#7C3AED', borderColor:'#7C3AED' }}>
             <I n="users" s={12}/> Me partager
+          </Btn>
+        )}
+        {/* V1.13.1.e — Créer ma fiche (scope collab : creation autorisee si dup chez autre collab) */}
+        {isOtherCollab && onCreateMyOwn && (
+          <Btn small onClick={() => onCreateMyOwn()} style={{ color:'#fff', background:'#16A34A', borderColor:'#16A34A' }}>
+            <I n="user-plus" s={12}/> Créer ma fiche
           </Btn>
         )}
         {/* Archiver (callback optionnel — V1.13.1.d wires) */}

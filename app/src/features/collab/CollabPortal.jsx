@@ -3508,6 +3508,19 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     setDupHardDeleteTarget(target);
   };
 
+  // V1.13.1.e — Créer ma fiche en parallèle (cas owner étranger)
+  // Utilise le scope-based dup check backend V1.13.1.e : si pas de dup
+  // dans MON scope (assignedTo=self), création autorisée même si autre collab a la fiche.
+  // Tag _origin pour audit (futur).
+  const handleDuplicateCreateMyOwn = () => {
+    const snapshot = duplicateOnCreateData?.pendingNewContact?._formSnapshot;
+    setDuplicateOnCreateData(null);
+    if (snapshot) {
+      const tagged = { ...snapshot, _origin: 'duplicate_create_parallel' };
+      submitNewContact(tagged, { forceCreate: false });
+    }
+  };
+
   const handleCollabCreateContact = () => {
     const fullName = (((typeof newContactForm!=='undefined'?newContactForm:{}).civility?newContactForm.civility+' ':'')+((typeof newContactForm!=='undefined'?newContactForm:{}).firstname||'')+' '+((typeof newContactForm!=='undefined'?newContactForm:{}).lastname||'')).trim() || (typeof newContactForm!=='undefined'?newContactForm:{}).name.trim();
     if (!fullName) { showNotif('Le nom est obligatoire','danger'); return; }
@@ -6737,6 +6750,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
           onShare={handleDuplicateShare}
           onArchive={handleDuplicateArchive}
           onHardDelete={handleDuplicateHardDelete}
+          onCreateMyOwn={handleDuplicateCreateMyOwn}
         />
       )}
       {/* V1.13.1.d — Instance HardDeleteContactModal pour flow duplicate (séparée de celle CrmTab) */}

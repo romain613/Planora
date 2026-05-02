@@ -30,7 +30,7 @@ const FORCE_REASONS = [
   { v: 'other',              l: 'Autre' },
 ];
 
-const DuplicateOnCreateModal = ({ data, onClose, onForceCreate, onEnrich, onShare, onArchive, onHardDelete }) => {
+const DuplicateOnCreateModal = ({ data, onClose, onForceCreate, onEnrich, onShare, onArchive, onHardDelete, onCreateMyOwn }) => {
   const { collab, contacts } = useCollabContext();
   const [forceCreateMode, setForceCreateMode] = useState(false);
   const [forceReason, setForceReason] = useState('');
@@ -101,10 +101,12 @@ const DuplicateOnCreateModal = ({ data, onClose, onForceCreate, onEnrich, onShar
             pendingContact={snap}
             collab={collab}
             // V1.13.1.d : actions wirees via callbacks parent (CollabPortal handlers)
+            // V1.13.1.e : + onCreateMyOwn pour cas owner etranger (scope collab)
             onEnrich={onEnrich}
             onShare={onShare}
             onArchive={onArchive}
             onHardDelete={onHardDelete}
+            onCreateMyOwn={onCreateMyOwn}
           />
         ))}
       </div>
