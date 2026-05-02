@@ -3432,6 +3432,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
         body:{ email: nc.email||'', phone: nc.phone||'' }
       }).then(checkRes => {
         if (checkRes && checkRes.exists) {
+          // V1.13.0-modal-stacking-fix — fermer Nouveau contact AVANT ouvrir Doublon (sinon empilement z-index)
+          // Le formulaire newContactForm n'est PAS reset ici : il sera restauré si user clique 'Annuler' sur la modale doublon.
+          setShowNewContact(false);
           setDuplicateOnCreateData({
             matches: checkRes.matches || [],
             conflict: !!checkRes.conflict,
@@ -6624,14 +6627,20 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
         );
       })()}
 
-      {/* V1.13.0 — DuplicateOnCreateModal (NewContactModal flow). Snapshot du formulaire dans state, pas de window globale. */}
+      {/* V1.13.0 — DuplicateOnCreateModal (NewContactModal flow). Snapshot du formulaire dans state, pas de window globale.
+          V1.13.0-modal-stacking-fix : NewContactModal fermée avant ouverture (pas d'empilement z-index).
+          onClose : ré-ouvre NewContactModal (formulaire intact pour correction).
+          onViewExisting / onForceCreate : reset formulaire (sortie du flow création). */}
       {duplicateOnCreateData && (
         <DuplicateOnCreateModal
           data={duplicateOnCreateData}
-          onClose={() => setDuplicateOnCreateData(null)}
+          onClose={() => {
+            setDuplicateOnCreateData(null);
+            // Restore NewContactModal — formulaire toujours en state, user peut corriger
+            setShowNewContact(true);
+          }}
           onViewExisting={(match, mode) => {
             setDuplicateOnCreateData(null);
-            setShowNewContact(false);
             setNewContactForm({name:'',email:'',phone:'',mobile:'',company:'',address:'',notes:'',pipeline_stage:'nouveau',tags:''});
             setSelectedCrmContact({ ...match, _editFromDuplicate: mode === 'edit' });
             if (typeof setCollabFicheTab === 'function') setCollabFicheTab('notes');
