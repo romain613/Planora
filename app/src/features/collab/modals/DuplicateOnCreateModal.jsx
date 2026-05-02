@@ -10,6 +10,7 @@
 import React from "react";
 import { T } from "../../../theme";
 import { I, Btn, Modal, Avatar } from "../../../shared/ui";
+import DuplicateMatchCard from "./DuplicateMatchCard"; // V1.13.1.b — composant pret, integre en V1.13.1.c
 
 const DuplicateOnCreateModal = ({ data, onClose, onViewExisting, onForceCreate }) => {
   if (!data) return null;
@@ -86,6 +87,8 @@ const DuplicateOnCreateModal = ({ data, onClose, onViewExisting, onForceCreate }
         })}
       </div>
 
+      {/* V1.13.1.b — dead branch pour valider compilation Vite (jamais rendu, integration reelle V1.13.1.c) */}
+      {false && <DuplicateMatchCard match={{}} pendingContact={{}} collab={{}} />}
       {/* Footer 3ème action : Créer quand même */}
       <div style={{ display:'flex', gap:8, paddingTop:14, borderTop:`1px solid ${T.border}` }}>
         <Btn small onClick={onClose} style={{ flex:1, justifyContent:'center' }}>Annuler</Btn>
