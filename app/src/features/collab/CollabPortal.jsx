@@ -49,6 +49,7 @@ import AgendaTab from "./tabs/AgendaTab";
 import CrmTab from "./tabs/CrmTab";
 import PhoneTab from "./tabs/PhoneTab";
 import RdvReportingTab from "./tabs/RdvReportingTab";
+import DuplicateOnCreateModal from "./modals/DuplicateOnCreateModal";
 
 const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCalendars, avails, setAvails, vacations, setVacations, contacts, setContacts, onBack, voipCredits, voipCallLogs, setVoipCallLogs, voipConfigured, appMyPhoneNumbers, appPhonePlans, appConversations, setAppConversations, pipelineStages, setPipelineStages, contactFieldDefs, setContactFieldDefs, collabs: collabsProp, googleEvents: googleEventsProp, setGoogleEvents, isAdminView, smsCredits }) => {
   // collabs = list of all collaborators in the company (for chat DM, etc.)
@@ -1351,6 +1352,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const [phoneScheduleForm, setPhoneScheduleForm] = useState({contactId:'',number:'',date:'',time:'',notes:'',collaboratorId:collab.id});
   // V1.8.22 Phase B — Modal de résolution de doublons (single/conflict/multi + multi-collab)
   const [duplicateResolverData, setDuplicateResolverData] = useState(null);
+  // V1.13.0 — modal anti-doublon création (NewContactModal flow)
+  // shape: { matches, conflict, pendingNewContact: { name, email, phone, _formSnapshot } }
+  const [duplicateOnCreateData, setDuplicateOnCreateData] = useState(null);
   // V1.8.2 — collab cible du RDV (default = moi). Si != moi, on filtre l'agenda et on prend les dispos de l'autre.
   const _scheduleTargetCollabId = (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).collaboratorId || collab.id;
   const _scheduleTargetCollab = (collabs||[]).find(c => c.id === _scheduleTargetCollabId) || collab;
@@ -3381,37 +3385,65 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       } catch(e) { console.warn('[SMS AUTO] Error:', e); }
     }
   };
-  const handleCollabCreateContact = () => {
-    const fullName = (((typeof newContactForm!=='undefined'?newContactForm:{}).civility?newContactForm.civility+' ':'')+((typeof newContactForm!=='undefined'?newContactForm:{}).firstname||'')+' '+((typeof newContactForm!=='undefined'?newContactForm:{}).lastname||'')).trim() || (typeof newContactForm!=='undefined'?newContactForm:{}).name.trim();
-    if (!fullName) { showNotif('Le nom est obligatoire','danger'); return; }
-    const tags = (typeof newContactForm!=='undefined'?newContactForm:{}).tags ? (typeof newContactForm!=='undefined'?newContactForm:{}).tags.split(',').map(t=>t.trim()).filter(Boolean) : [];
-    const nc = { id:'ct'+Date.now(), companyId:company.id, name:fullName, firstname:(typeof newContactForm!=='undefined'?newContactForm:{}).firstname?.trim()||'', lastname:(typeof newContactForm!=='undefined'?newContactForm:{}).lastname?.trim()||'', civility:(typeof newContactForm!=='undefined'?newContactForm:{}).civility||'', contact_type:(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type||'btc', email:(typeof newContactForm!=='undefined'?newContactForm:{}).email.trim(), phone:(typeof newContactForm!=='undefined'?newContactForm:{}).phone.trim()||(typeof newContactForm!=='undefined'?newContactForm:{}).mobile.trim(), mobile:(typeof newContactForm!=='undefined'?newContactForm:{}).mobile.trim(), company:(typeof newContactForm!=='undefined'?newContactForm:{}).company.trim(), address:(typeof newContactForm!=='undefined'?newContactForm:{}).address.trim(), website:(typeof newContactForm!=='undefined'?newContactForm:{}).website?.trim()||'', siret:(typeof newContactForm!=='undefined'?newContactForm:{}).siret?.trim()||'', totalBookings:0, lastVisit:'', tags, notes:(typeof newContactForm!=='undefined'?newContactForm:{}).notes.trim(), rating:null, docs:[], pipeline_stage:(typeof newContactForm!=='undefined'?newContactForm:{}).pipeline_stage||'nouveau', assignedTo:collab.id, shared_with:[], source:'manual', createdAt:new Date().toISOString() };
-    nc._pending = true;
-    setContacts(p => [...p, nc]);
+  // V1.13.0 — Soumission backend du nouveau contact, avec ou sans bypass anti-doublon.
+  // Appelée par handleCollabCreateContact (forceCreate=false) ou par DuplicateOnCreateModal
+  // onForceCreate (forceCreate=true) après confirmation utilisateur explicite.
+  const submitNewContact = (nc, { forceCreate = false } = {}) => {
+    const ncWithFlags = { ...nc, _forceCreate: !!forceCreate, _pending: true };
+    setContacts(p => [...p, ncWithFlags]);
     setShowNewContact(false);
     setNewContactForm({name:'',email:'',phone:'',mobile:'',company:'',address:'',notes:'',pipeline_stage:'nouveau',tags:''});
-    showNotif('Contact créé');
-    api('/api/data/contacts', { method:'POST', body:nc }).then(r => {
+    showNotif(forceCreate ? 'Contact créé (doublon ignoré)' : 'Contact créé');
+    api('/api/data/contacts', { method:'POST', body:ncWithFlags }).then(r => {
       if(!r||r.error||r._forbidden){
         console.error('[CONTACT CREATE FAIL]',r);
-        setContacts(p => p.filter(c => c.id !== nc.id));
+        setContacts(p => p.filter(c => c.id !== ncWithFlags.id));
         showNotif('Erreur: '+(r?.error||'création contact échouée'),'danger');
         return;
       }
       if(r._duplicate){
-        setContacts(p => p.filter(c => c.id !== nc.id));
+        // Sécurité : ne devrait pas arriver si forceCreate=true (backend bypass).
+        // Cas legacy ScheduleRdvModal flow OU race condition.
+        setContacts(p => p.filter(c => c.id !== ncWithFlags.id));
         showNotif('Ce contact existait déjà — fusionné','info');
         return;
       }
       if(!r.id){
         console.error('[CONTACT CREATE] server response missing id', r);
-        setContacts(p => p.filter(c => c.id !== nc.id));
+        setContacts(p => p.filter(c => c.id !== ncWithFlags.id));
         showNotif('Erreur: id serveur manquant — réessayez','danger');
         return;
       }
       // Reconcile temp id → real backend id, clear pending flag
-      setContacts(p => p.map(c => c.id === nc.id ? {...c, id: r.id, _pending: false} : c));
+      setContacts(p => p.map(c => c.id === ncWithFlags.id ? {...c, id: r.id, _pending: false, _forceCreate: undefined} : c));
     });
+  };
+
+  const handleCollabCreateContact = () => {
+    const fullName = (((typeof newContactForm!=='undefined'?newContactForm:{}).civility?newContactForm.civility+' ':'')+((typeof newContactForm!=='undefined'?newContactForm:{}).firstname||'')+' '+((typeof newContactForm!=='undefined'?newContactForm:{}).lastname||'')).trim() || (typeof newContactForm!=='undefined'?newContactForm:{}).name.trim();
+    if (!fullName) { showNotif('Le nom est obligatoire','danger'); return; }
+    const tags = (typeof newContactForm!=='undefined'?newContactForm:{}).tags ? (typeof newContactForm!=='undefined'?newContactForm:{}).tags.split(',').map(t=>t.trim()).filter(Boolean) : [];
+    const nc = { id:'ct'+Date.now(), companyId:company.id, name:fullName, firstname:(typeof newContactForm!=='undefined'?newContactForm:{}).firstname?.trim()||'', lastname:(typeof newContactForm!=='undefined'?newContactForm:{}).lastname?.trim()||'', civility:(typeof newContactForm!=='undefined'?newContactForm:{}).civility||'', contact_type:(typeof newContactForm!=='undefined'?newContactForm:{}).contact_type||'btc', email:(typeof newContactForm!=='undefined'?newContactForm:{}).email.trim(), phone:(typeof newContactForm!=='undefined'?newContactForm:{}).phone.trim()||(typeof newContactForm!=='undefined'?newContactForm:{}).mobile.trim(), mobile:(typeof newContactForm!=='undefined'?newContactForm:{}).mobile.trim(), company:(typeof newContactForm!=='undefined'?newContactForm:{}).company.trim(), address:(typeof newContactForm!=='undefined'?newContactForm:{}).address.trim(), website:(typeof newContactForm!=='undefined'?newContactForm:{}).website?.trim()||'', siret:(typeof newContactForm!=='undefined'?newContactForm:{}).siret?.trim()||'', totalBookings:0, lastVisit:'', tags, notes:(typeof newContactForm!=='undefined'?newContactForm:{}).notes.trim(), rating:null, docs:[], pipeline_stage:(typeof newContactForm!=='undefined'?newContactForm:{}).pipeline_stage||'nouveau', assignedTo:collab.id, shared_with:[], source:'manual', createdAt:new Date().toISOString() };
+
+    // V1.13.0 — Pré-check anti-doublon. Si match → ouvrir modal au lieu de submit silent.
+    if (nc.email || nc.phone) {
+      api('/api/data/contacts/check-duplicate-single', {
+        method:'POST',
+        body:{ email: nc.email||'', phone: nc.phone||'' }
+      }).then(checkRes => {
+        if (checkRes && checkRes.exists) {
+          setDuplicateOnCreateData({
+            matches: checkRes.matches || [],
+            conflict: !!checkRes.conflict,
+            pendingNewContact: { name: nc.name, email: nc.email, phone: nc.phone, _formSnapshot: nc },
+          });
+          return;
+        }
+        submitNewContact(nc, { forceCreate: false });
+      }).catch(() => submitNewContact(nc, { forceCreate: false }));
+      return;
+    }
+    submitNewContact(nc, { forceCreate: false });
   };
   // Quick add contact from phone number (inline in history/conversations)
   const handleQuickAddContact = () => {
@@ -6591,6 +6623,26 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
           </div>
         );
       })()}
+
+      {/* V1.13.0 — DuplicateOnCreateModal (NewContactModal flow). Snapshot du formulaire dans state, pas de window globale. */}
+      {duplicateOnCreateData && (
+        <DuplicateOnCreateModal
+          data={duplicateOnCreateData}
+          onClose={() => setDuplicateOnCreateData(null)}
+          onViewExisting={(match, mode) => {
+            setDuplicateOnCreateData(null);
+            setShowNewContact(false);
+            setNewContactForm({name:'',email:'',phone:'',mobile:'',company:'',address:'',notes:'',pipeline_stage:'nouveau',tags:''});
+            setSelectedCrmContact({ ...match, _editFromDuplicate: mode === 'edit' });
+            if (typeof setCollabFicheTab === 'function') setCollabFicheTab('notes');
+          }}
+          onForceCreate={() => {
+            const snapshot = duplicateOnCreateData?.pendingNewContact?._formSnapshot;
+            setDuplicateOnCreateData(null);
+            if (snapshot) submitNewContact(snapshot, { forceCreate: true });
+          }}
+        />
+      )}
 
 {/* ── MODAL NOUVEAU CONTACT ── */}
 <Modal open={showNewContact} onClose={()=>(typeof setShowNewContact==='function'?setShowNewContact:function(){})(false)} title="Nouveau contact" width={540}>

@@ -326,12 +326,13 @@ router.post('/contacts', requireAuth, enforceCompany, requirePermission('contact
     if (c.phone && !isValidPhone(c.phone)) {
       return res.status(400).json({ error: 'Format téléphone invalide (6-20 chiffres attendus)' });
     }
-    // Anti-doublon : si un contact avec le meme email OU phone existe deja dans la company → rejeter
-    if (c.email) {
+    // V1.13.0 — Anti-doublon : bypass si _forceCreate=true (utilisateur a vu modal DuplicateOnCreate et choisi 'Créer quand même')
+    // Sinon comportement legacy : retourne ID existant + _duplicate:true (compat ScheduleRdvModal V1.8.22)
+    if (!c._forceCreate && c.email) {
       const dupEmail = db.prepare("SELECT id FROM contacts WHERE companyId = ? AND email = ? AND email != '' AND COALESCE(pipeline_stage, '') != 'perdu' AND (archivedAt IS NULL OR archivedAt = '')").get(c.companyId, c.email.trim().toLowerCase());
       if (dupEmail) return res.json({ success: true, id: dupEmail.id, _duplicate: true });
     }
-    if (c.phone) {
+    if (!c._forceCreate && c.phone) {
       const cleanPhone = c.phone.replace(/[^\d+]/g, '').slice(-9);
       if (cleanPhone.length >= 6) {
         const candidates = db.prepare("SELECT id, phone FROM contacts WHERE companyId = ? AND phone != '' AND COALESCE(pipeline_stage, '') != 'perdu' AND (archivedAt IS NULL OR archivedAt = '')").all(c.companyId);
@@ -393,7 +394,7 @@ router.post('/contacts/check-duplicate-single', requireAuth, enforceCompany, (re
       if (cleanEmail) {
         // V1.11.5 — exclure pipeline_stage='perdu' (alignement POST /contacts) — soft-delete strict
         emailMatch = db.prepare(
-          "SELECT id, name, email, phone, mobile, assignedTo, shared_with_json, pipeline_stage, companyId FROM contacts WHERE companyId = ? AND LOWER(email) = ? AND email != '' AND COALESCE(pipeline_stage, '') != 'perdu' AND (archivedAt IS NULL OR archivedAt = '')"
+          "SELECT id, name, email, phone, mobile, assignedTo, shared_with_json, pipeline_stage, companyId, createdAt FROM contacts WHERE companyId = ? AND LOWER(email) = ? AND email != '' AND COALESCE(pipeline_stage, '') != 'perdu' AND (archivedAt IS NULL OR archivedAt = '')"
         ).get(companyId, cleanEmail);
         if (emailMatch) matches.push({ ...emailMatch, matchedBy: 'email' });
       }
@@ -404,7 +405,7 @@ router.post('/contacts/check-duplicate-single', requireAuth, enforceCompany, (re
       if (cleanPhone.length >= 6) {
         // V1.11.5 — exclure pipeline_stage='perdu' (alignement POST /contacts) — soft-delete strict
         const candidates = db.prepare(
-          "SELECT id, name, email, phone, mobile, assignedTo, shared_with_json, pipeline_stage, companyId FROM contacts WHERE companyId = ? AND (phone != '' OR mobile != '') AND COALESCE(pipeline_stage, '') != 'perdu' AND (archivedAt IS NULL OR archivedAt = '')"
+          "SELECT id, name, email, phone, mobile, assignedTo, shared_with_json, pipeline_stage, companyId, createdAt FROM contacts WHERE companyId = ? AND (phone != '' OR mobile != '') AND COALESCE(pipeline_stage, '') != 'perdu' AND (archivedAt IS NULL OR archivedAt = '')"
         ).all(companyId);
         for (const c of candidates) {
           const cp = (c.phone || c.mobile || '').replace(/[^\d]/g, '').slice(-9);
@@ -440,6 +441,7 @@ router.post('/contacts/check-duplicate-single', requireAuth, enforceCompany, (re
         assignedName,
         sharedWith,
         pipelineStage: m.pipeline_stage || '',
+        createdAt: m.createdAt || '',
         matchedBy: m.matchedBy
       };
     });
