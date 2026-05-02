@@ -30,7 +30,7 @@ const FORCE_REASONS = [
   { v: 'other',              l: 'Autre' },
 ];
 
-const DuplicateOnCreateModal = ({ data, onClose, onForceCreate }) => {
+const DuplicateOnCreateModal = ({ data, onClose, onForceCreate, onEnrich, onShare, onArchive, onHardDelete }) => {
   const { collab, contacts } = useCollabContext();
   const [forceCreateMode, setForceCreateMode] = useState(false);
   const [forceReason, setForceReason] = useState('');
@@ -100,8 +100,11 @@ const DuplicateOnCreateModal = ({ data, onClose, onForceCreate }) => {
             fullTarget={findFullTarget(m.id)}
             pendingContact={snap}
             collab={collab}
-            // V1.13.1.d wirera : onEnrich, onShare, onArchive, onHardDelete
-            // V1.13.1.c : seul "Voir détails" inline est actif (state local MatchCard)
+            // V1.13.1.d : actions wirees via callbacks parent (CollabPortal handlers)
+            onEnrich={onEnrich}
+            onShare={onShare}
+            onArchive={onArchive}
+            onHardDelete={onHardDelete}
           />
         ))}
       </div>

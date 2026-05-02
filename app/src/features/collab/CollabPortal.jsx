@@ -50,6 +50,7 @@ import CrmTab from "./tabs/CrmTab";
 import PhoneTab from "./tabs/PhoneTab";
 import RdvReportingTab from "./tabs/RdvReportingTab";
 import DuplicateOnCreateModal from "./modals/DuplicateOnCreateModal";
+import HardDeleteContactModal from "./modals/HardDeleteContactModal";
 
 const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCalendars, avails, setAvails, vacations, setVacations, contacts, setContacts, onBack, voipCredits, voipCallLogs, setVoipCallLogs, voipConfigured, appMyPhoneNumbers, appPhonePlans, appConversations, setAppConversations, pipelineStages, setPipelineStages, contactFieldDefs, setContactFieldDefs, collabs: collabsProp, googleEvents: googleEventsProp, setGoogleEvents, isAdminView, smsCredits }) => {
   // collabs = list of all collaborators in the company (for chat DM, etc.)
@@ -1355,6 +1356,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   // V1.13.0 — modal anti-doublon création (NewContactModal flow)
   // shape: { matches, conflict, pendingNewContact: { name, email, phone, _formSnapshot } }
   const [duplicateOnCreateData, setDuplicateOnCreateData] = useState(null);
+  // V1.13.1.d — hard delete depuis modal doublon (instance dédiée au flow doublon)
+  const [dupHardDeleteTarget, setDupHardDeleteTarget] = useState(null);
   // V1.8.2 — collab cible du RDV (default = moi). Si != moi, on filtre l'agenda et on prend les dispos de l'autre.
   const _scheduleTargetCollabId = (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).collaboratorId || collab.id;
   const _scheduleTargetCollab = (collabs||[]).find(c => c.id === _scheduleTargetCollabId) || collab;
@@ -3424,6 +3427,85 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       // Reconcile temp id → real backend id, clear pending flag
       setContacts(p => p.map(c => c.id === ncWithFlags.id ? {...c, id: r.id, _pending: false, _forceCreate: undefined} : c));
     });
+  };
+
+  // V1.13.1.d — Helper commun : reset formulaire + close duplicate modal après action
+  const _closeDupAfterAction = () => {
+    setDuplicateOnCreateData(null);
+    setNewContactForm({name:'',email:'',phone:'',mobile:'',company:'',address:'',notes:'',pipeline_stage:'nouveau',tags:''});
+  };
+
+  // V1.13.1.d — Compléter cette fiche (enrich-only, append-only)
+  // enrichPayload calculé côté MatchCard via computeEnrichPayload (Q1+Q2 conformes).
+  const handleDuplicateEnrich = async (matchId, enrichPayload) => {
+    contactsLocalEditRef.current = Date.now();
+    const body = { ...enrichPayload, companyId: company?.id };
+    const r = await api(`/api/data/contacts/${matchId}`, { method: 'PUT', body });
+    if (r?.success || r?.id || (!r?.error && !r?._forbidden)) {
+      // Update local contacts state (merge fields enrichis)
+      setContacts(p => p.map(c => c.id === matchId ? { ...c, ...enrichPayload } : c));
+      showNotif('Fiche enrichie avec succès');
+    } else {
+      showNotif('Erreur enrichissement : ' + (r?.error || 'inconnu'), 'danger');
+    }
+    _closeDupAfterAction();
+    setTimeout(() => { contactsLocalEditRef.current = 0; }, 30000);
+  };
+
+  // V1.13.1.d — Me partager cette fiche (PUT /:id/share mode:'add')
+  const handleDuplicateShare = async (matchId) => {
+    contactsLocalEditRef.current = Date.now();
+    const r = await api(`/api/data/contacts/${matchId}/share`, {
+      method: 'PUT',
+      body: { collaboratorId: collab.id, mode: 'add' }
+    });
+    if (r?.success) {
+      // Update local contact's shared_with
+      setContacts(p => p.map(c => c.id === matchId
+        ? { ...c, shared_with: Array.from(new Set([...(c.shared_with || []), collab.id])) }
+        : c
+      ));
+      showNotif('Fiche partagée avec vous');
+    } else if (r?.error === 'TARGET_COLLAB_IS_OWNER') {
+      showNotif('Cette fiche vous appartient déjà', 'info');
+    } else {
+      showNotif('Erreur partage : ' + (r?.error || 'inconnu'), 'danger');
+    }
+    _closeDupAfterAction();
+    setTimeout(() => { contactsLocalEditRef.current = 0; }, 30000);
+  };
+
+  // V1.13.1.d — Archiver doublon (POST /:id/archive avec window.confirm 2-step)
+  const handleDuplicateArchive = async (matchId) => {
+    const target = (contacts || []).find(c => c.id === matchId);
+    const targetName = target?.name || 'ce contact';
+    const ok = window.confirm(
+      `Archiver "${targetName}" ?\n\n` +
+      `Le contact sera masqué du CRM/Pipeline mais récupérable via le sous-onglet Archivés.\n` +
+      `Les RDV et historiques resteront visibles dans Agenda et Reporting (traçabilité préservée).`
+    );
+    if (!ok) return;
+    contactsLocalEditRef.current = Date.now();
+    const r = await api(`/api/data/contacts/${matchId}/archive`, {
+      method: 'POST',
+      body: { reason: 'Archived during duplicate resolution' }
+    });
+    if (r?.success || r?.action === 'archived') {
+      setContacts(p => p.filter(c => c.id !== matchId));
+      setPipelineRightContact(null);
+      setSelectedCrmContact(null);
+      showNotif('Contact archivé (récupérable)');
+    } else {
+      showNotif('Erreur archivage : ' + (r?.error || 'inconnu'), 'danger');
+    }
+    _closeDupAfterAction();
+    setTimeout(() => { contactsLocalEditRef.current = 0; }, 30000);
+  };
+
+  // V1.13.1.d — Hard delete : délègue à HardDeleteContactModal V1.12.9.d (3 verrous backend)
+  const handleDuplicateHardDelete = (target) => {
+    _closeDupAfterAction();
+    setDupHardDeleteTarget(target);
   };
 
   const handleCollabCreateContact = () => {
@@ -6651,6 +6733,24 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
             setDuplicateOnCreateData(null);
             if (snapshot) submitNewContact(snapshot, { forceCreate: true, reason, justification });
           }}
+          onEnrich={handleDuplicateEnrich}
+          onShare={handleDuplicateShare}
+          onArchive={handleDuplicateArchive}
+          onHardDelete={handleDuplicateHardDelete}
+        />
+      )}
+      {/* V1.13.1.d — Instance HardDeleteContactModal pour flow duplicate (séparée de celle CrmTab) */}
+      {dupHardDeleteTarget && (
+        <HardDeleteContactModal
+          contact={dupHardDeleteTarget}
+          onClose={() => setDupHardDeleteTarget(null)}
+          onSuccess={(id) => {
+            setContacts(p => p.filter(c => c.id !== id));
+            setPipelineRightContact(null);
+            setSelectedCrmContact(null);
+            // Window event 'crmContactHardDeleted' déjà émis par HardDeleteContactModal
+          }}
+          showNotif={showNotif}
         />
       )}
 
