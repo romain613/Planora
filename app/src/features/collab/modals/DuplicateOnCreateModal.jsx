@@ -1,101 +1,178 @@
-// DuplicateOnCreateModal — V1.13.0
-// Modal anti-doublon a la creation de contact.
+// DuplicateOnCreateModal — V1.13.1.c
+// Modal anti-doublon a la creation de contact (refactor V1.13.1).
 // Triggered depuis NewContactModal flow apres pre-check
 // /api/data/contacts/check-duplicate-single retournant exists=true.
-// 3 actions (per spec MH) : Voir fiche / Modifier fiche / Creer quand meme.
+//
+// Architecture V1.13.1.c :
+//   - Cards via DuplicateMatchCard (sous-composant V1.13.1.b)
+//   - Footer admin/supra only avec raison structuree + justification
+//   - Plus de boutons "Voir/Modifier la fiche" externes (UX in-modal pure)
+//   - "Voir details" inline expand dans MatchCard (V1.13.1.b)
+//
 // Aucune fusion automatique, aucun ecrasement, aucune action sans confirmation.
-// Snapshot du formulaire vit dans data.pendingNewContact._formSnapshot (state parent),
-// pas de variable globale window.
+// Snapshot du formulaire vit dans data.pendingNewContact._formSnapshot (state parent).
+//
+// Props :
+//   data         : { matches, conflict, pendingNewContact: { name, email, phone, _formSnapshot } }
+//   onClose      : callback fermeture (parent re-ouvre NewContactModal V1.13.0-modal-stacking-fix)
+//   onForceCreate: (reason, justification) => void  — admin/supra only
 
-import React from "react";
+import React, { useState } from "react";
 import { T } from "../../../theme";
-import { I, Btn, Modal, Avatar } from "../../../shared/ui";
-import DuplicateMatchCard from "./DuplicateMatchCard"; // V1.13.1.b — composant pret, integre en V1.13.1.c
+import { I, Btn, Modal } from "../../../shared/ui";
+import { useCollabContext } from "../context/CollabContext";
+import DuplicateMatchCard from "./DuplicateMatchCard";
 
-const DuplicateOnCreateModal = ({ data, onClose, onViewExisting, onForceCreate }) => {
+const FORCE_REASONS = [
+  { v: 'real_second_person', l: 'Vraie 2e personne (homonyme, famille…)' },
+  { v: 'test_data',          l: 'Données de test' },
+  { v: 'data_correction',    l: 'Correction de données' },
+  { v: 'other',              l: 'Autre' },
+];
+
+const DuplicateOnCreateModal = ({ data, onClose, onForceCreate }) => {
+  const { collab, contacts } = useCollabContext();
+  const [forceCreateMode, setForceCreateMode] = useState(false);
+  const [forceReason, setForceReason] = useState('');
+  const [forceJustification, setForceJustification] = useState('');
+
   if (!data) return null;
   const { matches = [], conflict = false, pendingNewContact = {} } = data;
 
-  const _matchedByLabel = (m) =>
-    m.matchedBy === 'email' ? { txt: 'Même email', icon: 'mail', color: '#2563EB' } :
-    m.matchedBy === 'phone' ? { txt: 'Même téléphone', icon: 'phone', color: '#22C55E' } :
-    { txt: '', icon: '', color: T.text3 };
+  const isAdmin = collab?.role === 'admin' || collab?.role === 'supra';
+  const snap = pendingNewContact._formSnapshot || pendingNewContact;
+  const justifLen = forceJustification.trim().length;
+  const canConfirmForce = !!forceReason && justifLen >= 10;
 
-  const _stageColor = (stage) => {
-    const colors = { nouveau:'#3B82F6', contacte:'#8B5CF6', qualifie:'#F59E0B', rdv_programme:'#10B981', nrp:'#EF4444', client_valide:'#22C55E', perdu:'#64748B' };
-    return colors[stage] || T.text3;
+  // Lookup fullTarget depuis contacts state local (enrichit les diffs MatchCard)
+  const findFullTarget = (matchId) => (contacts || []).find(c => c.id === matchId) || null;
+
+  const handleConfirmForce = () => {
+    if (!canConfirmForce) return;
+    const reasonLabel = FORCE_REASONS.find(r => r.v === forceReason)?.l || forceReason;
+    const msg = `Confirmer la création forcée de "${pendingNewContact.name}" ?\n\n` +
+      `Raison : ${reasonLabel}\n` +
+      `Justification : ${forceJustification.trim()}\n\n` +
+      `Cette action sera audit-loggée et tracée.`;
+    if (!window.confirm(msg)) return;
+    onForceCreate?.(forceReason, forceJustification.trim());
   };
 
-  const _fmtDate = (iso) => {
-    if (!iso) return '';
-    try { return new Date(iso).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit', year:'numeric'}); } catch { return ''; }
-  };
-
-  const _handleForceCreate = () => {
-    if (!window.confirm(`Créer un nouveau contact "${pendingNewContact.name}" malgré le doublon ?\n\nCela crée 2 contacts distincts. Ils pourront être fusionnés manuellement plus tard si besoin.`)) return;
-    onForceCreate?.();
+  const handleResetForce = () => {
+    setForceCreateMode(false);
+    setForceReason('');
+    setForceJustification('');
   };
 
   return (
-    <Modal open={true} onClose={onClose} title={conflict ? "⚠️ Conflit doublon" : (matches.length > 1 ? "Plusieurs contacts existent" : "Contact déjà existant")} width={560}>
-      {/* Bandeau "Vous saisissez" */}
+    <Modal
+      open={true}
+      onClose={onClose}
+      title={conflict ? "⚠️ Conflit doublon" : (matches.length > 1 ? "Plusieurs contacts existent" : "Contact déjà existant")}
+      width={640}
+    >
+      {/* Zone 1 — Vous saisissez */}
       <div style={{ padding:'10px 14px', borderRadius:10, background:T.bg, border:`1px solid ${T.border}`, marginBottom:14 }}>
         <div style={{ fontSize:10, fontWeight:700, color:T.text3, textTransform:'uppercase', letterSpacing:0.5, marginBottom:4 }}>Vous saisissez</div>
         <div style={{ fontSize:13, fontWeight:600, color:T.text }}>{pendingNewContact.name || '(sans nom)'}</div>
         <div style={{ fontSize:11, color:T.text3, marginTop:2, display:'flex', gap:10, flexWrap:'wrap' }}>
           {pendingNewContact.email && <span><I n="mail" s={11}/> {pendingNewContact.email}</span>}
           {pendingNewContact.phone && <span><I n="phone" s={11}/> {pendingNewContact.phone}</span>}
+          {snap.firstname && <span><I n="user" s={11}/> {snap.firstname} {snap.lastname || ''}</span>}
+          {snap.company && <span><I n="building-2" s={11}/> {snap.company}</span>}
+          {snap.address && <span><I n="map-pin" s={11}/> {String(snap.address).slice(0, 40)}</span>}
         </div>
       </div>
 
+      {/* Conflit banner */}
       {conflict && (
         <div style={{ padding:'8px 12px', borderRadius:8, background:'#F59E0B18', border:'1px solid #F59E0B', marginBottom:12, fontSize:11, color:'#92400E' }}>
           ⚠️ L'email correspond à un contact, le téléphone à un autre. Choisissez avec attention.
         </div>
       )}
 
-      {/* Liste des matches */}
-      <div style={{ display:'flex', flexDirection:'column', gap:10, marginBottom:16 }}>
-        {matches.map(m => {
-          const ml = _matchedByLabel(m);
-          return (
-            <div key={m.id} style={{ padding:14, borderRadius:12, border:`2px solid ${ml.color}40`, background:T.surface }}>
-              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
-                <Avatar name={m.name||'?'} color={ml.color} size={36}/>
-                <div style={{ flex:1, minWidth:0 }}>
-                  <div style={{ fontSize:14, fontWeight:700, color:T.text, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{m.name}</div>
-                  <div style={{ fontSize:10, color:T.text3 }}>
-                    {m.assignedName ? <span>👤 {m.assignedName}</span> : <span style={{color:'#F59E0B'}}>⚠ Sans propriétaire</span>}
-                    {m.createdAt && <span> · Créé le {_fmtDate(m.createdAt)}</span>}
-                  </div>
-                </div>
-                <span style={{ fontSize:10, fontWeight:700, padding:'3px 8px', borderRadius:6, background:ml.color+'18', color:ml.color, whiteSpace:'nowrap' }}>
-                  <I n={ml.icon} s={10}/> {ml.txt}
-                </span>
-              </div>
-              <div style={{ fontSize:11, color:T.text3, display:'flex', gap:10, flexWrap:'wrap', marginBottom:8 }}>
-                {m.email && <span><I n="mail" s={11}/> {m.email}</span>}
-                {m.phone && <span><I n="phone" s={11}/> {m.phone}</span>}
-                {m.pipelineStage && <span style={{color:_stageColor(m.pipelineStage), fontWeight:600}}>● {m.pipelineStage}</span>}
-              </div>
-              <div style={{ display:'flex', gap:6, flexWrap:'wrap' }}>
-                <Btn small onClick={() => onViewExisting?.(m, 'view')} style={{ color:T.accent, borderColor:T.accent+'40' }}><I n="eye" s={12}/> Voir la fiche</Btn>
-                <Btn small onClick={() => onViewExisting?.(m, 'edit')} style={{ color:'#F59E0B', borderColor:'#F59E0B40' }}><I n="edit-2" s={12}/> Modifier la fiche</Btn>
-              </div>
-            </div>
-          );
-        })}
+      {/* Zone 2 — Liste matches via DuplicateMatchCard */}
+      <div style={{ display:'flex', flexDirection:'column', marginBottom:16 }}>
+        {matches.map(m => (
+          <DuplicateMatchCard
+            key={m.id}
+            match={m}
+            fullTarget={findFullTarget(m.id)}
+            pendingContact={snap}
+            collab={collab}
+            // V1.13.1.d wirera : onEnrich, onShare, onArchive, onHardDelete
+            // V1.13.1.c : seul "Voir détails" inline est actif (state local MatchCard)
+          />
+        ))}
       </div>
 
-      {/* V1.13.1.b — dead branch pour valider compilation Vite (jamais rendu, integration reelle V1.13.1.c) */}
-      {false && <DuplicateMatchCard match={{}} pendingContact={{}} collab={{}} />}
-      {/* Footer 3ème action : Créer quand même */}
-      <div style={{ display:'flex', gap:8, paddingTop:14, borderTop:`1px solid ${T.border}` }}>
-        <Btn small onClick={onClose} style={{ flex:1, justifyContent:'center' }}>Annuler</Btn>
-        <Btn small onClick={_handleForceCreate} style={{ flex:1, justifyContent:'center', color:'#fff', background:'#DC2626', borderColor:'#DC2626' }}>
-          <I n="user-plus" s={12}/> Créer quand même
-        </Btn>
-      </div>
+      {/* Footer compact (default) */}
+      {!forceCreateMode && (
+        <div style={{ display:'flex', gap:8, paddingTop:14, borderTop:`1px solid ${T.border}` }}>
+          <Btn small onClick={onClose} style={{ flex:1, justifyContent:'center' }}>Annuler</Btn>
+          {isAdmin && (
+            <Btn small onClick={() => setForceCreateMode(true)} style={{ flex:1, justifyContent:'center', color:'#DC2626', borderColor:'#DC262640' }}>
+              <I n="user-plus" s={12}/> Créer quand même…
+            </Btn>
+          )}
+        </div>
+      )}
+
+      {/* Footer expanded — admin/supra justif (Q3+Q8) */}
+      {forceCreateMode && (
+        <div style={{ paddingTop:14, borderTop:`1px solid ${T.border}` }}>
+          <div style={{ padding:14, borderRadius:10, background:'#DC262608', border:'1.5px solid #DC2626', marginBottom:12 }}>
+            <div style={{ fontSize:12, fontWeight:700, color:'#DC2626', marginBottom:10 }}>
+              <I n="alert-triangle" s={13}/> Création forcée — admin uniquement
+            </div>
+
+            {/* Raison structurée */}
+            <div style={{ marginBottom:12 }}>
+              <label style={{ fontSize:11, fontWeight:700, color:T.text2, display:'block', marginBottom:6 }}>Raison * (obligatoire)</label>
+              {FORCE_REASONS.map(r => (
+                <label key={r.v} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', borderRadius:6, cursor:'pointer', background:forceReason===r.v?'#DC262618':'transparent', marginBottom:3, fontSize:12, color:T.text }}>
+                  <input
+                    type="radio"
+                    name="forceReason"
+                    value={r.v}
+                    checked={forceReason===r.v}
+                    onChange={e => setForceReason(e.target.value)}
+                    style={{ accentColor:'#DC2626' }}
+                  />
+                  {r.l}
+                </label>
+              ))}
+            </div>
+
+            {/* Justification textarea */}
+            <div style={{ marginBottom:6 }}>
+              <label style={{ fontSize:11, fontWeight:700, color:T.text2, display:'block', marginBottom:6 }}>
+                Justification * (minimum 10 caractères)
+              </label>
+              <textarea
+                value={forceJustification}
+                onChange={e => setForceJustification(e.target.value)}
+                placeholder="Expliquez pourquoi vous créez ce doublon (sera audité)…"
+                rows={3}
+                style={{ width:'100%', padding:'8px 10px', borderRadius:8, border:`1.5px solid ${justifLen>=10?'#22C55E':T.border}`, background:T.bg, color:T.text, fontSize:13, fontFamily:'inherit', boxSizing:'border-box', resize:'vertical' }}
+              />
+              <div style={{ fontSize:10, color:justifLen>=10?'#16A34A':T.text3, marginTop:3, textAlign:'right' }}>
+                {justifLen} / 10 caractères {justifLen>=10 ? '✓' : '— minimum requis'}
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display:'flex', gap:8 }}>
+            <Btn small onClick={handleResetForce} style={{ flex:1, justifyContent:'center' }}>
+              <I n="arrow-left" s={12}/> Retour
+            </Btn>
+            <Btn small onClick={handleConfirmForce} disabled={!canConfirmForce}
+              style={{ flex:1, justifyContent:'center', color:'#fff', background:canConfirmForce?'#DC2626':'#DC262660', borderColor:'#DC2626', cursor:canConfirmForce?'pointer':'not-allowed' }}>
+              <I n="check-circle" s={12}/> Confirmer création
+            </Btn>
+          </div>
+        </div>
+      )}
     </Modal>
   );
 };

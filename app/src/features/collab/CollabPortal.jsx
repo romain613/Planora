@@ -3388,8 +3388,15 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   // V1.13.0 — Soumission backend du nouveau contact, avec ou sans bypass anti-doublon.
   // Appelée par handleCollabCreateContact (forceCreate=false) ou par DuplicateOnCreateModal
   // onForceCreate (forceCreate=true) après confirmation utilisateur explicite.
-  const submitNewContact = (nc, { forceCreate = false } = {}) => {
-    const ncWithFlags = { ...nc, _forceCreate: !!forceCreate, _pending: true };
+  // V1.13.1.c — accepte reason + justification (relayés au backend V1.13.1.a pour audit log).
+  const submitNewContact = (nc, { forceCreate = false, reason = '', justification = '' } = {}) => {
+    const ncWithFlags = {
+      ...nc,
+      _forceCreate: !!forceCreate,
+      _forceCreateReason: forceCreate && reason ? reason : undefined,
+      _forceCreateJustification: forceCreate && justification ? justification : undefined,
+      _pending: true,
+    };
     setContacts(p => [...p, ncWithFlags]);
     setShowNewContact(false);
     setNewContactForm({name:'',email:'',phone:'',mobile:'',company:'',address:'',notes:'',pipeline_stage:'nouveau',tags:''});
@@ -6639,16 +6646,10 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
             // Restore NewContactModal — formulaire toujours en state, user peut corriger
             setShowNewContact(true);
           }}
-          onViewExisting={(match, mode) => {
-            setDuplicateOnCreateData(null);
-            setNewContactForm({name:'',email:'',phone:'',mobile:'',company:'',address:'',notes:'',pipeline_stage:'nouveau',tags:''});
-            setSelectedCrmContact({ ...match, _editFromDuplicate: mode === 'edit' });
-            if (typeof setCollabFicheTab === 'function') setCollabFicheTab('notes');
-          }}
-          onForceCreate={() => {
+          onForceCreate={(reason, justification) => {
             const snapshot = duplicateOnCreateData?.pendingNewContact?._formSnapshot;
             setDuplicateOnCreateData(null);
-            if (snapshot) submitNewContact(snapshot, { forceCreate: true });
+            if (snapshot) submitNewContact(snapshot, { forceCreate: true, reason, justification });
           }}
         />
       )}
