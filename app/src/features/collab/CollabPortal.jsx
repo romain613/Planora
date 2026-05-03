@@ -54,6 +54,7 @@ import RdvReportingTab from "./tabs/RdvReportingTab";
 import DuplicateOnCreateModal from "./modals/DuplicateOnCreateModal";
 import HardDeleteContactModal from "./modals/HardDeleteContactModal";
 import PostCallResultModal from "./modals/PostCallResultModal"; // V3.x post-call smart pipeline
+import SmartFooterBar from "./components/SmartFooterBar"; // V1 Smart Footer Performance Bar
 
 const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCalendars, avails, setAvails, vacations, setVacations, contacts, setContacts, onBack, voipCredits, voipCallLogs, setVoipCallLogs, voipConfigured, appMyPhoneNumbers, appPhonePlans, appConversations, setAppConversations, pipelineStages, setPipelineStages, contactFieldDefs, setContactFieldDefs, collabs: collabsProp, googleEvents: googleEventsProp, setGoogleEvents, isAdminView, smsCredits }) => {
   // collabs = list of all collaborators in the company (for chat DM, etc.)
@@ -4104,6 +4105,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       crmExportModal, setCrmExportModal,
       filteredCollabCrm, collabCrmTotalPages,
       showNewContact, setShowNewContact,
+      showIaWidget, setShowIaWidget, // V1 Smart Footer — bouton IA conservé
       newContactForm, setNewContactForm,
       scanImageModal, setScanImageModal,
       csvImportModal, setCsvImportModal,
@@ -7146,21 +7148,11 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
         </Modal>
       )}
 
-      {/* ═══ STICKY ACTION BAR ═══ */}
-      <div style={{position:'fixed',bottom:0,left:(typeof callFormAccordion!=='undefined'?callFormAccordion:null)?._navCollapsed?56:240,right:0,zIndex:9989,padding:'8px 16px',background:T.surface+'EE',backdropFilter:'blur(12px)',borderTop:'1px solid '+T.border,display:'flex',justifyContent:'center',gap:6,transition:'left .2s ease'}}>
-        {[
-          {icon:'phone-call',label:'Appeler',color:'#22C55E',action:()=>setPortalTab('phone')},
-          {icon:'calendar-plus',label:'RDV',color:'#0EA5E9',action:()=>{setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:new Date().toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true});setPhoneShowScheduleModal(true);}},
-          {icon:'message-square',label:'SMS',color:'#7C3AED',action:()=>setPortalTab('phone')},
-          {icon:'user-plus',label:'Contact',color:'#3B82F6',action:()=>setShowNewContact(true)},
-          ...(collab.ai_copilot_enabled?[{icon:'cpu',label:'IA',color:'#F97316',action:()=>setShowIaWidget(p=>!p)}]:[]),
-        ].map((btn,i)=>(
-          <div key={i} onClick={btn.action} style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2,padding:'6px 14px',borderRadius:10,cursor:'pointer',background:'transparent',border:'1px solid transparent',transition:'all .15s',minWidth:52}} onMouseEnter={e=>{e.currentTarget.style.background=btn.color+'12';e.currentTarget.style.borderColor=btn.color+'30';}} onMouseLeave={e=>{e.currentTarget.style.background='transparent';e.currentTarget.style.borderColor='transparent';}}>
-            <I n={btn.icon} s={18} style={{color:btn.color}}/>
-            <span style={{fontSize:8,fontWeight:700,color:btn.color}}>{btn.label}</span>
-          </div>
-        ))}
-      </div>
+      {/* V1 Smart Footer Performance Bar — remplace l'ancienne sticky action bar
+          (Appeler/RDV/SMS/Contact + IA). Position/style identiques (left dynamique selon
+          sidebar, z-index 9989, glassmorphism). KPI live : 📞 appels du jour | 📅 RDV |
+          🔥 intéressés | ❌ NRP | ➕ (V2) | IA conditionnel. */}
+      <SmartFooterBar navCollapsed={!!((typeof callFormAccordion!=='undefined'?callFormAccordion:null)?._navCollapsed)} />
 
       {/* ═══ IA PROACTIVE WIDGET ═══ */}
       {(typeof showIaWidget!=='undefined'?showIaWidget:null) && collab.ai_copilot_enabled && (()=>{

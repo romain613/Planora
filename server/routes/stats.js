@@ -49,4 +49,37 @@ router.get('/collab/:collaboratorId/pipeline-top', requireAuth, enforceCompany, 
   }
 });
 
+// V1 Smart Footer Performance Bar — KPI live aggregés du jour pour un collab.
+// Source : call_logs (compte aujourd'hui). RDV/Pipeline stages calculés frontend
+// depuis bookings/contacts state existant (Q4=A : frontend max + 1 SQL backend).
+// Permission : collab voit ses propres stats OR admin/supra.
+// Fenêtre : journée locale serveur (DATE('now') SQLite).
+router.get('/collab/:collaboratorId/footer-kpis', requireAuth, enforceCompany, (req, res) => {
+  try {
+    const collabId = req.params.collaboratorId;
+    const companyId = req.auth.companyId;
+
+    if (collabId !== req.auth.collaboratorId && !req.auth.isAdmin && !req.auth.isSupra) {
+      return res.status(403).json({ error: 'Permission denied' });
+    }
+
+    const callsToday = db.prepare(
+      "SELECT COUNT(*) AS n FROM call_logs WHERE companyId = ? AND collaboratorId = ? AND DATE(createdAt) = DATE('now')"
+    ).get(companyId, collabId)?.n || 0;
+
+    const callsValidToday = db.prepare(
+      "SELECT COUNT(*) AS n FROM call_logs WHERE companyId = ? AND collaboratorId = ? AND DATE(createdAt) = DATE('now') AND is_valid_call = 1"
+    ).get(companyId, collabId)?.n || 0;
+
+    res.json({
+      callsToday,
+      callsValidToday,
+      // RDV / pipeline stages = calculés frontend (bookings + contacts state)
+    });
+  } catch (err) {
+    console.error('[STATS FOOTER-KPIS ERR]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;
