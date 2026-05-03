@@ -1103,10 +1103,16 @@ router.delete('/contacts/:id/permanent', requireAuth, requirePermission('contact
     if (req.body?.confirm !== 'CONFIRM_HARD_DELETE') {
       return res.status(400).json({ error: 'BODY_CONFIRMATION_REQUIRED', message: "body.confirm doit etre 'CONFIRM_HARD_DELETE'" });
     }
-    const record = db.prepare('SELECT companyId, name, email, phone, archivedAt FROM contacts WHERE id = ?').get(id);
+    const record = db.prepare('SELECT companyId, name, email, phone, assignedTo, archivedAt FROM contacts WHERE id = ?').get(id);
     if (!record) return res.status(404).json({ error: 'NOT_FOUND' });
     if (!req.auth.isSupra && record.companyId !== req.auth.companyId) {
       return res.status(403).json({ error: 'Accès interdit' });
+    }
+    // V1.14.1.z R2 — Ownership check : non-admin ne peut hard delete QUE SES contacts archivés.
+    // Aligne avec V1.13.2.a Q2 archive owner-relax. Admin/supra bypass via wildcard '*' deja gere
+    // par requirePermission('contacts.hard_delete') au niveau middleware.
+    if (!req.auth.isAdmin && !req.auth.isSupra && record.assignedTo !== req.auth.collaboratorId) {
+      return res.status(403).json({ error: "Accès interdit — contact assigné à un autre collaborateur" });
     }
     if (!record.archivedAt || record.archivedAt === '') {
       return res.status(409).json({ error: 'NOT_ARCHIVED', message: 'Contact doit etre archive avant hard delete' });

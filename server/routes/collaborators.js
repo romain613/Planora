@@ -58,7 +58,10 @@ router.post('/', requireAuth, enforceCompany, async (req, res) => {
       chat_enabled: c.chat_enabled !== undefined ? c.chat_enabled : 1,
       sms_enabled: c.sms_enabled || 0,
       can_delete_contacts: c.can_delete_contacts || 0,
-      can_hard_delete_contacts: c.can_hard_delete_contacts || 0,
+      // V1.14.1.z — DEFAULT 1 pour nouveaux collabs : hard delete activé par défaut.
+      // Admin peut décocher via AdminDash toggle (V1.12.9.c). Backend impose ownership
+      // (data.js:1100 V1.14.1.z R2) + verrou archivedAt + saisie SUPPRIMER (HardDeleteContactModal).
+      can_hard_delete_contacts: c.can_hard_delete_contacts !== undefined ? c.can_hard_delete_contacts : 1,
       secure_ia_phone: c.secure_ia_phone || 0,
       secure_ia_words_json: c.secure_ia_words_json || '[]',
       ai_copilot_enabled: c.ai_copilot_enabled || 0,
