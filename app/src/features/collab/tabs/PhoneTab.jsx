@@ -8917,87 +8917,10 @@ Voir la fiche sans qualifier →
   </div>;
 })()}
 
-{/*
-    POST-CALL RESULT MODAL — Résultat d'appel obligatoire (appel >10s)
-    ═══════════════════════════════════════════════════════════════════ */}
-{(typeof postCallResultModal!=='undefined'?postCallResultModal:null) && (()=>{
-  const pcr = (typeof postCallResultModal!=='undefined'?postCallResultModal:null);
-  const ct = pcr.contact;
-  return <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:10001,display:'flex',alignItems:'center',justifyContent:'center',backdropFilter:'blur(6px)'}}>
-    <div onClick={e=>e.stopPropagation()} style={{width:480,borderRadius:20,background:'#fff',boxShadow:'0 20px 60px rgba(0,0,0,0.3)',padding:28,maxHeight:'90vh',overflow:'auto'}}>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',marginBottom:20}}>
-<div>
-<div style={{fontSize:17,fontWeight:800,color:'#1F2937',display:'flex',alignItems:'center',gap:8}}><I n="phone-call" s={20} style={{color:'#22C55E'}}/> Résultat de l'appel</div>
-<div style={{fontSize:12,color:T.text3,marginTop:2}}>{ct.name} · {Math.floor(pcr.duration/60)}min {pcr.duration%60}s</div>
-</div>
-<div onClick={()=>setPostCallResultModal(null)} style={{width:32,height:32,borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#F3F4F6',transition:'background .15s'}} onMouseEnter={e=>e.currentTarget.style.background='#E5E7EB'} onMouseLeave={e=>e.currentTarget.style.background='#F3F4F6'} title="Fermer sans statuer"><I n="x" s={16} style={{color:'#6B7280'}}/></div>
-      </div>
-
-      <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:12}}>Quel est le résultat de cet échange ?</div>
-
-      <div style={{display:'flex',flexDirection:'column',gap:8}}>
-{/* RDV Programmé */}
-<div onClick={()=>{
-setPostCallResultModal(null);
-handlePipelineStageChange(ct.id, 'rdv_programme');
-}} style={{padding:'14px 16px',borderRadius:12,border:'2px solid #0EA5E920',background:'#0EA5E908',cursor:'pointer',transition:'all .2s',display:'flex',alignItems:'center',gap:12}} onMouseEnter={e=>e.currentTarget.style.borderColor='#0EA5E9'} onMouseLeave={e=>e.currentTarget.style.borderColor='#0EA5E920'}>
-<div style={{width:40,height:40,borderRadius:10,background:'#0EA5E915',display:'flex',alignItems:'center',justifyContent:'center'}}><I n="calendar" s={20} style={{color:'#0EA5E9'}}/></div>
-<div><div style={{fontSize:14,fontWeight:700,color:'#0EA5E9'}}>RDV Programmé</div><div style={{fontSize:11,color:T.text3}}>Le prospect a accepté un rendez-vous</div></div>
-</div>
-
-{/* À rappeler */}
-<div onClick={()=>{
-const note = prompt('Note sur l\'échange + quand rappeler ?\n(Ex: Intéressé mais pas dispo cette semaine, rappeler lundi)');
-if (!note?.trim()) { showNotif('Note obligatoire','danger'); return; }
-const dateStr = new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
-handleCollabUpdateContact(ct.id, {
-  pipeline_stage: 'contacte',
-  notes: (ct.notes ? ct.notes+'\n' : '') + dateStr+' [En discussion - À rappeler] : '+note.trim()
-});
-showNotif('Contact → En discussion (à rappeler)');
-setPostCallResultModal(null);
-}} style={{padding:'14px 16px',borderRadius:12,border:'2px solid #F59E0B20',background:'#F59E0B08',cursor:'pointer',transition:'all .2s',display:'flex',alignItems:'center',gap:12}} onMouseEnter={e=>e.currentTarget.style.borderColor='#F59E0B'} onMouseLeave={e=>e.currentTarget.style.borderColor='#F59E0B20'}>
-<div style={{width:40,height:40,borderRadius:10,background:'#F59E0B15',display:'flex',alignItems:'center',justifyContent:'center'}}><I n="phone-forwarded" s={20} style={{color:'#F59E0B'}}/></div>
-<div><div style={{fontSize:14,fontWeight:700,color:'#F59E0B'}}>À rappeler</div><div style={{fontSize:11,color:T.text3}}>Échange positif, à recontacter plus tard</div></div>
-</div>
-
-{/* Qualifié */}
-<div onClick={()=>{
-setPostCallResultModal(null);
-handlePipelineStageChange(ct.id, 'qualifie');
-}} style={{padding:'14px 16px',borderRadius:12,border:'2px solid #7C3AED20',background:'#7C3AED08',cursor:'pointer',transition:'all .2s',display:'flex',alignItems:'center',gap:12}} onMouseEnter={e=>e.currentTarget.style.borderColor='#7C3AED'} onMouseLeave={e=>e.currentTarget.style.borderColor='#7C3AED20'}>
-<div style={{width:40,height:40,borderRadius:10,background:'#7C3AED15',display:'flex',alignItems:'center',justifyContent:'center'}}><I n="check-circle" s={20} style={{color:'#7C3AED'}}/></div>
-<div><div style={{fontSize:14,fontWeight:700,color:'#7C3AED'}}>Qualifié</div><div style={{fontSize:11,color:T.text3}}>Besoin identifié, budget confirmé</div></div>
-</div>
-
-{/* Pas intéressé */}
-<div onClick={()=>{
-setPostCallResultModal(null);
-handlePipelineStageChange(ct.id, 'perdu');
-}} style={{padding:'14px 16px',borderRadius:12,border:'2px solid #EF444420',background:'#EF444408',cursor:'pointer',transition:'all .2s',display:'flex',alignItems:'center',gap:12}} onMouseEnter={e=>e.currentTarget.style.borderColor='#EF4444'} onMouseLeave={e=>e.currentTarget.style.borderColor='#EF444420'}>
-<div style={{width:40,height:40,borderRadius:10,background:'#EF444415',display:'flex',alignItems:'center',justifyContent:'center'}}><I n="x-circle" s={20} style={{color:'#EF4444'}}/></div>
-<div><div style={{fontSize:14,fontWeight:700,color:'#EF4444'}}>Pas intéressé</div><div style={{fontSize:11,color:T.text3}}>Le prospect n'est pas intéressé</div></div>
-</div>
-
-{/* Note libre */}
-<div onClick={()=>{
-const note = prompt('Note sur l\'échange :');
-if (!note?.trim()) { showNotif('Note obligatoire','danger'); return; }
-const dateStr = new Date().toLocaleDateString('fr-FR',{day:'numeric',month:'short'});
-handleCollabUpdateContact(ct.id, {
-  pipeline_stage: 'contacte',
-  notes: (ct.notes ? ct.notes+'\n' : '') + dateStr+' [En discussion] : '+note.trim()
-});
-showNotif('Contact → En discussion');
-setPostCallResultModal(null);
-}} style={{padding:'14px 16px',borderRadius:12,border:'2px solid '+T.border,background:T.bg,cursor:'pointer',transition:'all .2s',display:'flex',alignItems:'center',gap:12}} onMouseEnter={e=>e.currentTarget.style.borderColor=T.accent} onMouseLeave={e=>e.currentTarget.style.borderColor=T.border}>
-<div style={{width:40,height:40,borderRadius:10,background:T.accentBg,display:'flex',alignItems:'center',justifyContent:'center'}}><I n="edit-3" s={20} style={{color:T.accent}}/></div>
-<div><div style={{fontSize:14,fontWeight:700,color:T.text}}>Autre</div><div style={{fontSize:11,color:T.text3}}>Ajouter une note libre sur l'échange</div></div>
-</div>
-      </div>
-    </div>
-  </div>;
-})()}
+{/* V3.x — POST-CALL RESULT MODAL déplacé vers PostCallResultModal.jsx (NEW V3.x).
+    Render unifié dans CollabPortal.jsx (cf. import + render top-level).
+    Ancien bloc inline hardcodé (4 statuts RDV/À rappeler/Qualifié/Pas intéressé) supprimé
+    car double-rendu sur même state postCallResultModal masquait le NEW modal dynamique. */}
 
 {/* Pipeline RDV Modal supprimé — remplacé par la modale unifiée phoneScheduleModal */}
 

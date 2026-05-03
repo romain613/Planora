@@ -17,6 +17,7 @@ import companiesRoutes from './routes/companies.js';
 import settingsRoutes from './routes/settings.js';
 import smsRoutes from './routes/sms.js';
 import dataRoutes from './routes/data.js';
+import statsRoutes from './routes/stats.js'; // V3.x post-call smart pipeline + futures stats
 import publicRoutes from './routes/public.js';
 import googleRoutes from './routes/google.js';
 import tasksRoutes from './routes/tasks.js';
@@ -154,6 +155,7 @@ app.use('/api/companies', companiesRoutes);
 app.use('/api/settings', settingsRoutes);
 app.use('/api/sms', smsRoutes);
 app.use('/api/data', dataRoutes);
+app.use('/api/stats', statsRoutes); // V3.x post-call smart pipeline
 app.use('/api/notify', notifyRoutes);
 app.use('/api/verify', verifyRoutes);
 app.use('/api/public', publicRoutes);

@@ -911,7 +911,7 @@ router.post('/calls', requireAuth, enforceCompany, (req, res) => {
 
 // PUT /api/voip/calls/:id — Update call log (notes, pipeline action, duration)
 // WHITELISTED columns only — prevents SQL injection via dynamic keys
-const ALLOWED_CALL_LOG_FIELDS = ['notes', 'status', 'duration', 'contactId', 'contactName', 'toNumber', 'fromNumber', 'recordingUrl', 'recordingSid', 'tags_json', 'disposition', 'endedAt', 'is_valid_call', 'invalid_reason'];
+const ALLOWED_CALL_LOG_FIELDS = ['notes', 'status', 'duration', 'contactId', 'contactName', 'toNumber', 'fromNumber', 'recordingUrl', 'recordingSid', 'tags_json', 'disposition', 'endedAt', 'is_valid_call', 'invalid_reason', 'pipelineAction']; // V3.x — pipelineAction post-call smart pipeline
 
 router.put('/calls/:id', requireAuth, enforceCompany, (req, res) => {
   try {

@@ -53,6 +53,7 @@ import PhoneTab from "./tabs/PhoneTab";
 import RdvReportingTab from "./tabs/RdvReportingTab";
 import DuplicateOnCreateModal from "./modals/DuplicateOnCreateModal";
 import HardDeleteContactModal from "./modals/HardDeleteContactModal";
+import PostCallResultModal from "./modals/PostCallResultModal"; // V3.x post-call smart pipeline
 
 const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCalendars, avails, setAvails, vacations, setVacations, contacts, setContacts, onBack, voipCredits, voipCallLogs, setVoipCallLogs, voipConfigured, appMyPhoneNumbers, appPhonePlans, appConversations, setAppConversations, pipelineStages, setPipelineStages, contactFieldDefs, setContactFieldDefs, collabs: collabsProp, googleEvents: googleEventsProp, setGoogleEvents, isAdminView, smsCredits }) => {
   // collabs = list of all collaborators in the company (for chat DM, etc.)
@@ -2222,7 +2223,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
             } catch {}
           } else if (duration >= 10) {
             // ── APPEL DECROCHE >10s → Popup résultat d'appel obligatoire ──
-            setPostCallResultModal({ contact: ct, duration, calledNumber });
+            // V3.x — passer callLogId (voipCurrentCallLogId) pour log pipelineAction
+            setPostCallResultModal({ contact: ct, duration, calledNumber, callLogId: (typeof voipCurrentCallLogId!=='undefined'?voipCurrentCallLogId:null) });
           }
         }, 500);
       }
@@ -4276,6 +4278,14 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       )}
 
       {/* ── NRP POST-CALL MODAL ── */}
+      {/* V3.x — Post-call smart pipeline (appel décroché >= 10s, hors NRP) */}
+      {(typeof postCallResultModal!=='undefined'?postCallResultModal:null) && (
+        <PostCallResultModal
+          data={postCallResultModal}
+          onClose={() => setPostCallResultModal(null)}
+        />
+      )}
+
       {(typeof nrpPostCallModal!=='undefined'?nrpPostCallModal:null) && (()=>{
         const m = (typeof nrpPostCallModal!=='undefined'?nrpPostCallModal:null);
         const ct = m.contact;
