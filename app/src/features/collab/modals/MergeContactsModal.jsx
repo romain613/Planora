@@ -12,10 +12,18 @@
 //   - Q7 : primary archivé déjà filtré côté CrmTab via canOpenMerge → modale ne s'ouvre pas
 //   - Q11 : 1 secondary -> 1 primary uniquement (pas de multi-sélection)
 //   - Backend re-vérifie companyId, permissions Q5, archivedAt primary, etc.
+//
+// V1.14.1 — Listener crmContactUpdated (PHASE 2 sync fiches contact) :
+//   primary prop est figé à l'ouverture (mergeTarget du hook useMergeContacts).
+//   secondary state local mis à jour via setSecondary lors de la sélection user.
+//   Si une autre vue modifie primary OU secondary pendant ouverture, on resync les states
+//   locaux. Reload mergePreview uniquement si fields includes archivedAt OR pipeline_stage
+//   (Q4 reco — economie reseau).
 
 import React, { useState, useEffect, useMemo } from "react";
 import { T } from "../../../theme";
 import { I, Btn, Modal, Spinner, Avatar } from "../../../shared/ui";
+import { api } from "../../../shared/services/api";
 import { useCollabContext } from "../context/CollabContext";
 import {
   filterMergeablePeers,
@@ -56,8 +64,11 @@ const PanelContact = ({ label, contact, accentColor }) => {
   );
 };
 
-const MergeContactsModal = ({ primary, onClose, onSuccess }) => {
+const MergeContactsModal = ({ primary: initialPrimary, onClose, onSuccess }) => {
   const { contacts, collab, showNotif } = useCollabContext();
+  // V1.14.1 — state local pour primary (sync via listener crmContactUpdated).
+  // initialPrimary = mergeTarget du hook useMergeContacts (figé à l'ouverture par CrmTab).
+  const [primary, setPrimary] = useState(initialPrimary);
   const [step, setStep] = useState(1);
   const [query, setQuery] = useState('');
   const [secondary, setSecondary] = useState(null);
@@ -85,6 +96,40 @@ const MergeContactsModal = ({ primary, onClose, onSuccess }) => {
     });
     return () => { cancelled = true; };
   }, [secondary?.id]);
+
+  // V1.14.1 — Listener crmContactUpdated : sync local state si primary OU secondary event match.
+  // Reload mergePreview UNIQUEMENT si fields includes archivedAt OR pipeline_stage
+  // (Q4 reco — economie reseau, recharge ciblee si impact cascade counts).
+  useEffect(() => {
+    const onUpdated = (e) => {
+      const detail = e?.detail || {};
+      const matchesPrimary = primary?.id && detail.id === primary.id;
+      const matchesSecondary = secondary?.id && detail.id === secondary.id;
+      if (!matchesPrimary && !matchesSecondary) return;
+      // Update state local cible
+      const applyFresh = (target, setter) => {
+        if (detail.contact) {
+          setter(detail.contact);
+        } else {
+          api('/api/data/contacts/' + target.id).then(fresh => {
+            if (fresh?.id) setter(fresh);
+          }).catch(() => {});
+        }
+      };
+      if (matchesPrimary) applyFresh(primary, setPrimary);
+      if (matchesSecondary) applyFresh(secondary, setSecondary);
+      // Reload mergePreview si secondary impacte ET fields significatifs
+      if (matchesSecondary && Array.isArray(detail.fields)) {
+        const significant = detail.fields.includes('archivedAt') || detail.fields.includes('pipeline_stage');
+        if (significant) {
+          setPreviewLoading(true);
+          fetchMergePreview(secondary.id).then(p => { setPreview(p); setPreviewLoading(false); }).catch(() => setPreviewLoading(false));
+        }
+      }
+    };
+    window.addEventListener('crmContactUpdated', onUpdated);
+    return () => window.removeEventListener('crmContactUpdated', onUpdated);
+  }, [primary?.id, secondary?.id]);
 
   // Q5 — Submit final : confirmation stricte "FUSIONNER" exact
   const handleSubmit = async () => {

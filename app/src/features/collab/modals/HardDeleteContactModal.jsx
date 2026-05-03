@@ -1,9 +1,14 @@
-// HardDeleteContactModal — V1.12.9.d
+// HardDeleteContactModal — V1.12.9.d (V1.14.1 listener crmContactUpdated)
 // Modale 2 etapes de suppression definitive d'un contact archive.
 // Etape 1 : preview impact via GET /:id/delete-preview (V1.12.7 backend pret).
 // Etape 2 : confirmation par saisie "SUPPRIMER" (casse stricte) + DELETE /:id/permanent.
 // Backend V1.12.9.b : requirePermission('contacts.hard_delete') + body.confirm='CONFIRM_HARD_DELETE'
 // + verrou archivedAt prereq + cascade 5 tables / KEEP 14 tables.
+//
+// V1.14.1 — Listener crmContactUpdated (PHASE 2 sync fiches contact) :
+//   Le contact prop est figé à l'ouverture. Si une autre vue modifie le contact pendant
+//   que la modale est ouverte, on resync via le state local + on recharge le preview
+//   uniquement si fields includes 'archivedAt' (impact counts cascade).
 // Aucun changement metier ; modal frontend pur.
 
 import React, { useState, useEffect } from "react";
@@ -11,7 +16,9 @@ import { T } from "../../../theme";
 import { I, Btn, Modal, Spinner } from "../../../shared/ui";
 import { api } from "../../../shared/services/api";
 
-const HardDeleteContactModal = ({ contact, onClose, onSuccess, showNotif }) => {
+const HardDeleteContactModal = ({ contact: initialContact, onClose, onSuccess, showNotif }) => {
+  // V1.14.1 — state local sync via listener crmContactUpdated (cf. useEffect ci-dessous)
+  const [contact, setContact] = useState(initialContact);
   const [step, setStep] = useState(1);
   const [preview, setPreview] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -26,6 +33,32 @@ const HardDeleteContactModal = ({ contact, onClose, onSuccess, showNotif }) => {
       .then(p => { if (!cancelled) { setPreview(p); setLoading(false); } })
       .catch(err => { if (!cancelled) { showNotif?.("Erreur chargement aperçu : " + (err?.message || ''), "danger"); setLoading(false); } });
     return () => { cancelled = true; };
+  }, [contact?.id]);
+
+  // V1.14.1 — Listener crmContactUpdated : sync state local si event match.
+  // Reload preview UNIQUEMENT si fields includes 'archivedAt' (Q3 reco — economie reseau).
+  useEffect(() => {
+    if (!contact?.id) return;
+    const onUpdated = (e) => {
+      const detail = e?.detail || {};
+      if (detail.id !== contact.id) return;
+      if (detail.contact) {
+        setContact(detail.contact);
+      } else {
+        // Fallback : refetch (rare car V1.14.0 envoie toujours r.contact si dispo)
+        api('/api/data/contacts/' + contact.id).then(fresh => {
+          if (fresh?.id) setContact(fresh);
+        }).catch(() => {});
+      }
+      if (Array.isArray(detail.fields) && detail.fields.includes('archivedAt')) {
+        setLoading(true);
+        api('/api/data/contacts/' + contact.id + '/delete-preview')
+          .then(p => { setPreview(p); setLoading(false); })
+          .catch(() => setLoading(false));
+      }
+    };
+    window.addEventListener('crmContactUpdated', onUpdated);
+    return () => window.removeEventListener('crmContactUpdated', onUpdated);
   }, [contact?.id]);
 
   const handleSubmit = async () => {
