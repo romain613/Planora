@@ -9,6 +9,8 @@ import { T, T_LIGHT, T_DARK, setTheme } from "../../theme";
 import { formatPhoneFR, displayPhone, normalizePhoneNumber, phoneMatchKey } from "../../shared/utils/phone";
 import { isValidEmail, isValidPhone } from "../../shared/utils/validators";
 import { COMMON_TIMEZONES, genCode } from "../../shared/utils/constants";
+// V2.1 — helper unifié pré-check anti-doublon (Quick Add Hub SMS + linkVisitor + futurs sites)
+import { precheckCreate } from "../../shared/utils/duplicateCheck";
 
 // Phase 1B — UI atomics barrel
 import { HookIsolator, Logo, I, Avatar, Badge, Btn, Stars, Toggle, LoadBar, Card, Spinner, Req, Skeleton, Input, Stat, Modal, ConfirmModal, EmptyState, HelpTip, ValidatedInput, ErrorBoundary, MiniMonthCalendar } from "../../shared/ui";
@@ -3113,8 +3115,15 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
 
   const linkVisitorToContacts = (visitor) => {
     const nc = { id:"ct"+Date.now(), companyId:company.id, name:visitor.name, email:visitor.email, phone:visitor.phone||"", totalBookings:visitor.totalBookings||0, lastVisit:visitor.lastVisit||"", tags:[], notes:"", rating:null, docs:[], pipeline_stage:"nouveau", assignedTo:collab.id, shared_with:[] };
-    setContacts(p => [...p, nc]);
-    api("/api/data/contacts", { method:"POST", body:nc });
+    // V2.1 — Pré-check anti-doublon async. Si dup détecté -> DuplicateOnCreateModal s'ouvre,
+    // setContacts + api POST sautés (la modale gère la résolution via _formSnapshot).
+    // Sinon -> création directe (comportement legacy). `return nc` synchrone conservé pour
+    // compat callers (CrmTab.jsx, CrmKanbanView.jsx) qui mettent à jour leur state local.
+    _precheckCreateAndOpenDup(nc).then(isDup => {
+      if (isDup) return;
+      setContacts(p => [...p, nc]);
+      api("/api/data/contacts", { method:"POST", body:nc });
+    });
     return nc;
   };
   const handleCollabUpdateContact = (id, updates) => {
@@ -3592,8 +3601,19 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     }
     submitNewContact(nc, { forceCreate: false });
   };
+
+  // V2.1 — Wrapper local helper precheckCreate : injecte api + setDuplicateOnCreateData (closure).
+  // Réutilisable par handleQuickAddContact + linkVisitorToContacts (et futurs sites V2.1.b).
+  // Returns Promise<boolean> : true si dup détecté (modal ouverte, caller stop), false sinon.
+  const _precheckCreateAndOpenDup = (nc, opts = {}) => precheckCreate(nc, {
+    api,
+    onMatch: (dupData) => setDuplicateOnCreateData(dupData),
+    onClose: opts.onClose,
+  });
+
   // Quick add contact from phone number (inline in history/conversations)
-  const handleQuickAddContact = () => {
+  // V2.1 — async pour await pré-check anti-doublon (helper precheckCreate). Si match → modal s'ouvre.
+  const handleQuickAddContact = async () => {
     const isBtb = (typeof phoneQuickAddType!=='undefined'?phoneQuickAddType:null) === 'btb';
     const contactName = isBtb ? (typeof phoneQuickAddCompany!=='undefined'?phoneQuickAddCompany:{}).trim() : `${(typeof phoneQuickAddFirstname!=='undefined'?phoneQuickAddFirstname:{}).trim()} ${(typeof phoneQuickAddLastname!=='undefined'?phoneQuickAddLastname:{}).trim()}`.trim();
     if (!contactName || !(typeof phoneQuickAddPhone!=='undefined'?phoneQuickAddPhone:null)) { showNotif(isBtb ? 'Nom entreprise obligatoire' : 'Prénom et nom obligatoires','danger'); return; }
@@ -3617,6 +3637,13 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       pipeline_stage: (typeof phoneQuickAddStage!=='undefined'?phoneQuickAddStage:null)||'nouveau', assignedTo:collab.id, shared_with:[],
       createdAt: new Date().toISOString()
     };
+    // V2.1 — Pré-check anti-doublon. Si match -> DuplicateOnCreateModal s'ouvre, _formSnapshot conserve nc
+    // pour que onForceCreate (admin) puisse re-soumettre via submitNewContact, ou onCreateMyOwn
+    // (V1.13.1.e scope-collab) pour création parallèle. Caller stop ici si dup détecté.
+    const isDup = await _precheckCreateAndOpenDup(nc, {
+      onClose: () => { try { setPhoneQuickAddPhone(null); } catch {} }
+    });
+    if (isDup) return;
     setContacts(p => [...p, nc]);
     // Sauvegarder immédiatement en DB (pas attendre sync-batch)
     api('/api/data/contacts', { method:'POST', body: nc }).then(r => {
