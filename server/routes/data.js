@@ -1015,7 +1015,9 @@ router.delete('/contacts/:id', requireAuth, requirePermission('contacts.delete')
 // Decision MH Q1 (UI 2-step bookings futurs) sera implementee en V1.12.6.
 // Acces : requireAuth + requirePermission('contacts.delete') + companyId match + ownership
 // Idempotence : 409 ALREADY_ARCHIVED si deja archive.
-router.post('/contacts/:id/archive', requireAuth, requirePermission('contacts.delete'), (req, res) => {
+// V1.13.2.a Q2 — Relax permission : owner peut archiver SA propre fiche sans contacts.delete.
+// Admin/supra/owner allowed. Non-owner non-admin bloque ligne ownership.
+router.post('/contacts/:id/archive', requireAuth, (req, res) => {
   try {
     const id = req.params.id;
     const reason = (req.body?.reason || '').toString().slice(0, 500);
@@ -1025,7 +1027,7 @@ router.post('/contacts/:id/archive', requireAuth, requirePermission('contacts.de
     if (!req.auth.isSupra && record.companyId !== req.auth.companyId) {
       return res.status(403).json({ error: 'Accès interdit' });
     }
-    // SECURITE : non-admin ne peut archiver que SES contacts (pattern DELETE existant)
+    // SECURITE : non-admin ne peut archiver que SES contacts (V1.13.2.a Q2 — owner allowed sans contacts.delete)
     if (!req.auth.isAdmin && !req.auth.isSupra && record.assignedTo !== req.auth.collaboratorId) {
       return res.status(403).json({ error: "Accès interdit — contact assigné à un autre collaborateur" });
     }
@@ -1128,6 +1130,131 @@ router.delete('/contacts/:id/permanent', requireAuth, requirePermission('contact
       success: true, action: 'hard_deleted', id, name: record.name || '',
       deletedFromTables: ['contact_followers', 'recommended_actions', 'contact_ai_memory', 'contact_documents', 'contacts']
     });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+// V1.13.2.a — POST /api/data/contacts/:primaryId/merge — DORMANT (reserve V1.13.2.b)
+// =========================================================================
+// ⚠ ENDPOINT DORMANT : present en backend mais AUCUN consommateur frontend en V1.13.2.a.
+// Reserve a V1.13.2.b (CRM tab : fusion manuelle de 2 fiches DEJA persistees par admin
+// ou owner-shared sur les 2). N'est PAS branche dans le flow "creation contact"
+// (DuplicateOnCreateModal) car la fiche brouillon n'existe pas encore en DB a ce moment ;
+// l'enrichissement y reste assure par PUT /:id (handler handleDuplicateEnrich).
+// =========================================================================
+//
+// Fusionne secondary -> primary. Tout l'historique du secondary est rattache au primary
+// (bookings, calls, sms, conversations, pipeline_history, etc.). Notes append avec prefixe
+// [Fusionne depuis X]. Tables d'etat (contact_followers / recommended_actions /
+// contact_ai_memory) du secondary sont supprimees pour eviter les conflits UNIQUE.
+// Le secondary contact est DELETE hard (Q4). Aucun RDV n'est supprime (Q principale MH).
+//
+// Body : { secondaryId, confirm: 'CONFIRM_MERGE' }
+// Permissions (Q5) : admin/supra OR (collab is owner/shared on BOTH contacts)
+router.post('/contacts/:primaryId/merge', requireAuth, enforceCompany, (req, res) => {
+  try {
+    const primaryId = req.params.primaryId;
+    const secondaryId = req.body?.secondaryId;
+    if (!secondaryId) return res.status(400).json({ error: 'SECONDARY_ID_REQUIRED' });
+    if (req.body?.confirm !== 'CONFIRM_MERGE') {
+      return res.status(400).json({ error: 'CONFIRMATION_REQUIRED', message: "body.confirm doit etre 'CONFIRM_MERGE'" });
+    }
+    if (primaryId === secondaryId) return res.status(400).json({ error: 'SAME_CONTACT' });
+
+    const primary = db.prepare('SELECT * FROM contacts WHERE id = ?').get(primaryId);
+    if (!primary) return res.status(404).json({ error: 'PRIMARY_NOT_FOUND' });
+    const secondary = db.prepare('SELECT * FROM contacts WHERE id = ?').get(secondaryId);
+    if (!secondary) return res.status(404).json({ error: 'SECONDARY_NOT_FOUND' });
+
+    // companyId match strict
+    if (!req.auth.isSupra) {
+      if (primary.companyId !== req.auth.companyId || secondary.companyId !== req.auth.companyId) {
+        return res.status(403).json({ error: 'Accès interdit' });
+      }
+    }
+    if (primary.companyId !== secondary.companyId) {
+      return res.status(400).json({ error: 'CROSS_COMPANY_MERGE_FORBIDDEN' });
+    }
+
+    // Q5 — Permission : admin/supra OR (owner/shared sur les 2 fiches)
+    const isAdmin = req.auth.isAdmin || req.auth.isSupra;
+    if (!isAdmin) {
+      const myId = req.auth.collaboratorId;
+      const parseShared = (raw) => {
+        if (Array.isArray(raw)) return raw;
+        try { return JSON.parse(raw || '[]'); } catch { return []; }
+      };
+      const sharedP = parseShared(primary.shared_with || primary.shared_with_json);
+      const sharedS = parseShared(secondary.shared_with || secondary.shared_with_json);
+      const isOnPrimary = primary.assignedTo === myId || sharedP.includes(myId);
+      const isOnSecondary = secondary.assignedTo === myId || sharedS.includes(myId);
+      if (!isOnPrimary || !isOnSecondary) {
+        return res.status(403).json({ error: 'PERMISSION_DENIED', message: 'Merge requires admin/supra OR owner/shared on both contacts' });
+      }
+    }
+
+    // Q6 — Notes append [Fusionne depuis X]
+    let mergedNotes = primary.notes || '';
+    if (secondary.notes && String(secondary.notes).trim()) {
+      const sep = mergedNotes ? '\n---\n' : '';
+      const headerName = secondary.name || secondary.id;
+      mergedNotes = mergedNotes + sep + '[Fusionne depuis ' + headerName + ']\n' + secondary.notes;
+    }
+
+    // Cascade en transaction
+    const counts = {};
+    const updateContactId = (table) => {
+      try { return db.prepare(`UPDATE ${table} SET contactId = ? WHERE contactId = ?`).run(primaryId, secondaryId).changes; }
+      catch (e) { return -1; } // -1 = erreur (UNIQUE conflict ou table absente)
+    };
+    const tx = db.transaction(() => {
+      // UPDATE tables d'historique (preserve data, rattache au primary)
+      counts.bookings = updateContactId('bookings');
+      counts.call_logs = updateContactId('call_logs');
+      counts.call_contexts = updateContactId('call_contexts');
+      counts.call_form_responses = updateContactId('call_form_responses');
+      counts.call_transcript_archive = updateContactId('call_transcript_archive');
+      counts.sms_messages = updateContactId('sms_messages');
+      counts.pipeline_history = updateContactId('pipeline_history');
+      counts.contact_status_history = updateContactId('contact_status_history');
+      counts.contact_documents = updateContactId('contact_documents');
+      counts.conversations = updateContactId('conversations');
+      // interaction_responses : UNIQUE (templateId, contactId, collaboratorId) — Q7 fallback DELETE secondary si conflit
+      try {
+        counts.interaction_responses = db.prepare('UPDATE interaction_responses SET contactId = ? WHERE contactId = ?').run(primaryId, secondaryId).changes;
+      } catch (e) {
+        if (String(e.message || e).indexOf('UNIQUE') >= 0) {
+          counts.interaction_responses_deleted = db.prepare('DELETE FROM interaction_responses WHERE contactId = ?').run(secondaryId).changes;
+          counts.interaction_responses = 0;
+        } else throw e;
+      }
+
+      // DELETE state secondary (UNIQUE possible — drop)
+      counts.contact_followers_deleted = db.prepare('DELETE FROM contact_followers WHERE contactId = ?').run(secondaryId).changes;
+      counts.recommended_actions_deleted = db.prepare('DELETE FROM recommended_actions WHERE contactId = ?').run(secondaryId).changes;
+      counts.contact_ai_memory_deleted = db.prepare('DELETE FROM contact_ai_memory WHERE contactId = ?').run(secondaryId).changes;
+
+      // UPDATE primary notes (Q6)
+      db.prepare('UPDATE contacts SET notes = ? WHERE id = ?').run(mergedNotes, primaryId);
+
+      // Q4 — DELETE secondary contact (hard)
+      db.prepare('DELETE FROM contacts WHERE id = ?').run(secondaryId);
+    });
+    tx();
+
+    // Q8 — audit log enrichi
+    logAudit(req, 'contact_merged', 'data', 'contact', primaryId,
+      'Contacts fusionnes: ' + (secondary.name || '') + ' -> ' + (primary.name || ''), {
+        primaryId, secondaryId,
+        primaryName: primary.name, secondaryName: secondary.name,
+        primaryEmail: primary.email, secondaryEmail: secondary.email,
+        primaryPhone: primary.phone, secondaryPhone: secondary.phone,
+        primaryAssignedTo: primary.assignedTo, secondaryAssignedTo: secondary.assignedTo,
+        notesAppended: !!(secondary.notes && String(secondary.notes).trim()),
+        cascadeCounts: counts,
+      });
+    console.log(`[CONTACTS] Merge ${secondaryId} -> ${primaryId} by ${req.auth.collaboratorId || ''}`);
+
+    res.json({ success: true, action: 'merged', primaryId, secondaryId, cascadeCounts: counts });
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

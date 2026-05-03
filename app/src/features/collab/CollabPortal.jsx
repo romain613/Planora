@@ -3521,6 +3521,42 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     }
   };
 
+  // V1.13.2.a — "Supprimer cette fiche" : alias soft archive (Q1 = soft uniquement).
+  // Owner-only côté UI (Btn caché si !isOwner). Backend Q2 relax permet sans contacts.delete.
+  const handleDuplicateDelete = async (target) => {
+    if (!target?.id) return;
+    const targetName = target.name || 'cette fiche';
+    const ok = window.confirm(
+      `Supprimer "${targetName}" ?\n\n` +
+      `La fiche sera ARCHIVEE (récupérable via le sous-onglet Archivés).\n` +
+      `Les RDV et historiques resteront visibles dans Agenda et Reporting.`
+    );
+    if (!ok) return;
+    contactsLocalEditRef.current = Date.now();
+    const r = await api(`/api/data/contacts/${target.id}/archive`, {
+      method: 'POST',
+      body: { reason: 'Supprimer cette fiche (duplicate resolution)' }
+    });
+    if (r?.success || r?.action === 'archived') {
+      setContacts(p => p.filter(c => c.id !== target.id));
+      setPipelineRightContact(null);
+      setSelectedCrmContact(null);
+      showNotif('Fiche supprimée (archivée — récupérable)');
+    } else if (r?.error === 'ALREADY_ARCHIVED') {
+      showNotif('Fiche déjà archivée', 'info');
+    } else {
+      showNotif('Erreur suppression : ' + (r?.error || 'inconnu'), 'danger');
+    }
+    _closeDupAfterAction();
+    setTimeout(() => { contactsLocalEditRef.current = 0; }, 30000);
+  };
+
+  // V1.13.2.a — "Fusionner" non branche dans le flow creation : la fiche brouillon n'existe
+  // pas encore en DB, donc un vrai merge cote backend serait incorrect. L'enrichissement reste
+  // disponible via "Compléter cette fiche" (handleDuplicateEnrich). Le vrai merge backend
+  // POST /api/data/contacts/:primaryId/merge est reserve V1.13.2.b (CRM tab : 2 fiches deja
+  // persistees a fusionner manuellement par admin ou owner-shared sur les 2).
+
   const handleCollabCreateContact = () => {
     const fullName = (((typeof newContactForm!=='undefined'?newContactForm:{}).civility?newContactForm.civility+' ':'')+((typeof newContactForm!=='undefined'?newContactForm:{}).firstname||'')+' '+((typeof newContactForm!=='undefined'?newContactForm:{}).lastname||'')).trim() || (typeof newContactForm!=='undefined'?newContactForm:{}).name.trim();
     if (!fullName) { showNotif('Le nom est obligatoire','danger'); return; }
@@ -6751,6 +6787,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
           onArchive={handleDuplicateArchive}
           onHardDelete={handleDuplicateHardDelete}
           onCreateMyOwn={handleDuplicateCreateMyOwn}
+          onDelete={handleDuplicateDelete}
         />
       )}
       {/* V1.13.1.d — Instance HardDeleteContactModal pour flow duplicate (séparée de celle CrmTab) */}

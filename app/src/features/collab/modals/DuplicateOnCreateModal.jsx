@@ -30,7 +30,7 @@ const FORCE_REASONS = [
   { v: 'other',              l: 'Autre' },
 ];
 
-const DuplicateOnCreateModal = ({ data, onClose, onForceCreate, onEnrich, onShare, onArchive, onHardDelete, onCreateMyOwn }) => {
+const DuplicateOnCreateModal = ({ data, onClose, onForceCreate, onEnrich, onShare, onArchive, onHardDelete, onCreateMyOwn, onDelete }) => {
   const { collab, contacts } = useCollabContext();
   const [forceCreateMode, setForceCreateMode] = useState(false);
   const [forceReason, setForceReason] = useState('');
@@ -107,6 +107,9 @@ const DuplicateOnCreateModal = ({ data, onClose, onForceCreate, onEnrich, onShar
             onArchive={onArchive}
             onHardDelete={onHardDelete}
             onCreateMyOwn={onCreateMyOwn}
+            // V1.13.2.a — Soft delete in-modal (owner). Merge depuis ce flow non branche
+            // (la fiche brouillon n'existe pas encore en DB). Vrai merge reserve V1.13.2.b CRM tab.
+            onDelete={onDelete}
           />
         ))}
       </div>

@@ -14,6 +14,7 @@
 //   onShare        : (matchId) => void          — callback "Me partager"
 //   onArchive      : (matchId) => void          — V1.13.1.d wires (undefined V1.13.1.b)
 //   onHardDelete   : (target) => void           — V1.13.1.d wires (undefined V1.13.1.b)
+//   onDelete       : (target) => void           — V1.13.2.a "Supprimer cette fiche" (soft archive owner)
 //
 // Pas de modification destructive : si callback absent, bouton caché.
 // Pas de fusion automatique. Pas d'écrasement.
@@ -103,6 +104,7 @@ const DuplicateMatchCard = ({
   onArchive,
   onHardDelete,
   onCreateMyOwn,
+  onDelete,
 }) => {
   const [expanded, setExpanded] = useState(false);
   const target = fullTarget || match;
@@ -218,6 +220,12 @@ const DuplicateMatchCard = ({
         {canSoftDelete && !isArchived && onArchive && (
           <Btn small onClick={()=>onArchive(target.id)} style={{ color:'#EF4444', borderColor:'#EF444440' }}>
             <I n="archive" s={12}/> Archiver
+          </Btn>
+        )}
+        {/* V1.13.2.a — "Supprimer cette fiche" : soft archive owner-only (Q1+Q2 : owner peut sans contacts.delete) */}
+        {isOwner && !isArchived && onDelete && (
+          <Btn small onClick={()=>onDelete(target)} style={{ color:'#EF4444', borderColor:'#EF444440' }}>
+            <I n="trash-2" s={12}/> Supprimer cette fiche
           </Btn>
         )}
         {/* Supprimer définitivement (callback optionnel — V1.13.1.d wires) */}
