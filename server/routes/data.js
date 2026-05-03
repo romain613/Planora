@@ -152,6 +152,110 @@ router.get('/contacts/archived', requireAuth, enforceCompany, requirePermission(
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+// ─── V2.2.b — GET DUPLICATES SCAN ───
+// Scan tous les groupes de doublons d'une company. Read-only, non destructif.
+// 3 types de groupes : email, phone (last 9 digits), name (firstname+lastname).
+// Pagination simple (page + pageSize). Match aligné sur matchers V2.2.a (cohérence).
+// Scope companyId strict. Préparation V2.2.c (UI résolution AdminDash).
+//
+// ⚠ ORDRE EXPRESS CRITIQUE : DOIT être inséré AVANT GET /contacts/:id ci-dessous,
+// sinon Express matche `:id='duplicates-scan'` (pattern déjà connu V1.12.4 pour /archived).
+router.get('/contacts/duplicates-scan', requireAuth, enforceCompany, requirePermission('contacts.view'), (req, res) => {
+  try {
+    const companyId = req.auth.companyId;
+    const type = String(req.query.type || 'all');
+    const includeArchived = String(req.query.includeArchived) === 'true';
+    const page = Math.max(0, parseInt(req.query.page || '0', 10) || 0);
+    const pageSize = Math.min(100, Math.max(10, parseInt(req.query.pageSize || '50', 10) || 50));
+    const archivedFilter = includeArchived ? '' : "AND (archivedAt IS NULL OR archivedAt = '')";
+
+    // 1 SELECT all contacts company (184 max — full scan en mémoire ensuite)
+    const all = db.prepare(
+      `SELECT id, name, firstname, lastname, email, phone, mobile, company,
+              assignedTo, pipeline_stage, archivedAt, createdAt
+       FROM contacts
+       WHERE companyId = ?
+         AND COALESCE(pipeline_stage, '') != 'perdu'
+         ${archivedFilter}`
+    ).all(companyId);
+
+    // 1 SELECT collaborators (Map id → name pour assignedName enrichissement)
+    const collabRows = db.prepare('SELECT id, name FROM collaborators WHERE companyId = ?').all(companyId);
+    const collabMap = Object.fromEntries(collabRows.map(c => [c.id, c.name]));
+
+    // Helper enrichissement contact (utilisé dans tous les groupes)
+    const enrich = (c) => ({
+      id: c.id,
+      name: c.name || '',
+      firstname: c.firstname || '',
+      lastname: c.lastname || '',
+      email: c.email || '',
+      phone: c.phone || c.mobile || '',
+      company: c.company || '',
+      assignedTo: c.assignedTo || '',
+      assignedName: collabMap[c.assignedTo] || '',
+      pipelineStage: c.pipeline_stage || '',
+      createdAt: c.createdAt || '',
+      isArchived: !!(c.archivedAt && c.archivedAt !== '')
+    });
+
+    // 3 signatures normalisées (alignées matcher V2.2.a)
+    const sigEmail = (c) => (c.email || '').trim().toLowerCase();
+    const sigPhone = (c) => {
+      const cleaned = (c.phone || c.mobile || '').replace(/[^\d]/g, '').slice(-9);
+      return cleaned.length >= 6 ? cleaned : '';
+    };
+    const sigName = (c) => {
+      const fn = (c.firstname || '').trim().toLowerCase();
+      const ln = (c.lastname || '').trim().toLowerCase();
+      return fn && ln ? fn + '|' + ln : '';
+    };
+
+    // Group helper (filter count > 1)
+    const groupBy = (sigFn, typeName) => {
+      const m = new Map();
+      for (const c of all) {
+        const sig = sigFn(c);
+        if (!sig) continue;
+        if (!m.has(sig)) m.set(sig, []);
+        m.get(sig).push(c);
+      }
+      return [...m.entries()]
+        .filter(([, arr]) => arr.length > 1)
+        .map(([sig, arr]) => ({
+          signature: sig,
+          type: typeName,
+          count: arr.length,
+          contacts: arr.map(enrich)
+        }));
+    };
+
+    const groups = [];
+    if (type === 'all' || type === 'email') groups.push(...groupBy(sigEmail, 'email'));
+    if (type === 'all' || type === 'phone') groups.push(...groupBy(sigPhone, 'phone'));
+    if (type === 'all' || type === 'name')  groups.push(...groupBy(sigName,  'name'));
+
+    // Tri : count desc puis signature asc
+    groups.sort((a, b) => b.count - a.count || a.signature.localeCompare(b.signature));
+
+    const total = groups.length;
+    const paged = groups.slice(page * pageSize, (page + 1) * pageSize);
+
+    console.log(`[DUPLICATES-SCAN] company=${companyId} type=${type} archived=${includeArchived} → ${total} groupes (page ${page}) sur ${all.length} contacts`);
+
+    res.json({
+      groups: paged,
+      total,
+      page,
+      pageSize,
+      scannedContacts: all.length
+    });
+  } catch (err) {
+    console.error('[DUPLICATES-SCAN ERR]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── V3: GET SINGLE CONTACT — refetch unitaire propre ───
 router.get('/contacts/:id', requireAuth, requirePermission('contacts.view'), (req, res) => {
   try {
