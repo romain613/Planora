@@ -1133,23 +1133,26 @@ router.delete('/contacts/:id/permanent', requireAuth, requirePermission('contact
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
-// V1.13.2.a — POST /api/data/contacts/:primaryId/merge — DORMANT (reserve V1.13.2.b)
+// V1.13.2.a + V1.13.2.b — POST /api/data/contacts/:primaryId/merge
 // =========================================================================
-// ⚠ ENDPOINT DORMANT : present en backend mais AUCUN consommateur frontend en V1.13.2.a.
-// Reserve a V1.13.2.b (CRM tab : fusion manuelle de 2 fiches DEJA persistees par admin
-// ou owner-shared sur les 2). N'est PAS branche dans le flow "creation contact"
-// (DuplicateOnCreateModal) car la fiche brouillon n'existe pas encore en DB a ce moment ;
-// l'enrichissement y reste assure par PUT /:id (handler handleDuplicateEnrich).
+// ACTIF V1.13.2.b : consomme par le frontend depuis CrmTab.jsx via le composant
+// MergeContactsModal.jsx + hook useMergeContacts.js + handlers contactMergeHandlers.js.
+// N'est PAS branche dans le flow "creation contact" (DuplicateOnCreateModal) car la fiche
+// brouillon n'existe pas encore en DB a ce moment ; l'enrichissement y reste assure par
+// PUT /:id (handler handleDuplicateEnrich).
 // =========================================================================
 //
 // Fusionne secondary -> primary. Tout l'historique du secondary est rattache au primary
-// (bookings, calls, sms, conversations, pipeline_history, etc.). Notes append avec prefixe
-// [Fusionne depuis X]. Tables d'etat (contact_followers / recommended_actions /
-// contact_ai_memory) du secondary sont supprimees pour eviter les conflits UNIQUE.
-// Le secondary contact est DELETE hard (Q4). Aucun RDV n'est supprime (Q principale MH).
+// (bookings, calls, sms, conversations, pipeline_history, ai_copilot_analyses,
+// client_messages, notifications, etc.). Notes append avec prefixe [Fusionne depuis X].
+// Tables d'etat (contact_followers / recommended_actions / contact_ai_memory) du secondary
+// sont supprimees pour eviter les conflits UNIQUE. Le secondary contact est DELETE hard (Q4).
+// Aucun RDV n'est supprime (contrainte MH C6).
 //
 // Body : { secondaryId, confirm: 'CONFIRM_MERGE' }
 // Permissions (Q5) : admin/supra OR (collab is owner/shared on BOTH contacts)
+// Q7 V1.13.2.b : primary archive refuse (409 PRIMARY_ARCHIVED — restaurer d'abord).
+// Q6 V1.13.2.b : secondary archive autorise (cas legitime de nettoyage).
 router.post('/contacts/:primaryId/merge', requireAuth, enforceCompany, (req, res) => {
   try {
     const primaryId = req.params.primaryId;
@@ -1173,6 +1176,16 @@ router.post('/contacts/:primaryId/merge', requireAuth, enforceCompany, (req, res
     }
     if (primary.companyId !== secondary.companyId) {
       return res.status(400).json({ error: 'CROSS_COMPANY_MERGE_FORBIDDEN' });
+    }
+
+    // Q7 V1.13.2.b — Refuser le merge si primary est archive
+    // (un archive ne doit pas absorber un actif ; restaurer d'abord)
+    if (primary.archivedAt && primary.archivedAt !== '') {
+      return res.status(409).json({
+        error: 'PRIMARY_ARCHIVED',
+        message: 'La fiche principale est archivee. Restaurez-la avant de fusionner.',
+        primaryId, archivedAt: primary.archivedAt
+      });
     }
 
     // Q5 — Permission : admin/supra OR (owner/shared sur les 2 fiches)
@@ -1218,6 +1231,11 @@ router.post('/contacts/:primaryId/merge', requireAuth, enforceCompany, (req, res
       counts.contact_status_history = updateContactId('contact_status_history');
       counts.contact_documents = updateContactId('contact_documents');
       counts.conversations = updateContactId('conversations');
+      // Q1 V1.13.2.b — tables additionnelles avec contactId (rattachement au primary)
+      counts.ai_copilot_analyses = updateContactId('ai_copilot_analyses');
+      counts.client_messages = updateContactId('client_messages');
+      counts.notifications = updateContactId('notifications');
+      // system_anomaly_logs : NON couvert (logs systeme, valeur historique nulle apres merge)
       // interaction_responses : UNIQUE (templateId, contactId, collaboratorId) — Q7 fallback DELETE secondary si conflit
       try {
         counts.interaction_responses = db.prepare('UPDATE interaction_responses SET contactId = ? WHERE contactId = ?').run(primaryId, secondaryId).changes;

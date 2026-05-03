@@ -21,6 +21,9 @@ import FicheReportingBlock from "./crm/fiche/FicheReportingBlock";
 import InteractionTemplatesPanel from "../../interactions/InteractionTemplatesPanel.jsx";
 import ContactInfoEnriched from "../../contacts/ContactInfoEnriched.jsx";
 import HardDeleteContactModal from "../modals/HardDeleteContactModal";
+// V1.13.2.b — Merge CRM (modale + hook + handlers isoles, regle "pas d'empilage")
+import MergeContactsModal from "../modals/MergeContactsModal";
+import { useMergeContacts, canOpenMerge } from "../hooks/useMergeContacts";
 import { FicheClientMsgScreen, FicheDocsLinkedScreen, FicheSuiviScreen } from "../screens";
 
 const CrmTab = () => {
@@ -103,6 +106,14 @@ const CrmTab = () => {
   const [loadingArchived, setLoadingArchived] = useState(false);
   // V1.12.9.d — modale hard delete (target = contact courant)
   const [hardDeleteTarget, setHardDeleteTarget] = useState(null);
+  // V1.13.2.b — modale merge CRM (Q3 autocomplete, Q4 preview, Q5 confirm 'FUSIONNER', Q10 sync)
+  const { mergeTarget, openMerge, closeMerge } = useMergeContacts({
+    onMergeSuccess: ({ secondaryId }) => {
+      setContacts(p => p.filter(c => c.id !== secondaryId));
+      if (selectedCrmContact?.id === secondaryId) setSelectedCrmContact(null);
+      if (pipelineRightContact?.id === secondaryId) setPipelineRightContact(null);
+    }
+  });
   useEffect(() => {
     if (crmActiveSubtab !== 'archived' || !company?.id) return;
     setLoadingArchived(true);
@@ -1135,6 +1146,8 @@ const CrmTab = () => {
             {ct.archivedAt && ct.archivedAt!=='' ? <Btn small onClick={async()=>{contactsLocalEditRef.current=Date.now();const r=await api("/api/data/contacts/"+ct.id+"/restore",{method:"POST"});if(r?.action==='restored'){showNotif("Contact restauré");const updated={...ct,archivedAt:'',archivedBy:'',archivedReason:''};setContacts(p=>{const exists=p.some(c=>c.id===ct.id);return exists?p.map(c=>c.id===ct.id?updated:c):[...p,updated];});setPipelineRightContact(null);setSelectedCrmContact(null);}else{showNotif(r?.error||"Erreur restauration","danger");}setTimeout(()=>{contactsLocalEditRef.current=0;},30000);}} style={{color:'#22C55E',borderColor:'#22C55E30'}}><I n="rotate-ccw" s={13}/> Restaurer</Btn> : null}
             {/* V1.12.9.d — Supprimer définitivement (admin/supra/can_hard_delete_contacts uniquement, contact archivé uniquement) */}
             {ct.archivedAt && ct.archivedAt!=='' && (collab?.role === 'admin' || collab?.role === 'supra' || collab?.can_hard_delete_contacts) ? <Btn small onClick={()=>setHardDeleteTarget(ct)} style={{color:'#fff',background:'#DC2626',borderColor:'#DC2626'}}><I n="alert-triangle" s={13}/> Supprimer définitivement</Btn> : null}
+            {/* V1.13.2.b — Fusionner avec une autre fiche (Q9 visible si !primary.archivedAt && perm Q5 admin/owner-shared) */}
+            {canOpenMerge(ct, collab) ? <Btn small onClick={()=>openMerge(ct)} style={{color:'#fff',background:'#0EA5E9',borderColor:'#0EA5E9'}}><I n="git-merge" s={13}/> Fusionner</Btn> : null}
           </div>
         )}
         {!ct._linked && (
@@ -1803,6 +1816,14 @@ const CrmTab = () => {
         onClose={() => setHardDeleteTarget(null)}
         onSuccess={(id) => { setContacts(p=>p.filter(c=>c.id!==id)); setSelectedCrmContact(null); setPipelineRightContact(null); }}
         showNotif={showNotif}
+      />
+    )}
+    {/* V1.13.2.b — modale fusion CRM (sync via window event 'crmContactMerged' + onMergeSuccess hook) */}
+    {mergeTarget && (
+      <MergeContactsModal
+        primary={mergeTarget}
+        onClose={closeMerge}
+        onSuccess={() => closeMerge()}
       />
     )}
     </>
