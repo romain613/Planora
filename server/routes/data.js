@@ -417,40 +417,45 @@ router.post('/contacts/check-duplicates', requireAuth, enforceCompany, (req, res
 // matches avec ownership pour permettre au frontend d'afficher modal de résolution.
 router.post('/contacts/check-duplicate-single', requireAuth, enforceCompany, (req, res) => {
   try {
-    const { email, phone } = req.body || {};
+    // V2.2.a — enrichi : matchers name (firstname+lastname) + company + flag includeArchived
+    const { email, phone, firstname = '', lastname = '', company = '', includeArchived = false } = req.body || {};
     const companyId = req.auth.companyId;
-    if (!email && !phone) {
+    if (!email && !phone && !firstname && !lastname && !company) {
       return res.json({ exists: false, conflict: false, matches: [] });
     }
 
+    // V2.2.a — filtre archivedAt conditionnel selon flag includeArchived
+    const archivedFilter = includeArchived ? '' : "AND (archivedAt IS NULL OR archivedAt = '')";
+    const SELECT_FIELDS = "id, name, firstname, lastname, email, phone, mobile, company, assignedTo, shared_with_json, pipeline_stage, archivedAt, companyId, createdAt";
+
     let emailMatch = null;
     let phoneMatch = null;
-    const matches = [];
+    // V2.2.a — Map pour dédupliquer par contact id (évite doublons quand plusieurs matchers convergent)
+    const matchesMap = new Map();
 
     if (email) {
       const cleanEmail = String(email).trim().toLowerCase();
       if (cleanEmail) {
-        // V1.11.5 — exclure pipeline_stage='perdu' (alignement POST /contacts) — soft-delete strict
+        // V1.11.5 — exclure pipeline_stage='perdu' — soft-delete strict
         emailMatch = db.prepare(
-          "SELECT id, name, email, phone, mobile, assignedTo, shared_with_json, pipeline_stage, companyId, createdAt FROM contacts WHERE companyId = ? AND LOWER(email) = ? AND email != '' AND COALESCE(pipeline_stage, '') != 'perdu' AND (archivedAt IS NULL OR archivedAt = '')"
+          `SELECT ${SELECT_FIELDS} FROM contacts WHERE companyId = ? AND LOWER(email) = ? AND email != '' AND COALESCE(pipeline_stage, '') != 'perdu' ${archivedFilter}`
         ).get(companyId, cleanEmail);
-        if (emailMatch) matches.push({ ...emailMatch, matchedBy: 'email' });
+        if (emailMatch) matchesMap.set(emailMatch.id, { ...emailMatch, matchedBy: 'email' });
       }
     }
 
     if (phone) {
       const cleanPhone = String(phone).replace(/[^\d]/g, '').slice(-9);
       if (cleanPhone.length >= 6) {
-        // V1.11.5 — exclure pipeline_stage='perdu' (alignement POST /contacts) — soft-delete strict
         const candidates = db.prepare(
-          "SELECT id, name, email, phone, mobile, assignedTo, shared_with_json, pipeline_stage, companyId, createdAt FROM contacts WHERE companyId = ? AND (phone != '' OR mobile != '') AND COALESCE(pipeline_stage, '') != 'perdu' AND (archivedAt IS NULL OR archivedAt = '')"
+          `SELECT ${SELECT_FIELDS} FROM contacts WHERE companyId = ? AND (phone != '' OR mobile != '') AND COALESCE(pipeline_stage, '') != 'perdu' ${archivedFilter}`
         ).all(companyId);
         for (const c of candidates) {
           const cp = (c.phone || c.mobile || '').replace(/[^\d]/g, '').slice(-9);
           if (cp === cleanPhone && cp.length >= 6) {
             phoneMatch = c;
-            if (!emailMatch || emailMatch.id !== c.id) {
-              matches.push({ ...c, matchedBy: 'phone' });
+            if (!matchesMap.has(c.id)) {
+              matchesMap.set(c.id, { ...c, matchedBy: 'phone' });
             }
             break;
           }
@@ -458,9 +463,32 @@ router.post('/contacts/check-duplicate-single', requireAuth, enforceCompany, (re
       }
     }
 
+    // V2.2.a — Name match (firstname + lastname normalisés lower-trim)
+    if (firstname && lastname) {
+      const fn = String(firstname).trim().toLowerCase();
+      const ln = String(lastname).trim().toLowerCase();
+      if (fn && ln) {
+        const rows = db.prepare(
+          `SELECT ${SELECT_FIELDS} FROM contacts WHERE companyId = ? AND LOWER(TRIM(firstname)) = ? AND LOWER(TRIM(lastname)) = ? AND firstname != '' AND lastname != '' AND COALESCE(pipeline_stage, '') != 'perdu' ${archivedFilter}`
+        ).all(companyId, fn, ln);
+        for (const r of rows) if (!matchesMap.has(r.id)) matchesMap.set(r.id, { ...r, matchedBy: 'name' });
+      }
+    }
+
+    // V2.2.a — Company match (normalisé lower-trim)
+    if (company) {
+      const c = String(company).trim().toLowerCase();
+      if (c) {
+        const rows = db.prepare(
+          `SELECT ${SELECT_FIELDS} FROM contacts WHERE companyId = ? AND LOWER(TRIM(company)) = ? AND company != '' AND COALESCE(pipeline_stage, '') != 'perdu' ${archivedFilter}`
+        ).all(companyId, c);
+        for (const r of rows) if (!matchesMap.has(r.id)) matchesMap.set(r.id, { ...r, matchedBy: 'company' });
+      }
+    }
+
     const conflict = !!(emailMatch && phoneMatch && emailMatch.id !== phoneMatch.id);
 
-    const enriched = matches.map(m => {
+    const enriched = [...matchesMap.values()].map(m => {
       let assignedName = '';
       if (m.assignedTo) {
         try {
@@ -475,19 +503,22 @@ router.post('/contacts/check-duplicate-single', requireAuth, enforceCompany, (re
         name: m.name,
         email: m.email || '',
         phone: m.phone || m.mobile || '',
+        company: m.company || '',
         assignedTo: m.assignedTo || '',
         assignedName,
         sharedWith,
         pipelineStage: m.pipeline_stage || '',
         createdAt: m.createdAt || '',
-        matchedBy: m.matchedBy
+        matchedBy: m.matchedBy,
+        // V2.2.a — flag isArchived (toujours présent ; true uniquement si includeArchived a permis le retour)
+        isArchived: !!(m.archivedAt && m.archivedAt !== '')
       };
     });
 
-    console.log(`[CONTACT DUPLICATE CHECK] company=${companyId} email=${email||''} phone=${phone||''} → exists=${matches.length>0} conflict=${conflict} matches=${matches.length}`);
+    console.log(`[CONTACT DUPLICATE CHECK] company=${companyId} email=${email||''} phone=${phone||''} name=${firstname||''}/${lastname||''} company_match=${company||''} archived=${includeArchived} → exists=${enriched.length>0} conflict=${conflict} matches=${enriched.length}`);
 
     res.json({
-      exists: matches.length > 0,
+      exists: enriched.length > 0,
       conflict,
       matches: enriched
     });
