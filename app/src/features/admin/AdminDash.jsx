@@ -45,6 +45,11 @@ import { TemplatesSection, AssignTemplateModal } from "./templates";
 import { precheckCreate } from "../../shared/utils/duplicateCheck";
 import DuplicateOnCreateModal from "../collab/modals/DuplicateOnCreateModal";
 
+// V2.2.c — UI résolution doublons admin (consomme V2.2.b /duplicates-scan)
+import { useMergeContacts } from "../collab/hooks/useMergeContacts";
+import MergeContactsModal from "../collab/modals/MergeContactsModal";
+import DuplicatesPanel from "./components/DuplicatesPanel";
+
 const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, setBookings, avails, setAvails, collabs, setCollabs, cals, setCals, darkMode, setDarkMode, blackouts, setBlackouts, vacations, setVacations, isSupraAdmin, allCompanies, setAllCompanies, allUsers, setAllUsers, allCalendars, setAllCalendars, allBookings, setAllBookings, allContacts, setAllContacts, activityLog, setActivityLog, smsCredits, setSmsCredits, smsHistory, setSmsHistory, voipCredits, setVoipCredits, voipCallLogs, setVoipCallLogs, voipConfigured, setVoipConfigured, appPhonePlans, setAppPhonePlans, appMyPhoneNumbers, setAppMyPhoneNumbers, appAvailableNumbers, setAppAvailableNumbers, contacts, setContacts, onSwitchCompany, pipelineStages, setPipelineStages, contactFieldDefs, setContactFieldDefs }) => {
   const [tab, _setTab] = useState(() => { try { return localStorage.getItem("c360-tab") || "home"; } catch { return "home"; } });
   const [tabKey, setTabKey] = useState(0); // for re-triggering animation on tab change
@@ -648,6 +653,16 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
   const [selectedContact, setSelectedContact] = useState(null);
   const [showNewContact, setShowNewContact] = useState(false);
   const [duplicateOnCreateData, setDuplicateOnCreateData] = useState(null); // V2.1.b — modale doublon admin
+
+  // V2.2.c — Admin user object pour MergeContactsModal (collab.role='admin' suffit pour autoriser merge backend Q5)
+  const adminCollabUser = useMemo(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem("calendar360-session") || "null");
+      return { id: s?.collaboratorId || s?.userId || 'admin', role: 'admin', name: s?.name || 'Admin' };
+    } catch { return { id: 'admin', role: 'admin', name: 'Admin' }; }
+  }, []);
+  // V2.2.c — Hook merge (gère state mergeTarget + listener crmContactMerged cross-tabs)
+  const { mergeTarget, openMerge, closeMerge } = useMergeContacts();
   const [ficheTab, setFicheTab] = useState("history");
   const [crmView, setCrmView] = useState("table"); // table | pipeline
   const [crmSelectedIds, setCrmSelectedIds] = useState([]); // multi-select
@@ -10023,7 +10038,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                   </div>
                 </div>
                 <div style={{display:"flex",gap:4,background:T.bg,borderRadius:10,padding:3}}>
-                  {[{id:"table",icon:"list",label:"Table"},{id:"pipeline",icon:"trello",label:"Pipeline"},{id:"funnel",icon:"trending-up",label:"Funnel"}].map(v=>(
+                  {[{id:"table",icon:"list",label:"Table"},{id:"pipeline",icon:"trello",label:"Pipeline"},{id:"funnel",icon:"trending-up",label:"Funnel"},{id:"duplicates",icon:"git-merge",label:"Doublons"}].map(v=>(
                     <div key={v.id} onClick={()=>(typeof setCrmView==='function'?setCrmView:function(){})(v.id)} style={{padding:"5px 14px",borderRadius:8,cursor:"pointer",fontSize:12,fontWeight:600,background:crmView===v.id?T.accent:"transparent",color:crmView===v.id?"#fff":T.text3,transition:"all .2s"}}><I n={v.icon} s={13}/> {v.label}</div>
                   ))}
                 </div>
@@ -10902,6 +10917,14 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                   );
                 })}
               </div>
+            ) : (typeof crmView!=='undefined'?crmView:null) === "duplicates" ? (
+              /* ═══ V2.2.c — DUPLICATES PANEL ═══ */
+              <DuplicatesPanel
+                company={company}
+                onOpenContact={(c) => { setSelectedContact(c); setFicheTab("history"); }}
+                onOpenMerge={openMerge}
+                notif={notif}
+              />
             ) : (
               /* ═══ CONVERSION FUNNEL VIEW ═══ */
               <Card style={{padding:24}}>
@@ -11883,6 +11906,18 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
             if (snapshot) submitNewContactAdmin(snapshot, { forceCreate: true, reason, justification });
           }}
           onEnrich={handleDuplicateEnrichAdmin}
+        />
+      )}
+
+      {/* V2.2.c — Modale fusion admin (props collab/contacts/showNotif injectés, AdminDash hors CollabProvider) */}
+      {mergeTarget && (
+        <MergeContactsModal
+          primary={mergeTarget}
+          onClose={closeMerge}
+          onSuccess={() => closeMerge()}
+          collab={adminCollabUser}
+          contacts={contacts}
+          showNotif={notif}
         />
       )}
     </div>

@@ -20,11 +20,11 @@
 //   locaux. Reload mergePreview uniquement si fields includes archivedAt OR pipeline_stage
 //   (Q4 reco — economie reseau).
 
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useContext } from "react";
 import { T } from "../../../theme";
 import { I, Btn, Modal, Spinner, Avatar } from "../../../shared/ui";
 import { api } from "../../../shared/services/api";
-import { useCollabContext } from "../context/CollabContext";
+import { CollabContext } from "../context/CollabContext";
 import {
   filterMergeablePeers,
   fetchMergePreview,
@@ -64,8 +64,12 @@ const PanelContact = ({ label, contact, accentColor }) => {
   );
 };
 
-const MergeContactsModal = ({ primary: initialPrimary, onClose, onSuccess }) => {
-  const { contacts, collab, showNotif } = useCollabContext();
+const MergeContactsModal = ({ primary: initialPrimary, onClose, onSuccess, collab: collabProp, contacts: contactsProp, showNotif: showNotifProp }) => {
+  // V2.2.c — props prioritaires (AdminDash hors CollabProvider). Fallback context (CrmTab CollabPortal).
+  const ctx = useContext(CollabContext) || {};
+  const collab = collabProp || ctx.collab;
+  const contacts = contactsProp || ctx.contacts || [];
+  const showNotif = showNotifProp || ctx.showNotif || (() => {});
   // V1.14.1 — state local pour primary (sync via listener crmContactUpdated).
   // initialPrimary = mergeTarget du hook useMergeContacts (figé à l'ouverture par CrmTab).
   const [primary, setPrimary] = useState(initialPrimary);
