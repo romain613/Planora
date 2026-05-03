@@ -2460,7 +2460,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   };
 
   // V3.x.6 fix UX — Sync ALL connected external calendars (Google + Outlook + fallback)
-  const syncAllExternal = async () => {
+  // V3.x.6.b1 — silent=true skip success notif (used by auto-sync on Agenda mount)
+  const syncAllExternal = async ({ silent = false } = {}) => {
     const promises = [];
     if (googleConnected) {
       setGoogleLoading(true);
@@ -2480,7 +2481,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       );
     }
     if (!promises.length) {
-      showNotif("Aucun calendrier externe connecté. Connectez Google ou Outlook depuis Paramètres.", "danger");
+      if (!silent) showNotif("Aucun calendrier externe connecté. Connectez Google ou Outlook depuis Paramètres.", "danger");
       return;
     }
     try {
@@ -2489,9 +2490,13 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       const initData = await api(`/api/init?companyId=${company.id}`);
       if (initData?.googleEvents && setGoogleEvents) setGoogleEvents(initData.googleEvents);
       if (initData?.outlookEvents && setOutlookEvents) setOutlookEvents(initData.outlookEvents);
+      const allOk = results.every(r => r.ok);
       const summary = results.map(r => `${r.provider} ${r.ok ? r.count + ' events' : '✗'}`).join(' · ');
-      showNotif(`Synchronisé — ${summary}`, results.every(r => r.ok) ? 'success' : 'danger');
-    } catch (e) { setGoogleLoading(false); setOutlookLoading(false); showNotif("Erreur de sync", "danger"); }
+      // silent: skip notif on full success, but still notify on failure (user must know)
+      if (!silent || !allOk) {
+        showNotif(`Synchronisé — ${summary}`, allOk ? 'success' : 'danger');
+      }
+    } catch (e) { setGoogleLoading(false); setOutlookLoading(false); if (!silent) showNotif("Erreur de sync", "danger"); }
   };
 
   const showNotif = (msg, type="success") => { setNotification({ msg, type }); setTimeout(() => setNotification(null), 3000); };

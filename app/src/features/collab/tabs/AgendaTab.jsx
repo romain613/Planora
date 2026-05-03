@@ -42,6 +42,22 @@ const AgendaTab = () => {
   basePreset, dayBookings, dayDate, exportICS, googleConnected, gridTheme, hours, isAvailableSlot, monthMonth, monthYear, myGoogleEvents, myOutlookEvents, syncGoogle, syncAllExternal, outlookConnected, outlookLoading, getOutlookEventAt, today, todayStr, weekDates, ZOOM_LEVELS,
   } = useCollabContext();
 
+  // V3.x.6.b1 — Auto-sync au mount Agenda si dernier sync > 5 min (silent fire-and-forget)
+  // Garde useRef anti-double-call : 1 trigger par mount uniquement.
+  // Ne re-fire pas sur re-render — fire uniquement quand collab.id change (i.e. session change).
+  const _autoSyncFiredRef = React.useRef(false);
+  React.useEffect(() => {
+    if (_autoSyncFiredRef.current) return;
+    _autoSyncFiredRef.current = true;
+    const STALE_MS = 5 * 60 * 1000; // 5 minutes
+    const isStale = (lastSync) => !lastSync || (Date.now() - new Date(lastSync).getTime() > STALE_MS);
+    const needSync = (outlookConnected && isStale(collab?.outlook_last_sync)) || (googleConnected && isStale(collab?.google_last_sync));
+    if (needSync && typeof syncAllExternal === 'function') {
+      console.log('[AGENDA AUTO-SYNC] triggered (stale > 5min)');
+      syncAllExternal({ silent: true });
+    }
+  }, [collab?.id]);
+
   // V1.8.24.5 — agendaFilter branché sur les 4 vues (Jour/Semaine/Mois/Liste)
   // Source : _T.agendaFilter (state global tabState) — lu via les boutons compteur du composant.
   // Si 'all' : comportement actuel (cancelled exclus de Jour/Semaine, mois respecte ≠cancelled).
