@@ -39,7 +39,7 @@ const AgendaTab = () => {
     // ── Hotfix audit 2026-04-23 (v3) ──
   googleLoading,
   // ── AST audit 2026-04-23 (v7) ──
-  basePreset, dayBookings, dayDate, exportICS, googleConnected, gridTheme, hours, isAvailableSlot, monthMonth, monthYear, myGoogleEvents, syncGoogle, today, todayStr, weekDates, ZOOM_LEVELS,
+  basePreset, dayBookings, dayDate, exportICS, googleConnected, gridTheme, hours, isAvailableSlot, monthMonth, monthYear, myGoogleEvents, myOutlookEvents, syncGoogle, syncAllExternal, outlookConnected, outlookLoading, getOutlookEventAt, today, todayStr, weekDates, ZOOM_LEVELS,
   } = useCollabContext();
 
   // V1.8.24.5 — agendaFilter branché sur les 4 vues (Jour/Semaine/Mois/Liste)
@@ -118,7 +118,13 @@ const AgendaTab = () => {
       </div>}
       <div style={{ width:1, height:24, background:T.border, margin:"0 4px" }}/>
       <Btn small onClick={()=>{setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:new Date().toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true});setPhoneShowScheduleModal(true);}} style={{display:"flex",alignItems:"center",gap:4,background:"#F59E0B",color:"#fff",border:"none",fontWeight:700}}><I n="calendar-plus" s={14}/> Nouveau RDV</Btn>
-      <Btn small primary onClick={(typeof googleConnected!=='undefined'?googleConnected:null) ? syncGoogle : exportICS} disabled={googleLoading} title="Synchroniser avec Google Agenda" style={{ display:"flex", alignItems:"center", gap:4 }}><I n="calendar" s={14}/> {(typeof googleLoading!=='undefined'?googleLoading:null) ? "Sync..." : "Sync"}</Btn>
+      {/* V3.x.6 fix UX — Synchroniser calendriers externes (Google + Outlook) */}
+      <Btn small primary onClick={syncAllExternal} disabled={(typeof googleLoading!=='undefined'&&googleLoading) || (typeof outlookLoading!=='undefined'&&outlookLoading)} title={(googleConnected || outlookConnected) ? `Synchroniser ${[googleConnected?'Google':null, outlookConnected?'Outlook':null].filter(Boolean).join(' + ')}` : "Aucun calendrier externe connecté"} style={{ display:"flex", alignItems:"center", gap:4 }}>
+        <I n="refresh-cw" s={14}/> {((typeof googleLoading!=='undefined'&&googleLoading) || (typeof outlookLoading!=='undefined'&&outlookLoading)) ? "Sync..." : "Synchroniser"}
+      </Btn>
+      <Btn small onClick={exportICS} title="Exporter au format .ics" style={{ display:"flex", alignItems:"center", gap:4 }}>
+        <I n="download" s={14}/> .ics
+      </Btn>
       <div style={{ position:"relative" }}>
         <div onClick={() => (typeof setShowGridColors==='function'?setShowGridColors:function(){})(!showGridColors)} style={{ width:28, height:28, borderRadius:8, background:`linear-gradient(135deg,${gridTheme.avail},${gridTheme.accent}40)`, border:`2px solid ${gridTheme.accent}`, cursor:"pointer", display:"flex", alignItems:"center", justifyContent:"center" }} title="Couleur de la grille">
           <I n="palette" s={13} style={{ color:gridTheme.accent }}/>
@@ -218,6 +224,13 @@ const AgendaTab = () => {
         <Badge color={gridTheme.google} bg={gridTheme.google+"18"}>{collab.google_events_private ? "Occupé" : "Synchro"}</Badge>
       </div>
     )}
+    {/* V3.x.6 Phase 2C — Legend Outlook (mirror Google) */}
+    {(myOutlookEvents||[]).length > 0 && (
+      <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:'#0078D4' }}>
+        <div style={{ width:10, height:10, borderRadius:3, background:`repeating-linear-gradient(135deg,#0078D440,#0078D440 2px,transparent 2px,transparent 4px)`, border:`1px solid #0078D4` }}/> Outlook Agenda
+        <Badge color={'#0078D4'} bg={'#0078D418'}>{collab.outlook_events_private ? "Occupé" : "Synchro"}</Badge>
+      </div>
+    )}
   </div>
 
   {/* ── AUTRES CALENDRIERS (accordéon) — seulement si plusieurs calendriers ── */}
@@ -256,7 +269,7 @@ const AgendaTab = () => {
     <div>
       <div style={{ textAlign:"center", marginBottom:12 }}>
         <div style={{ fontSize:16, fontWeight:700, color:T.accent }}>{DAYS_FR[getDow(dayDate)]} {new Date(dayDate).getDate()} {MONTHS_FR[new Date(dayDate).getMonth()]} {new Date(dayDate).getFullYear()}</div>
-        <div style={{ fontSize:12, color:T.text3, marginTop:4 }}>{_dayBkF.length} RDV{_agFilter!=='all'?` (filtre: ${_agFilter})`:''} · {myGoogleEvents.filter(ge => ge.startTime.slice(0,10) === dayDate).length} événements Google</div>
+        <div style={{ fontSize:12, color:T.text3, marginTop:4 }}>{_dayBkF.length} RDV{_agFilter!=='all'?` (filtre: ${_agFilter})`:''} · {myGoogleEvents.filter(ge => ge.startTime.slice(0,10) === dayDate).length} Google · {(myOutlookEvents||[]).filter(oe => (oe.startTime||'').slice(0,10) === dayDate).length} Outlook</div>
       </div>
       <Card style={{ padding:0, overflow:"hidden", borderRadius:12 }}>
         <div ref={el => { if (el && isDayToday && !agendaScrolledRef.current) { agendaScrolledRef.current = true; const scrollTo = Math.max(0, (nowH - (agendaWorkHours?7:0) - 2) * agendaZoom * 2); setTimeout(() => el.scrollTop = scrollTo, 100); } }} style={{ maxHeight:600, overflowY:"auto", overflowX:"hidden" }}>
@@ -268,6 +281,8 @@ const AgendaTab = () => {
             // Bookings qui COMMENCENT dans ce slot de 30min
             const hBookings = _dayBkF.filter(b => { const [bH,bM] = (b.time||'0:0').split(':').map(Number); const bMin = bH*60+(bM||0); return bMin >= slotMin && bMin < slotMin + 30; });
             const hGoogleEvents = getGoogleEventAt(dayDate, hour).filter(ge => { if (ge.allDay) return hour === hours[0]; const geMin = parseInt(ge.startTime.slice(11,13))*60+parseInt(ge.startTime.slice(14,16)); return geMin >= slotMin && geMin < slotMin + 30; });
+            // V3.x.6 fix Day — Outlook events at this slot (mirror Google)
+            const hOutlookEvents = (typeof getOutlookEventAt==='function'?getOutlookEventAt:()=>[])(dayDate, hour).filter(oe => { if (oe.allDay) return hour === hours[0]; const oeMin = parseInt((oe.startTime||'').slice(11,13))*60+parseInt((oe.startTime||'').slice(14,16)); return oeMin >= slotMin && oeMin < slotMin + 30; });
             const isAvail = isAvailableSlot(dayDate, hour);
             const isFreeSlot = isAvail && hBookings.length === 0;
             const isNow = isDayToday && Math.abs(slotMin - (nowH*60+nowM)) < 30 && slotMin <= nowH*60+nowM;
@@ -315,6 +330,20 @@ const AgendaTab = () => {
                         <div style={{ color:gridTheme.google, fontWeight:600, fontSize:11 }}>{ge.allDay ? "Journée entière" : `${ge.startTime.slice(11,16)} - ${ge.endTime.slice(11,16)}`} · Google Agenda</div>
                       </div>
                       <svg width="16" height="16" viewBox="0 0 24 24" style={{ flexShrink:0 }}><circle cx="12" cy="12" r="10" fill="#4285F4" opacity=".2"/><path d="M12 7v5l3 3" stroke="#4285F4" strokeWidth="2" fill="none" strokeLinecap="round"/></svg>
+                    </div>
+                  ))}
+                  {/* V3.x.6 fix Day — Outlook events rendering (mirror Google) */}
+                  {hOutlookEvents.map(oe => (
+                    <div key={"oe-"+oe.id} style={{
+                      padding:"8px 12px", borderRadius:8, marginBottom:2,
+                      background:`repeating-linear-gradient(135deg,#0078D414,#0078D414 3px,transparent 3px,transparent 6px)`,
+                      borderLeft:`3px solid #0078D4`, fontSize:12, lineHeight:1.4, opacity:0.85, display:"flex", alignItems:"center", gap:8, cursor:"default",
+                    }}>
+                      <div style={{ flex:1 }}>
+                        <div style={{ fontWeight:700, color:T.text3 }}>{collab.outlook_events_private ? "Occupé" : (oe.summary || "Occupé")}</div>
+                        <div style={{ color:'#0078D4', fontWeight:600, fontSize:11 }}>{oe.allDay ? "Journée entière" : `${(oe.startTime||'').slice(11,16)} - ${(oe.endTime||'').slice(11,16)}`} · Outlook Agenda</div>
+                      </div>
+                      <svg width="16" height="16" viewBox="0 0 24 24" style={{ flexShrink:0 }}><rect x="3" y="5" width="13" height="14" rx="1.5" fill="#0078D4" opacity=".25"/><rect x="16" y="8" width="5" height="8" fill="#0078D4" opacity=".4"/></svg>
                     </div>
                   ))}
                 </div>
@@ -367,11 +396,14 @@ const AgendaTab = () => {
             {weekDates.map((ds,i) => {
               const cellBookings = getBookingAt(ds, hour);
               const cellGoogleEvents = getGoogleEventAt(ds, hour);
+              // V3.x.6 fix Week — Outlook events at this cell (mirror Google)
+              const cellOutlookEvents = (typeof getOutlookEventAt==='function'?getOutlookEventAt:()=>[])(ds, hour);
               const isToday = ds === todayStr;
               const isAvail = isAvailableSlot(ds, hour);
               const isStartSlot = (b) => { const [bH,bM] = (b.time||'0:0').split(':').map(Number); const bMin = bH*60+(bM||0); return bMin >= slotMin && bMin < slotMin + 30; };
               const isGeStart = (ge) => { if (ge.allDay) return hour === hours[0]; const geSlotMin = parseInt(ge.startTime.slice(11,13))*60+parseInt(ge.startTime.slice(14,16)); return geSlotMin >= slotMin && geSlotMin < slotMin + 30; };
-              const isEmptyAvail = isAvail && cellBookings.length===0 && cellGoogleEvents.length===0;
+              const isOeStart = (oe) => { if (oe.allDay) return hour === hours[0]; const oeSlotMin = parseInt((oe.startTime||'').slice(11,13))*60+parseInt((oe.startTime||'').slice(14,16)); return oeSlotMin >= slotMin && oeSlotMin < slotMin + 30; };
+              const isEmptyAvail = isAvail && cellBookings.length===0 && cellGoogleEvents.length===0 && cellOutlookEvents.length===0;
               return (
                 <div key={ds+hour} onClick={()=>{if(isEmptyAvail){setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:ds,time:hour,duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true});setPhoneShowScheduleModal(true);}}} title={isEmptyAvail?'+ Créer un RDV':undefined} onMouseEnter={e=>{if(isEmptyAvail)e.currentTarget.style.background='#E8F5E920';}} onMouseLeave={e=>{e.currentTarget.style.background=isToday?'#E8F0FE40':isAvail?'#fff':'#f8f9fa';}} style={{
                   borderRight:i<6?'1px solid #dadce060':'none', padding:0,
@@ -424,6 +456,23 @@ const AgendaTab = () => {
                       <div style={{ fontSize:9, opacity:0.85 }}>{ge.allDay ? "Journée" : ge.startTime.slice(11,16)}</div>
                     </div>);
                   })}
+                  {/* V3.x.6 fix Week — Outlook events rendering (mirror Google) */}
+                  {cellOutlookEvents.filter(oe => isOeStart(oe)).map(oe => {
+                    const oeSlotMin = parseInt((oe.startTime||'').slice(11,13))*60+parseInt((oe.startTime||'').slice(14,16));
+                    const offsetMin = oeSlotMin - slotMin;
+                    const offsetPx = Math.round(offsetMin / 30 * slotH);
+                    return (
+                    <div key={"oe-"+oe.id} title={collab.outlook_events_private ? "Occupé" : (oe.summary || "Outlook")} style={{
+                      padding:"2px 6px", borderRadius:4,
+                      background:'#0078D4', color:'#fff',
+                      fontSize:10, lineHeight:1.2, position:'absolute', top:offsetPx, left:2, width:'calc(100% - 4px)', zIndex:1,
+                      height: Math.max(20, Math.round(((new Date(oe.endTime).getTime()-new Date(oe.startTime).getTime())/60000) / 30 * slotH)),
+                      overflow:'hidden', opacity:0.85, cursor:'default',
+                    }}>
+                      <div style={{ fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{collab.outlook_events_private ? "Occupé" : (oe.summary || "")}</div>
+                      <div style={{ fontSize:9, opacity:0.85 }}>{oe.allDay ? "Journée" : (oe.startTime||'').slice(11,16)}</div>
+                    </div>);
+                  })}
                 </div>
               );
             })}
@@ -454,7 +503,9 @@ const AgendaTab = () => {
             const isToday = ds === todayStr;
             const dayBk = (_agFilter==='all'?myBookings:_filteredMyBookings).filter(b => b.date === ds && (_agFilter==='all'?b.status !== "cancelled":true));
             const dayGe = myGoogleEvents.filter(ge => { if (ge.allDay) return ds >= ge.startTime.slice(0,10) && ds < ge.endTime.slice(0,10); return ge.startTime.slice(0,10) === ds; });
-            const totalItems = dayBk.length + dayGe.length;
+            // V3.x.6 Phase 2C — Outlook events on this day (mirror Google)
+            const dayOe = (myOutlookEvents||[]).filter(oe => { if (oe.allDay) return ds >= (oe.startTime||'').slice(0,10) && ds < (oe.endTime||'').slice(0,10); return (oe.startTime||'').slice(0,10) === ds; });
+            const totalItems = dayBk.length + dayGe.length + dayOe.length;
             return (
               <div key={ds} onClick={() => { setSelectedDay(ds); setViewMode("day"); }} style={{
                 minHeight:80, padding:6, borderBottom:`1px solid ${T.border}08`, borderRight:`1px solid ${T.border}08`,
@@ -476,6 +527,12 @@ const AgendaTab = () => {
                 {dayGe.slice(0, Math.max(0, 3-dayBk.length)).map(ge => (
                   <div key={"ge-"+ge.id} title={collab.google_events_private ? "Occupé (Google Agenda)" : (ge.summary || "Google Agenda")} style={{ fontSize:10, padding:"2px 4px", borderRadius:3, background:gridTheme.google+"18", color:gridTheme.google, fontWeight:600, marginBottom:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis" }}>
                     {ge.allDay ? "Journée" : ge.startTime.slice(11,16)} {collab.google_events_private ? "Occupé" : (ge.summary || "Occupé")}
+                  </div>
+                ))}
+                {/* V3.x.6 Phase 2C — Outlook events on this day (mirror Google rendering) */}
+                {dayOe.slice(0, Math.max(0, 3-dayBk.length-dayGe.length)).map(oe => (
+                  <div key={"oe-"+oe.id} title={collab.outlook_events_private ? "Occupé (Outlook)" : (oe.summary || "Outlook Agenda")} style={{ fontSize:10, padding:"2px 4px", borderRadius:3, background:'#0078D418', color:'#0078D4', fontWeight:600, marginBottom:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", cursor:"default" }}>
+                    {oe.allDay ? "Journée" : (oe.startTime||'').slice(11,16)} {collab.outlook_events_private ? "Occupé" : (oe.summary || "Occupé")}
                   </div>
                 ))}
                 {totalItems > 3 && <div style={{ fontSize:10, color:T.text3, fontWeight:600 }}>+{totalItems-3} de plus</div>}

@@ -56,7 +56,7 @@ import HardDeleteContactModal from "./modals/HardDeleteContactModal";
 import PostCallResultModal from "./modals/PostCallResultModal"; // V3.x post-call smart pipeline
 import SmartFooterBar from "./components/SmartFooterBar"; // V1 Smart Footer Performance Bar
 
-const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCalendars, avails, setAvails, vacations, setVacations, contacts, setContacts, onBack, voipCredits, voipCallLogs, setVoipCallLogs, voipConfigured, appMyPhoneNumbers, appPhonePlans, appConversations, setAppConversations, pipelineStages, setPipelineStages, contactFieldDefs, setContactFieldDefs, collabs: collabsProp, googleEvents: googleEventsProp, setGoogleEvents, isAdminView, smsCredits }) => {
+const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCalendars, avails, setAvails, vacations, setVacations, contacts, setContacts, onBack, voipCredits, voipCallLogs, setVoipCallLogs, voipConfigured, appMyPhoneNumbers, appPhonePlans, appConversations, setAppConversations, pipelineStages, setPipelineStages, contactFieldDefs, setContactFieldDefs, collabs: collabsProp, googleEvents: googleEventsProp, setGoogleEvents, outlookEvents: outlookEventsProp, setOutlookEvents, isAdminView, smsCredits }) => {
   // collabs = list of all collaborators in the company (for chat DM, etc.)
   const collabs = collabsProp || [];
   const _MIGRATED_TABS = ['messages','availability','tables','ai-profile','objectifs','signalements','bookings','analytics'];
@@ -2013,6 +2013,14 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
           return st < newEnd && en > newStart;
         }catch{return false;}
       });
+      // V3.x.6 Phase 2C — Outlook frontend pre-check (mirror conflictGCal above)
+      const conflictOutlook = (outlookEventsProp||[]).filter(oe=>oe.collaboratorId===(f.collaboratorId||collab.id) && oe.showAs!=='free').find(oe=>{
+        try{
+          const st=new Date(oe.startTime).getTime() - bufferMs;
+          const en=new Date(oe.endTime||st+3600000).getTime() + bufferMs;
+          return st < newEnd && en > newStart;
+        }catch{return false;}
+      });
       if(conflictBooking) {
         console.log('[BOOKING BLOCK] conflict with booking:', conflictBooking.id, conflictBooking.time);
         setBookErr('Ce créneau chevauche un RDV existant ('+conflictBooking.time+') ! Choisissez un autre horaire.');
@@ -2021,6 +2029,11 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       if(conflictGCal) {
         console.log('[BOOKING BLOCK] conflict with GCal event');
         setBookErr('Ce créneau chevauche un événement Google Calendar ! Choisissez un autre horaire.');
+        return false;
+      }
+      if(conflictOutlook) {
+        console.log('[BOOKING BLOCK] conflict with Outlook event');
+        setBookErr('Ce créneau chevauche un événement Outlook ! Choisissez un autre horaire.');
         return false;
       }
 
@@ -2446,6 +2459,41 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     setGoogleLoading(false);
   };
 
+  // V3.x.6 fix UX — Sync ALL connected external calendars (Google + Outlook + fallback)
+  const syncAllExternal = async () => {
+    const promises = [];
+    if (googleConnected) {
+      setGoogleLoading(true);
+      promises.push(
+        fetch(`${API_BASE}/api/google/sync`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ collaboratorId: collab.id }) })
+          .then(r => r.json()).then(d => ({ provider:'Google', ok:!!d?.success, count:d?.synced||0 }))
+          .catch(() => ({ provider:'Google', ok:false }))
+      );
+    }
+    if (outlookConnected) {
+      setOutlookLoading(true);
+      const tk = (() => { try { return JSON.parse(localStorage.getItem('calendar360-session')||'null')?.token||''; } catch { return ''; } })();
+      promises.push(
+        fetch(`${API_BASE}/api/outlook/sync`, { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+tk}, body:JSON.stringify({ collaboratorId: collab.id }) })
+          .then(r => r.json()).then(d => ({ provider:'Outlook', ok:!!d?.success, count:d?.synced||0 }))
+          .catch(() => ({ provider:'Outlook', ok:false }))
+      );
+    }
+    if (!promises.length) {
+      showNotif("Aucun calendrier externe connecté. Connectez Google ou Outlook depuis Paramètres.", "danger");
+      return;
+    }
+    try {
+      const results = await Promise.all(promises);
+      setGoogleLoading(false); setOutlookLoading(false);
+      const initData = await api(`/api/init?companyId=${company.id}`);
+      if (initData?.googleEvents && setGoogleEvents) setGoogleEvents(initData.googleEvents);
+      if (initData?.outlookEvents && setOutlookEvents) setOutlookEvents(initData.outlookEvents);
+      const summary = results.map(r => `${r.provider} ${r.ok ? r.count + ' events' : '✗'}`).join(' · ');
+      showNotif(`Synchronisé — ${summary}`, results.every(r => r.ok) ? 'success' : 'danger');
+    } catch (e) { setGoogleLoading(false); setOutlookLoading(false); showNotif("Erreur de sync", "danger"); }
+  };
+
   const showNotif = (msg, type="success") => { setNotification({ msg, type }); setTimeout(() => setNotification(null), 3000); };
 
   // Week dates
@@ -2557,6 +2605,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
 
   // Google Calendar events (busy blocks)
   const myGoogleEvents = (googleEventsProp || []).filter(ge => ge.collaboratorId === collab.id);
+  // V3.x.6 Phase 2C — Outlook events (mirror Google)
+  const myOutlookEvents = (outlookEventsProp || []).filter(oe => oe.collaboratorId === collab.id);
   const getGoogleEventAt = (date, hour) => {
     const slotMin = parseInt(hour) * 60 + parseInt(hour.slice(3));
     return myGoogleEvents.filter(ge => {
@@ -2567,6 +2617,23 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       const geStartMin = date === geDate ? (parseInt(ge.startTime.slice(11,13))*60 + parseInt(ge.startTime.slice(14,16))) : 0;
       const geEndMin = date === geEndDate ? (parseInt(ge.endTime.slice(11,13))*60 + parseInt(ge.endTime.slice(14,16))) : 1440;
       return slotMin >= geStartMin && slotMin < geEndMin;
+    });
+  };
+
+  // V3.x.6 fix Day/Week — mirror getGoogleEventAt for Outlook
+  const getOutlookEventAt = (date, hour) => {
+    const slotMin = parseInt(hour) * 60 + parseInt(hour.slice(3));
+    return myOutlookEvents.filter(oe => {
+      if (oe.showAs === 'free') return false;
+      const st = oe.startTime || '';
+      const en = oe.endTime || '';
+      if (oe.allDay) return date >= st.slice(0, 10) && date < en.slice(0, 10);
+      const oeDate = st.slice(0, 10);
+      const oeEndDate = en.slice(0, 10);
+      if (date < oeDate || date > oeEndDate) return false;
+      const oeStartMin = date === oeDate ? (parseInt(st.slice(11,13))*60 + parseInt(st.slice(14,16))) : 0;
+      const oeEndMin = date === oeEndDate ? (parseInt(en.slice(11,13))*60 + parseInt(en.slice(14,16))) : 1440;
+      return slotMin >= oeStartMin && slotMin < oeEndMin;
     });
   };
 
@@ -4187,7 +4254,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       showGridColors, setShowGridColors,
       gridColorPresets,
       myBookings, myCalendars, monthDays, agendaFillRate,
-      getBookingAt, getGoogleEventAt, updateBooking, cancelBookingAndCascade,
+      getBookingAt, getGoogleEventAt, getOutlookEventAt, updateBooking, cancelBookingAndCascade,
       // Home tab
       bookings, voipCallLogs, smsCredits,
       portalTab, setPortalTab,
@@ -4225,6 +4292,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       getCollabLeadScore,
       getLeadTemperature,
       googleEventsProp,
+      outlookEventsProp,
       handleCollabDeleteContact,
       handleCollabUpdateContact,
       handleColumnDragStart,
@@ -4254,7 +4322,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       googleLoading, handleQuickAddContact, phoneTeamChatRef, stopAutoDialer, togglePhoneAutoRecap, togglePhoneAutoSMS, togglePhoneRightPanel,
 
       // ── AST audit 2026-04-23 (v7) — complete phantom elimination via @babel/parser ──
-      CALL_TAGS, PHONE_MODULES, ZOOM_LEVELS, _defaultLiveConfig, addToBlacklist, autoDialerNext, basePreset, collabContactTags, collabPaginatedContacts, collabsProp, dayBookings, dayDate, exportICS, fetchCallTranscript, generateCallAnalysis, googleConnected, gridTheme, hours, isAdminView, isAvailableSlot, monthMonth, monthYear, myGoogleEvents, perduMotifModal, postCallResultModal, removeFromBlacklist, removeScheduledCall, saveCallRecording, savePhoneCallRating, savePhoneCallTag, saveScriptsDual, setPerduMotifModal, setPostCallResultModal, startAutoDialer, syncGoogle, today, toggleModule, togglePhoneFav, weekDates,
+      CALL_TAGS, PHONE_MODULES, ZOOM_LEVELS, _defaultLiveConfig, addToBlacklist, autoDialerNext, basePreset, collabContactTags, collabPaginatedContacts, collabsProp, dayBookings, dayDate, exportICS, fetchCallTranscript, generateCallAnalysis, googleConnected, gridTheme, hours, isAdminView, isAvailableSlot, monthMonth, monthYear, myGoogleEvents, myOutlookEvents, outlookConnected, outlookLoading, perduMotifModal, postCallResultModal, removeFromBlacklist, removeScheduledCall, saveCallRecording, savePhoneCallRating, savePhoneCallTag, saveScriptsDual, setPerduMotifModal, setPostCallResultModal, startAutoDialer, syncGoogle, syncAllExternal, today, toggleModule, togglePhoneFav, weekDates,
 
     }}>
     <div style={{ display:"flex", minHeight:"100vh", background:T.bg, fontFamily:"'Onest','Outfit',system-ui,sans-serif", color:T.text }}>
@@ -6452,10 +6520,13 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                 const selCollabId = _scheduleTargetCollabId;
                 const dayBookings = (bookings||[]).filter(b=>(b.calendarId===selCalId || b.collaboratorId===selCollabId) && (b.date||'').startsWith(selDate) && b.status!=='cancelled');
                 const dayGCal = (googleEventsProp||[]).filter(ge=>(ge.collaboratorId===selCollabId) && (ge.start||ge.startDate||'').startsWith(selDate));
+                // V3.x.6 Phase 2C — Outlook busy slots (mirror Google block)
+                const dayOCal = (outlookEventsProp||[]).filter(oe=>(oe.collaboratorId===selCollabId) && oe.showAs!=='free' && (oe.startTime||'').startsWith(selDate));
                 const buf = (typeof availBuffer!=='undefined'?availBuffer:null)||0;
                 const busySlots = new Set();
                 dayBookings.forEach(b=>{ if(b.time) { const h=parseInt(b.time.split(':')[0]); const m=parseInt(b.time.split(':')[1]||0); const startMin=h*60+m-buf; const endMin=h*60+m+(b.duration||30)+buf; for(let i=Math.max(0,startMin);i<endMin;i+=30) busySlots.add(String(Math.floor(i/60)).padStart(2,'0')+':'+String(i%60).padStart(2,'0')); }});
                 dayGCal.forEach(ge=>{ try{ const st=new Date(ge.start||ge.startDate); const en=new Date(ge.end||ge.endDate||st.getTime()+3600000); const stBuf=st.getTime()-buf*60000; const enBuf=en.getTime()+buf*60000; for(let t=stBuf;t<enBuf;t+=1800000){const d=new Date(t);busySlots.add(String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'));} }catch{} });
+                dayOCal.forEach(oe=>{ try{ const st=new Date(oe.startTime); const en=new Date(oe.endTime||st.getTime()+3600000); const stBuf=st.getTime()-buf*60000; const enBuf=en.getTime()+buf*60000; for(let t=stBuf;t<enBuf;t+=1800000){const d=new Date(t);busySlots.add(String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'));} }catch{} });
                 const slots = [];
                 // V1.7.7 — Génération basée sur le planning hebdo du collab (pas hardcodé 8-19h)
                 const _dayDate = new Date(selDate+'T00:00:00');

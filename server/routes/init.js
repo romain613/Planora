@@ -131,6 +131,16 @@ router.get('/', (req, res) => {
       }
     } catch (e) {}
 
+    // V3.x.6 Phase 2C — Outlook Calendar events (mirror Google block above)
+    let outlookEvents = [];
+    try {
+      const collabIds = collaborators.map(c => c.id);
+      if (collabIds.length > 0) {
+        const ph = collabIds.map(() => '?').join(',');
+        outlookEvents = db.prepare(`SELECT id, collaboratorId, summary, startTime, endTime, allDay, showAs FROM outlook_events WHERE collaboratorId IN (${ph}) ORDER BY startTime ASC`).all(...collabIds);
+      }
+    } catch (e) {}
+
     // Settings
     const settingsRow = db.prepare('SELECT * FROM settings WHERE companyId = ?').get(companyId);
     let settings = { blackoutDates: [], vacations: [], timezone: 'Europe/Paris', language: 'fr', cancelPolicy: '', customDomain: '', brandColor: '#2563EB', reminder24h: true, reminder1h: true, reminder15min: false, reminderSms: false, google_chat_webhook: '', ga4_property_id: '', google_tasks_auto: true };
@@ -268,7 +278,7 @@ router.get('/', (req, res) => {
         allCalendars, allBookings, allContacts,
         myPhoneNumbers, phonePlans, availableNumbers, allPhoneNumbers,
         voipPacks, smsPacks, telecomCredits, allTelecomCredits, telecomCreditLogs,
-        pipelineStages, customTables, googleEvents, conversations, contactFieldDefs,
+        pipelineStages, customTables, googleEvents, outlookEvents, conversations, contactFieldDefs,
       });
     }
 
@@ -284,7 +294,7 @@ router.get('/', (req, res) => {
         myPhoneNumbers, phonePlans, availableNumbers,
         allPhoneNumbers: [], // no global stock view
         voipPacks, smsPacks, telecomCredits, allTelecomCredits: {}, telecomCreditLogs,
-        pipelineStages, customTables, googleEvents, conversations, contactFieldDefs,
+        pipelineStages, customTables, googleEvents, outlookEvents, conversations, contactFieldDefs,
       });
     }
 
@@ -379,6 +389,8 @@ router.get('/', (req, res) => {
       contactFieldDefs: contactFieldDefs.filter(d => d.scope === 'company' || d.createdBy === collabId),
       // V1.8.4 — Tous les events GCal de la company. Summary remplacée par "Occupé" pour les autres collabs.
       googleEvents: googleEvents.map(e => e.collaboratorId === collabId ? e : { ...e, summary: 'Occupé' }),
+      // V3.x.6 Phase 2C — Tous les events Outlook (mirror Google privacy mask cross-collab)
+      outlookEvents: outlookEvents.map(e => e.collaboratorId === collabId ? e : { ...e, summary: 'Occupé' }),
       conversations: conversations.filter(c => c.collaboratorId === collabId),
       myGoals, myTeamGoals, myRewards,
     });

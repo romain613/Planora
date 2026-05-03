@@ -216,6 +216,7 @@ export default function App() {
   const contactsLocalEditRef = useRef(0); // timestamp of last local edit — protect from auto-refresh overwrite
   const [customTables, setCustomTables] = useState([]);
   const [googleEvents, setGoogleEvents] = useState([]);
+  const [outlookEvents, setOutlookEvents] = useState([]); // V3.x.6 Phase 2C — Outlook events mirror
   // Phase C-4 (2026-04-20): no longer initialize with COMPANIES[0]={id:'c1',...}.
   // Bootstrap leaked 'c1' as companyId in API calls before session resolved.
   // Real value is set via setCompany(data.company) after /api/init succeeds.
@@ -303,7 +304,7 @@ export default function App() {
         setSmsHistory(data.smsTransactions || []);
         setContacts((data.contacts || []).filter(Boolean)); // hotfix 2026-04-23 — null-safe API boundary
         if (data?.customTables) (typeof setCustomTables==='function'?setCustomTables:function(){})(data.customTables);
-        if (data?.googleEvents) setGoogleEvents(data.googleEvents);
+        if (data?.googleEvents) setGoogleEvents(data.googleEvents); if (data?.outlookEvents) setOutlookEvents(data.outlookEvents);
         // Sécurité : si le collaborateur connecté n'est PAS admin → ouvrir son portail directement
         if (savedSession && savedSession.role && savedSession.role !== "admin" && !savedSession.supraAdmin && savedSession.collaboratorId) {
           const collabFull = (data.collaborators || []).find(c => c.id === savedSession.collaboratorId);
@@ -379,7 +380,7 @@ export default function App() {
           if (typeof setSelectedContact === 'function') { try { if (selectedContact?.id && freshMap.has(selectedContact.id)) setSelectedContact(p => p ? {...p, ...freshMap.get(p.id)} : p); } catch {} }
         }
         if (data?.customTables) (typeof setCustomTables==='function'?setCustomTables:function(){})(data.customTables);
-        if (data?.googleEvents) setGoogleEvents(data.googleEvents);
+        if (data?.googleEvents) setGoogleEvents(data.googleEvents); if (data?.outlookEvents) setOutlookEvents(data.outlookEvents);
         if (data?.smsCredits != null) setSmsCredits(data.smsCredits);
         if (data?.voipCredits != null) setVoipCredits(data.voipCredits);
         // Telecom credits & notifications are synced inside AdminDash
@@ -423,7 +424,7 @@ export default function App() {
             setSmsHistory(data.smsTransactions || []);
             setContacts((data.contacts || []).filter(Boolean)); // hotfix 2026-04-23 — null-safe API boundary
             if (data?.customTables) (typeof setCustomTables==='function'?setCustomTables:function(){})(data.customTables);
-            if (data?.googleEvents) setGoogleEvents(data.googleEvents);
+            if (data?.googleEvents) setGoogleEvents(data.googleEvents); if (data?.outlookEvents) setOutlookEvents(data.outlookEvents);
             // Telecom states (voipPacks, smsPacks, telecomCredits, allTelecomCredits, etc.)
             // are loaded by AdminDash's own useEffect — not available at App scope
             if (data.phonePlans) setAppPhonePlans(data.phonePlans);
@@ -543,6 +544,7 @@ export default function App() {
                 setContacts((data.contacts || []).filter(Boolean)); // hotfix 2026-04-23 — null-safe API boundary
                 if (data?.customTables) (typeof setCustomTables==='function'?setCustomTables:function(){})(data.customTables);
                 if (data?.googleEvents) (typeof setGoogleEvents==='function'?setGoogleEvents:function(){})(data.googleEvents);
+                if (data?.outlookEvents) (typeof setOutlookEvents==='function'?setOutlookEvents:function(){})(data.outlookEvents);
                 // Persist in localStorage as UX convenience (backend is source of truth)
                 try {
                   const sess = JSON.parse(localStorage.getItem("calendar360-session") || "null");
@@ -602,6 +604,8 @@ export default function App() {
             collabs={collabs}
             googleEvents={googleEvents}
             setGoogleEvents={setGoogleEvents}
+            outlookEvents={outlookEvents}
+            setOutlookEvents={setOutlookEvents}
             isAdminView={(() => { try { const s = JSON.parse(localStorage.getItem("calendar360-session")||"null"); return !s || s.role === "admin" || s.supraAdmin; } catch { return true; } })()}
             smsCredits={smsCredits}
           />

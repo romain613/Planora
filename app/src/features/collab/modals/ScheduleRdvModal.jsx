@@ -61,6 +61,7 @@ const ScheduleRdvModal = () => {
     calendars,
     bookings,
     googleEventsProp,
+    outlookEventsProp,
     availBuffer,
     collab, company,
     contacts, setContacts,
@@ -192,10 +193,13 @@ const ScheduleRdvModal = () => {
             const selCollabId = selCalId ? ((calendars||[]).find(c=>c.id===selCalId)?.collaboratorId || collab.id) : collab.id;
             const dayBookings = (bookings||[]).filter(b=>(b.calendarId===selCalId || b.collaboratorId===selCollabId) && (b.date||'').startsWith(selDate) && b.status!=='cancelled');
             const dayGCal = (googleEventsProp||[]).filter(ge=>(ge.collaboratorId===selCollabId) && (ge.start||ge.startDate||'').startsWith(selDate));
+            // V3.x.6 Phase 2C — Outlook busy slots (mirror Google)
+            const dayOCal = (outlookEventsProp||[]).filter(oe=>(oe.collaboratorId===selCollabId) && oe.showAs!=='free' && (oe.startTime||'').startsWith(selDate));
             const buf = availBuffer||0;
             const busySlots = new Set();
             dayBookings.forEach(b=>{ if(b.time) { const h=parseInt(b.time.split(':')[0]); const m=parseInt(b.time.split(':')[1]||0); const startMin=h*60+m-buf; const endMin=h*60+m+(b.duration||30)+buf; for(let i=Math.max(0,startMin);i<endMin;i+=30) busySlots.add(String(Math.floor(i/60)).padStart(2,'0')+':'+String(i%60).padStart(2,'0')); }});
             dayGCal.forEach(ge=>{ try{ const st=new Date(ge.start||ge.startDate); const en=new Date(ge.end||ge.endDate||st.getTime()+3600000); const stBuf=st.getTime()-buf*60000; const enBuf=en.getTime()+buf*60000; for(let t=stBuf;t<enBuf;t+=1800000){const d=new Date(t);busySlots.add(String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'));} }catch{} });
+            dayOCal.forEach(oe=>{ try{ const st=new Date(oe.startTime); const en=new Date(oe.endTime||st.getTime()+3600000); const stBuf=st.getTime()-buf*60000; const enBuf=en.getTime()+buf*60000; for(let t=stBuf;t<enBuf;t+=1800000){const d=new Date(t);busySlots.add(String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'));} }catch{} });
             const slots = [];
             for(let h=8;h<=19;h++) for(let m=0;m<60;m+=30) {
               const slot = String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
