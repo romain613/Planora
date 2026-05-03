@@ -20,6 +20,7 @@ import dataRoutes from './routes/data.js';
 import statsRoutes from './routes/stats.js'; // V3.x post-call smart pipeline + futures stats
 import publicRoutes from './routes/public.js';
 import googleRoutes from './routes/google.js';
+import outlookRoutes from './routes/outlook.js'; // Phase 3 Outlook OAuth
 import tasksRoutes from './routes/tasks.js';
 import chatRoutes from './routes/chat.js';
 import analyticsRoutes from './routes/analytics.js';
@@ -160,6 +161,7 @@ app.use('/api/notify', notifyRoutes);
 app.use('/api/verify', verifyRoutes);
 app.use('/api/public', publicRoutes);
 app.use('/api/google', googleRoutes);
+app.use('/api/outlook', outlookRoutes); // Phase 3 Outlook OAuth (Azure redirect → /api/outlook/callback)
 app.use('/api/tasks', tasksRoutes);
 app.use('/api/chat', chatRoutes);
 app.use('/api/analytics', analyticsRoutes);

@@ -402,6 +402,29 @@ db.exec(`
 `);
 try { db.exec("CREATE INDEX IF NOT EXISTS idx_google_events_collab ON google_events (collaboratorId, startTime)"); } catch {}
 
+// Outlook Calendar integration (Phase 3 Outlook — additive, idempotent)
+try { db.exec('ALTER TABLE collaborators ADD COLUMN outlook_tokens_json TEXT'); } catch {}
+try { db.exec('ALTER TABLE collaborators ADD COLUMN outlook_email TEXT'); } catch {}
+try { db.exec('ALTER TABLE collaborators ADD COLUMN outlook_last_sync TEXT'); } catch {}
+try { db.exec('ALTER TABLE collaborators ADD COLUMN outlook_events_private INTEGER DEFAULT 1'); } catch {}
+try { db.exec('ALTER TABLE collaborators ADD COLUMN outlook_account_id TEXT'); } catch {}
+try { db.exec('ALTER TABLE bookings ADD COLUMN outlookEventId TEXT'); } catch {}
+
+db.exec(`
+  CREATE TABLE IF NOT EXISTS outlook_events (
+    id TEXT PRIMARY KEY,
+    collaboratorId TEXT NOT NULL,
+    summary TEXT,
+    startTime TEXT NOT NULL,
+    endTime TEXT NOT NULL,
+    allDay INTEGER DEFAULT 0,
+    status TEXT,
+    showAs TEXT,
+    FOREIGN KEY (collaboratorId) REFERENCES collaborators(id)
+  )
+`);
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_outlook_events_collab ON outlook_events (collaboratorId, startTime)"); } catch {}
+
 // Per-calendar notification channels (legacy unified — kept for compat)
 try { db.exec("ALTER TABLE calendars ADD COLUMN notifyEmail INTEGER DEFAULT 1"); } catch {}
 try { db.exec("ALTER TABLE calendars ADD COLUMN notifySms INTEGER DEFAULT 0"); } catch {}
