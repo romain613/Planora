@@ -160,6 +160,10 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const [googleConnected, setGoogleConnected] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [googleEmail, setGoogleEmail] = useState(null);
+  // V3.x.7 — Outlook Calendar connection state (Phase 3 Outlook UI)
+  const [outlookConnected, setOutlookConnected] = useState(false);
+  const [outlookLoading, setOutlookLoading] = useState(false);
+  const [outlookEmail, setOutlookEmail] = useState(null);
   // Online/offline connection indicator
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
   useEffect(() => {
@@ -291,6 +295,13 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       .catch(() => {});
   }, [collab.id]);
 
+  // V3.x.7 — Check Outlook Calendar connection status
+  useEffect(() => {
+    api('/api/outlook/status?collaboratorId=' + collab.id)
+      .then(d => { if (d && !d.error) { setOutlookConnected(!!d.connected); setOutlookEmail(d.email || null); } })
+      .catch(() => {});
+  }, [collab.id]);
+
   // Detect ?google=success after OAuth redirect
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -300,6 +311,19 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       window.history.replaceState({}, '', window.location.pathname);
     } else if (params.get('google') === 'error') {
       showNotif("Erreur de connexion Google Agenda", "danger");
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  // V3.x.7 — Detect ?outlook=success/error after OAuth redirect
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('outlook') === 'success') {
+      setOutlookConnected(true);
+      showNotif("Outlook Agenda connecté avec succès !");
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (params.get('outlook') === 'error') {
+      showNotif("Erreur de connexion Outlook Agenda", "danger");
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
@@ -5643,6 +5667,73 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                     }} disabled={googleLoading}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ marginRight:6 }}><path d="M17.64 12.2c0-.63-.06-1.25-.16-1.84H12v3.49h3.16c-.14.73-.55 1.35-1.17 1.76v1.46h1.89c1.1-1.02 1.74-2.52 1.74-4.3l.02-.57z" fill="#fff"/><path d="M12 18c1.58 0 2.91-.52 3.88-1.42l-1.89-1.46c-.52.35-1.19.56-1.99.56-1.53 0-2.83-1.04-3.29-2.43H6.77v1.51C7.73 16.78 9.72 18 12 18z" fill="#fff" opacity=".8"/><path d="M8.71 13.25a3.56 3.56 0 010-2.5V9.24H6.77a5.99 5.99 0 000 5.52l1.94-1.51z" fill="#fff" opacity=".6"/><path d="M12 8.32c.86 0 1.64.3 2.25.88l1.69-1.69C14.9 6.5 13.58 6 12 6 9.72 6 7.73 7.22 6.77 9.24l1.94 1.51c.46-1.39 1.76-2.43 3.29-2.43z" fill="#fff" opacity=".9"/></svg>
                       Connecter Google Agenda
+                    </Btn>
+                  </div>
+                )}
+              </Card>
+
+              {/* V3.x.7 — Outlook Agenda */}
+              <Card style={{ gridColumn:"1/-1" }}>
+                <div style={{ display:"flex", alignItems:"center", gap:12, marginBottom:14 }}>
+                  <div style={{ width:40, height:40, borderRadius:12, background:"#0078D410", display:"flex", alignItems:"center", justifyContent:"center" }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+                      <rect x="3" y="5" width="13" height="14" rx="1.5" fill="#0078D4"/>
+                      <rect x="5.5" y="7.5" width="8" height="9" rx="0.5" fill="#fff"/>
+                      <circle cx="9.5" cy="12" r="2.5" fill="#0078D4"/>
+                      <path d="M16 8l5 -2v12l-5 -2V8z" fill="#0078D4" opacity="0.85"/>
+                    </svg>
+                  </div>
+                  <div style={{ flex:1 }}>
+                    <h3 style={{ fontSize:15, fontWeight:700, margin:0 }}>Outlook Agenda</h3>
+                    <p style={{ fontSize:12, color:T.text3, margin:0 }}>Connexion à Microsoft Outlook / Office 365</p>
+                  </div>
+                  {outlookConnected && <Badge color="#22C55E" style={{ marginLeft:"auto" }}>Connecté</Badge>}
+                </div>
+                {outlookConnected ? (
+                  <div style={{ display:"flex", alignItems:"center", gap:12 }}>
+                    <div style={{ flex:1, padding:"12px 16px", borderRadius:12, background:"#22C55E08", border:"1px solid #22C55E20", fontSize:13, color:"#22C55E" }}>
+                      {outlookEmail && <div style={{ fontWeight:600, marginBottom:4 }}>{outlookEmail}</div>}
+                      Connexion Outlook active. Synchronisation des événements à venir.
+                    </div>
+                    <div style={{ display:"flex", flexDirection:"column", gap:6 }}>
+                      <Btn small danger onClick={() => {
+                        setOutlookLoading(true);
+                        const tk = (() => { try { return JSON.parse(localStorage.getItem('calendar360-session')||'null')?.token||''; } catch { return ''; } })();
+                        fetch(`${API_BASE}/api/outlook/disconnect`, {
+                          method:"POST",
+                          headers:{ "Content-Type":"application/json", "Authorization":"Bearer "+tk },
+                          body:JSON.stringify({ collaboratorId: collab.id })
+                        })
+                          .then(r => r.json())
+                          .then(() => { setOutlookConnected(false); setOutlookEmail(null); showNotif("Outlook Agenda déconnecté"); })
+                          .catch(() => showNotif("Erreur", "danger"))
+                          .finally(() => setOutlookLoading(false));
+                      }} disabled={outlookLoading}>
+                        <I n="x" s={12}/> Déconnecter
+                      </Btn>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <p style={{ fontSize:13, color:T.text2, marginBottom:14, lineHeight:1.5 }}>
+                      Connectez votre compte Outlook (Microsoft 365 ou compte personnel) pour préparer la synchronisation de vos événements.
+                    </p>
+                    <Btn primary onClick={() => {
+                      setOutlookLoading(true);
+                      const tk = (() => { try { return JSON.parse(localStorage.getItem('calendar360-session')||'null')?.token||''; } catch { return ''; } })();
+                      fetch(`${API_BASE}/api/outlook/auth-url?collaboratorId=${collab.id}`, {
+                        headers:{ "Authorization":"Bearer "+tk }
+                      })
+                        .then(r => r.json())
+                        .then(d => { if (d && d.url) window.location.href = d.url; else showNotif("Erreur de connexion Outlook", "danger"); })
+                        .catch(() => showNotif("Erreur de connexion Outlook", "danger"))
+                        .finally(() => setOutlookLoading(false));
+                    }} disabled={outlookLoading}>
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ marginRight:6 }}>
+                        <rect x="3" y="5" width="13" height="14" rx="1.5" fill="#fff"/>
+                        <rect x="16" y="8" width="5" height="8" fill="#fff" opacity="0.85"/>
+                      </svg>
+                      Connecter Outlook
                     </Btn>
                   </div>
                 )}
