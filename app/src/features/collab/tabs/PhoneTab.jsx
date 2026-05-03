@@ -1629,7 +1629,18 @@ if (n === ph) matched.set(c.id, c);
 <div>
   {/* ── Coordonnées complètes — version épurée V3 ── */}
   {(()=>{
-    const _upd=(field,val)=>{contactsLocalEditRef.current=Date.now();setPipelineRightContact(p=>p?{...p,[field]:val}:p);setContacts(p=>p.map(c=>c.id===ct.id?{...c,[field]:val}:c));if((typeof selectedCrmContact!=='undefined'?selectedCrmContact:null)?.id===ct.id)(typeof setSelectedCrmContact==='function'?setSelectedCrmContact:function(){})(p=>p?{...p,[field]:val}:p);clearTimeout(_T.pipeRightSaveTimer);_T.pipeRightSaveTimer=setTimeout(()=>{api(`/api/data/contacts/${ct.id}`,{method:'PUT',body:{[field]:val,companyId:company?.id}}).then(()=>{_T.pipeRightSaved=true;setTimeout(()=>{_T.pipeRightSaved=false;},2000);});},600);};
+    // V1.14.0 — Optimistic UI immediate sur pipelineRightContact (champ saisi),
+    // puis save centralise via handleCollabUpdateContact (5 setters + 409 + retry + crmContactUpdated event).
+    // Debounce 600ms conserve pour limiter les PUT pendant la frappe.
+    const _upd=(field,val)=>{
+      setPipelineRightContact(p=>p?{...p,[field]:val}:p);
+      clearTimeout(_T.pipeRightSaveTimer);
+      _T.pipeRightSaveTimer=setTimeout(()=>{
+        handleCollabUpdateContact(ct.id, { [field]: val, _source: 'pipeline_right' });
+        _T.pipeRightSaved=true;
+        setTimeout(()=>{_T.pipeRightSaved=false;},2000);
+      },600);
+    };
     const _fmtPhone=(v)=>{if(!v)return v;let n=v.replace(/\s/g,'');if(/^0[1-9]\d{8}$/.test(n))return'+33'+n.slice(1);if(/^[1-9]\d{8}$/.test(n))return'+33'+n;return v;};
     const _fld=(icon,field,placeholder,opts={})=><div style={{display:'flex',alignItems:'center',gap:4,padding:'3px 6px',borderRadius:6,border:`1px solid ${T.border}40`,background:T.card,...(opts.full?{gridColumn:'1 / -1'}:{})}}>
       <I n={icon} s={10} style={{color:T.text3,flexShrink:0}}/>
@@ -1728,7 +1739,17 @@ if (n === ph) matched.set(c.id, c);
         const defs=(contactFieldDefs||[]).filter(d=>d.scope==='company'||d.createdBy===collab?.id);
         const cfRaw=Array.isArray(ct.custom_fields)?ct.custom_fields:(()=>{try{return JSON.parse(ct.custom_fields_json||'[]');}catch{return[];}})();
         const cfMap={};cfRaw.forEach(f=>{cfMap[f.key]=f.value;});
-        const saveCF=(fieldKey,value)=>{contactsLocalEditRef.current=Date.now();const updated=[...cfRaw.filter(f=>f.key!==fieldKey),{key:fieldKey,value}];const json=JSON.stringify(updated);setPipelineRightContact(p=>p?{...p,custom_fields:updated,custom_fields_json:json}:p);setContacts(p=>p.map(c=>c.id===ct.id?{...c,custom_fields:updated,custom_fields_json:json}:c));if((typeof selectedCrmContact!=='undefined'?selectedCrmContact:null)?.id===ct.id)(typeof setSelectedCrmContact==='function'?setSelectedCrmContact:function(){})(p=>p?{...p,custom_fields:updated,custom_fields_json:json}:p);clearTimeout(_T.pipeRightSaveTimer);_T.pipeRightSaveTimer=setTimeout(()=>api(`/api/data/contacts/${ct.id}`,{method:'PUT',body:{custom_fields_json:json,companyId:company?.id}}),800);};
+        // V1.14.0 — Optimistic UI immediate sur pipelineRightContact, puis save centralise
+        // via handleCollabUpdateContact (cf. _upd ci-dessus). Debounce 800ms specifique custom fields.
+        const saveCF=(fieldKey,value)=>{
+          const updated=[...cfRaw.filter(f=>f.key!==fieldKey),{key:fieldKey,value}];
+          const json=JSON.stringify(updated);
+          setPipelineRightContact(p=>p?{...p,custom_fields:updated,custom_fields_json:json}:p);
+          clearTimeout(_T.pipeRightSaveTimer);
+          _T.pipeRightSaveTimer=setTimeout(()=>{
+            handleCollabUpdateContact(ct.id, { custom_fields_json: json, _source: 'pipeline_right_cf' });
+          },800);
+        };
         return defs.length>0?<div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:3,marginTop:3}}>
           {defs.map(d=><div key={d.id} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 6px',borderRadius:6,border:`1px solid ${T.border}40`,background:T.card,position:'relative'}}>
             <span style={{fontSize:8,fontWeight:700,color:T.accent,flexShrink:0,textTransform:'uppercase'}}>{d.label}</span>

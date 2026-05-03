@@ -3145,6 +3145,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
             if ((typeof selectedCrmContact!=='undefined'?selectedCrmContact:null)?.id === id) (typeof setSelectedCrmContact==='function'?setSelectedCrmContact:function(){})(fresh);
             if ((typeof pipelineRightContact!=='undefined'?pipelineRightContact:null)?.id === id) (typeof setPipelineRightContact==='function'?setPipelineRightContact:function(){})(fresh);
             showNotif('Contact mis à jour par une autre source — données rechargées', 'warning');
+            // V1.14.0 — broadcast event pour modales/composants qui auraient le contact ouvert
+            try { window.dispatchEvent(new CustomEvent('crmContactUpdated', { detail: { id, contact: fresh, source: 'conflict_resolved', fields: Object.keys(updates) } })); } catch {}
           } else if (!r || r.error) {
             console.error('[CONTACT SAVE] Erreur serveur:', r?.error, '→ retry', attempt);
             if (attempt < 3) setTimeout(() => saveToBackend(attempt + 1), 1000 * attempt);
@@ -3157,6 +3159,10 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
               if ((typeof selectedCrmContact!=='undefined'?selectedCrmContact:null)?.id === id) (typeof setSelectedCrmContact==='function'?setSelectedCrmContact:function(){})(r.contact);
               if ((typeof pipelineRightContact!=='undefined'?pipelineRightContact:null)?.id === id) (typeof setPipelineRightContact==='function'?setPipelineRightContact:function(){})(r.contact);
             }
+            // V1.14.0 — broadcast crmContactUpdated event : permet aux modales/composants
+            // ayant le contact ouvert (HardDelete, Merge, FicheModal V1.14.1+) de se resync.
+            // detail.contact = contact frais si backend l'a retourne, sinon null (consumer fetch).
+            try { window.dispatchEvent(new CustomEvent('crmContactUpdated', { detail: { id, contact: r.contact || null, source: updates._source || 'manual', fields: Object.keys(updates).filter(k => !k.startsWith('_')) } })); } catch {}
             // V3: délai de protection 5s post-succès
             setTimeout(() => { if (Date.now() - contactsLocalEditRef.current > 4000) contactsLocalEditRef.current = 0; }, 5000);
             // V1.7.5 — cascade soft-cancel bookings futurs uniquement après succès réel du passage en perdu
