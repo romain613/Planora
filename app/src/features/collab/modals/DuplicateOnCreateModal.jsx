@@ -17,10 +17,10 @@
 //   onClose      : callback fermeture (parent re-ouvre NewContactModal V1.13.0-modal-stacking-fix)
 //   onForceCreate: (reason, justification) => void  — admin/supra only
 
-import React, { useState } from "react";
+import React, { useState, useContext } from "react";
 import { T } from "../../../theme";
 import { I, Btn, Modal } from "../../../shared/ui";
-import { useCollabContext } from "../context/CollabContext";
+import { CollabContext } from "../context/CollabContext";
 import DuplicateMatchCard from "./DuplicateMatchCard";
 
 const FORCE_REASONS = [
@@ -30,8 +30,11 @@ const FORCE_REASONS = [
   { v: 'other',              l: 'Autre' },
 ];
 
-const DuplicateOnCreateModal = ({ data, onClose, onForceCreate, onEnrich, onShare, onArchive, onHardDelete, onCreateMyOwn, onDelete }) => {
-  const { collab, contacts } = useCollabContext();
+const DuplicateOnCreateModal = ({ data, onClose, onForceCreate, onEnrich, onShare, onArchive, onHardDelete, onCreateMyOwn, onDelete, collab: collabProp, contacts: contactsProp }) => {
+  // V2.1.b — props prioritaires (AdminDash hors CollabProvider). Fallback context (CollabPortal usage).
+  const ctx = useContext(CollabContext) || {};
+  const collab = collabProp || ctx.collab;
+  const contacts = contactsProp || ctx.contacts || [];
   const [forceCreateMode, setForceCreateMode] = useState(false);
   const [forceReason, setForceReason] = useState('');
   const [forceJustification, setForceJustification] = useState('');

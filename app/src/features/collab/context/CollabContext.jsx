@@ -43,6 +43,9 @@ import { createContext, useContext } from "react";
 
 const CollabContext = createContext(null);
 
+// V2.1.b — export raw pour useContext optionnel (AdminDash hors CollabProvider)
+export { CollabContext };
+
 export const CollabProvider = CollabContext.Provider;
 
 export const useCollabContext = () => {

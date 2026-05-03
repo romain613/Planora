@@ -41,6 +41,10 @@ import { NewCollabForm, NewCompanyForm, PlacesAutocomplete, TemplateEditorPopup,
 // V1.8.16 — Phase 3 : assignation template par collaborateur via AssignTemplateModal
 import { TemplatesSection, AssignTemplateModal } from "./templates";
 
+// V2.1.b — Anti-doublon admin (helper unifié + modale réutilisée)
+import { precheckCreate } from "../../shared/utils/duplicateCheck";
+import DuplicateOnCreateModal from "../collab/modals/DuplicateOnCreateModal";
+
 const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, setBookings, avails, setAvails, collabs, setCollabs, cals, setCals, darkMode, setDarkMode, blackouts, setBlackouts, vacations, setVacations, isSupraAdmin, allCompanies, setAllCompanies, allUsers, setAllUsers, allCalendars, setAllCalendars, allBookings, setAllBookings, allContacts, setAllContacts, activityLog, setActivityLog, smsCredits, setSmsCredits, smsHistory, setSmsHistory, voipCredits, setVoipCredits, voipCallLogs, setVoipCallLogs, voipConfigured, setVoipConfigured, appPhonePlans, setAppPhonePlans, appMyPhoneNumbers, setAppMyPhoneNumbers, appAvailableNumbers, setAppAvailableNumbers, contacts, setContacts, onSwitchCompany, pipelineStages, setPipelineStages, contactFieldDefs, setContactFieldDefs }) => {
   const [tab, _setTab] = useState(() => { try { return localStorage.getItem("c360-tab") || "home"; } catch { return "home"; } });
   const [tabKey, setTabKey] = useState(0); // for re-triggering animation on tab change
@@ -643,6 +647,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
   const [crmAdvFilters, setCrmAdvFilters] = useState({scoreRange:'',hasEmail:null,hasPhone:null});
   const [selectedContact, setSelectedContact] = useState(null);
   const [showNewContact, setShowNewContact] = useState(false);
+  const [duplicateOnCreateData, setDuplicateOnCreateData] = useState(null); // V2.1.b — modale doublon admin
   const [ficheTab, setFicheTab] = useState("history");
   const [crmView, setCrmView] = useState("table"); // table | pipeline
   const [crmSelectedIds, setCrmSelectedIds] = useState([]); // multi-select
@@ -1148,20 +1153,8 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
     return { funnel, avgScores, won, lost, active, winRate, total: contacts.length };
   }, [contacts, getLeadScore]);
 
-  // Duplicate detection — check email/phone before create
-  const findDuplicateContact = useCallback((email, phone) => {
-    const dupes = [];
-    if (email) {
-      const emailLower = email.toLowerCase().trim();
-      contacts.forEach(c => { if (c.email && c.email.toLowerCase().trim() === emailLower) dupes.push(c); });
-    }
-    if (phone) {
-      const phoneTrim = phone.replace(/[\s\-\(\)]/g, "");
-      contacts.forEach(c => { if (c.phone && c.phone.replace(/[\s\-\(\)]/g, "") === phoneTrim) dupes.push(c); });
-    }
-    // Deduplicate
-    return [...new Map(dupes.map(d => [d.id, d])).values()];
-  }, [contacts]);
+  // V2.1.b — findDuplicateContact local supprimée (remplacée par helper precheckCreate
+  // backend /api/data/contacts/check-duplicate-single, source unique alignée CollabPortal V2.1).
 
   const allContactTags = useMemo(() => {
     const tags = new Set();
@@ -1258,19 +1251,74 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
   }, [bookings]);
 
   // CRM CRUD
-  const handleCreateContact = (c) => {
-    // Duplicate detection
-    const dupes = findDuplicateContact(c.email, c.phone);
-    if (dupes.length > 0) {
-      const dupeNames = dupes.map(d=>d.name).join(", ");
-      const go = window.confirm(`⚠️ Doublon possible !\n\nContact(s) similaire(s) trouvé(s) : ${dupeNames}\n\nVoulez-vous quand même créer ce contact ?`);
-      if (!go) return;
-    }
-    const nc = { ...c, id:"ct"+Date.now(), companyId:company.id, totalBookings:0, lastVisit:"", tags:c.tags||[], notes:c.notes||"", rating:null, docs:[], createdAt:new Date().toISOString() };
-    setContacts(p => [...p, nc]);
+  // V2.1.b — submit admin avec flags _forceCreate (équivalent submitNewContact V1.13.0 CollabPortal).
+  // Pattern : optimistic add + POST + reconcile temp id → real id (ou rollback).
+  const submitNewContactAdmin = (nc, { forceCreate = false, reason = '', justification = '' } = {}) => {
+    const ncWithFlags = {
+      ...nc,
+      _forceCreate: !!forceCreate,
+      _forceCreateReason: forceCreate && reason ? reason : undefined,
+      _forceCreateJustification: forceCreate && justification ? justification : undefined,
+      _pending: true,
+    };
+    setContacts(p => [...p, ncWithFlags]);
     setShowNewContact(false);
-    notif("Contact créé");
-    api("/api/data/contacts", { method:"POST", body:nc });
+    notif(forceCreate ? 'Contact créé (doublon ignoré)' : 'Contact créé');
+    api('/api/data/contacts', { method:'POST', body: ncWithFlags }).then(r => {
+      if (!r || r.error || r._forbidden) {
+        setContacts(p => p.filter(c => c.id !== ncWithFlags.id));
+        notif('Erreur: ' + (r?.error || 'création contact échouée'), 'danger');
+        return;
+      }
+      if (r._duplicate) {
+        setContacts(p => p.filter(c => c.id !== ncWithFlags.id));
+        notif('Ce contact existait déjà — fusionné');
+        return;
+      }
+      if (!r.id) {
+        setContacts(p => p.filter(c => c.id !== ncWithFlags.id));
+        notif('Erreur: id serveur manquant', 'danger');
+        return;
+      }
+      setContacts(p => p.map(c => c.id === ncWithFlags.id ? { ...c, id: r.id, _pending: false, _forceCreate: undefined } : c));
+      if (typeof setAllContacts === 'function') {
+        try { setAllContacts(p => Array.isArray(p) ? p.map(c => c.id === ncWithFlags.id ? { ...c, id: r.id } : c) : p); } catch {}
+      }
+    });
+  };
+
+  // V2.1.b — Compléter cette fiche (enrich-only, append-only) — équivalent CollabPortal:3455
+  const handleDuplicateEnrichAdmin = async (matchId, enrichPayload) => {
+    const body = { ...enrichPayload, companyId: company?.id };
+    const r = await api(`/api/data/contacts/${matchId}`, { method:'PUT', body });
+    if (r?.success || r?.id || (!r?.error && !r?._forbidden)) {
+      setContacts(p => p.map(c => c.id === matchId ? { ...c, ...enrichPayload } : c));
+      if (typeof setAllContacts === 'function') {
+        try { setAllContacts(p => Array.isArray(p) ? p.map(c => c.id === matchId ? { ...c, ...enrichPayload } : c) : p); } catch {}
+      }
+      notif('Fiche enrichie avec succès');
+    } else {
+      notif('Erreur enrichissement : ' + (r?.error || 'inconnu'), 'danger');
+    }
+    setDuplicateOnCreateData(null);
+  };
+
+  // V2.1.b — handleCreateContact : pré-check backend (remplace findDuplicateContact + window.confirm).
+  // Si dup → DuplicateOnCreateModal s'ouvre, _formSnapshot conserve nc pour onForceCreate.
+  const handleCreateContact = async (c) => {
+    const nc = {
+      ...c, id:"ct"+Date.now(), companyId:company.id,
+      totalBookings:0, lastVisit:"", tags:c.tags||[], notes:c.notes||"", rating:null, docs:[],
+      pipeline_stage: c.pipeline_stage || 'nouveau',
+      createdAt:new Date().toISOString()
+    };
+    const isDup = await precheckCreate(nc, {
+      api,
+      onMatch: (dupData) => setDuplicateOnCreateData(dupData),
+      onClose: () => setShowNewContact(false),
+    });
+    if (isDup) return;
+    submitNewContactAdmin(nc, { forceCreate: false });
   };
   const handleUpdateContact = (id, updates) => {
     contactsLocalEditRef.current = Date.now();
@@ -11817,6 +11865,25 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
             </div>
           </div>
         </div>
+      )}
+
+      {/* V2.1.b — Modale doublon admin (props collab/contacts injectés, AdminDash hors CollabProvider) */}
+      {duplicateOnCreateData && (
+        <DuplicateOnCreateModal
+          data={duplicateOnCreateData}
+          collab={{ role: 'admin' }}
+          contacts={contacts}
+          onClose={() => {
+            setDuplicateOnCreateData(null);
+            setShowNewContact(true);
+          }}
+          onForceCreate={(reason, justification) => {
+            const snapshot = duplicateOnCreateData?.pendingNewContact?._formSnapshot;
+            setDuplicateOnCreateData(null);
+            if (snapshot) submitNewContactAdmin(snapshot, { forceCreate: true, reason, justification });
+          }}
+          onEnrich={handleDuplicateEnrichAdmin}
+        />
       )}
     </div>
   );
