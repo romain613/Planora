@@ -11,6 +11,7 @@ import { sendWhatsapp } from '../services/brevoWhatsapp.js';
 import { reminderEmail, reminderSms, reminderWhatsapp } from '../templates/reminder.js';
 import { sendChatNotification, formatDailySummary } from '../services/googleChat.js';
 import { syncEventsFromGoogle } from '../services/googleCalendar.js';
+import { syncEventsFromOutlook } from '../services/outlookCalendar.js'; // V3.x.8
 
 // Run every 5 minutes
 cron.schedule('*/5 * * * *', () => {
@@ -200,6 +201,32 @@ cron.schedule('*/5 * * * *', async () => {
   }
 });
 
+// V3.x.8 — Sync Outlook Calendar events every 10 minutes (mirror Google, espacement délibéré 10 vs 5)
+cron.schedule('*/10 * * * *', async () => {
+  try {
+    const collabs = db.prepare("SELECT id FROM collaborators WHERE outlook_tokens_json IS NOT NULL AND outlook_tokens_json != ''").all();
+    if (collabs.length === 0) return;
+    let total = 0;
+    let errors = 0;
+    for (const c of collabs) {
+      try {
+        const result = await syncEventsFromOutlook(c.id);
+        total += result.synced || 0;
+        if (result.errors && result.errors.length) errors++;
+      } catch (err) {
+        errors++;
+        console.error(`\x1b[31m[CRON OUTLOOK SYNC]\x1b[0m ${c.id}: ${err.message}`);
+      }
+    }
+    if (total > 0 || errors > 0) {
+      console.log(`\x1b[34m[CRON OUTLOOK SYNC]\x1b[0m ${total} events synced for ${collabs.length} collaborator(s)${errors ? ` (${errors} errors)` : ''}`);
+    }
+  } catch (err) {
+    console.error('[CRON OUTLOOK SYNC ERROR]', err);
+  }
+});
+
 console.log('\x1b[35m[CRON]\x1b[0m Reminder scheduler started (every 5 min)');
 console.log('\x1b[33m[CRON]\x1b[0m Google Chat daily summary scheduled (8:00 AM)');
+console.log('\x1b[34m[CRON]\x1b[0m Outlook Calendar sync scheduled (every 10 min)');
 console.log('\x1b[32m[CRON]\x1b[0m Google Calendar sync scheduled (every 5 min)');
