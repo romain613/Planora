@@ -746,6 +746,28 @@ router.get('/slots/:collaboratorId', requireAuth, enforceCompany, (req, res) => 
       }
     } catch {} // google_events table might not exist
 
+    // V3.x.5 Phase 2B — Outlook conflicts (mirror Google block above)
+    const outlookConflicts = [];
+    try {
+      const oEvents = db.prepare(
+        `SELECT startTime, endTime, allDay, showAs FROM outlook_events
+         WHERE collaboratorId = ? AND startTime < ? AND endTime > ?`
+      ).all(collaboratorId, `${date}T23:59:59`, `${date}T00:00:00`);
+
+      for (const oe of oEvents) {
+        if (oe.showAs === 'free') continue; // défensif (déjà filtré au sync)
+        if (oe.allDay) {
+          outlookConflicts.push({ start: 0, end: 1440 });
+        } else {
+          const oeStart = DateTime.fromISO(oe.startTime, { zone: collabTz });
+          const oeEnd = DateTime.fromISO(oe.endTime, { zone: collabTz });
+          const startMin = oeStart.toFormat('yyyy-MM-dd') === date ? oeStart.hour * 60 + oeStart.minute : 0;
+          const endMin = oeEnd.toFormat('yyyy-MM-dd') === date ? oeEnd.hour * 60 + oeEnd.minute : 1440;
+          if (endMin > startMin) outlookConflicts.push({ start: startMin, end: endMin });
+        }
+      }
+    } catch {} // outlook_events table might not exist
+
     // Generate slots
     const slots = [];
     for (const slot of daySchedule.slots) {
@@ -770,8 +792,9 @@ router.get('/slots/:collaboratorId', requireAuth, enforceCompany, (req, res) => 
         });
 
         const hasGoogleConflict = googleConflicts.some(gc => slotStart < gc.end && slotEnd > gc.start);
+        const hasOutlookConflict = outlookConflicts.some(oc => slotStart < oc.end && slotEnd > oc.start);
 
-        if (!hasBookingConflict && !hasGoogleConflict) {
+        if (!hasBookingConflict && !hasGoogleConflict && !hasOutlookConflict) {
           slots.push({
             time: timeStr,
             endTime: minutesToTime(m + duration),

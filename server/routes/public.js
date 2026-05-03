@@ -169,6 +169,28 @@ function generateSlots(cal, req, res) {
       }
     } catch (e) { /* google_events table may not exist yet */ }
 
+    // V3.x.5 Phase 2B — Outlook conflicts (mirror Google block above)
+    const outlookConflicts = [];
+    try {
+      const oEvents = db.prepare(
+        `SELECT startTime, endTime, allDay, showAs FROM outlook_events
+         WHERE collaboratorId = ? AND startTime < ? AND endTime > ?`
+      ).all(collabId, `${date}T23:59:59`, `${date}T00:00:00`);
+
+      for (const oe of oEvents) {
+        if (oe.showAs === 'free') continue; // défensif (déjà filtré au sync)
+        if (oe.allDay) {
+          outlookConflicts.push({ start: 0, end: 1440 });
+        } else {
+          const oeStart = DateTime.fromISO(oe.startTime, { zone: collabTz });
+          const oeEnd = DateTime.fromISO(oe.endTime, { zone: collabTz });
+          const startMin = oeStart.toFormat('yyyy-MM-dd') === date ? oeStart.hour * 60 + oeStart.minute : 0;
+          const endMin = oeEnd.toFormat('yyyy-MM-dd') === date ? oeEnd.hour * 60 + oeEnd.minute : 1440;
+          if (endMin > startMin) outlookConflicts.push({ start: startMin, end: endMin });
+        }
+      }
+    } catch (e) { /* outlook_events table may not exist yet */ }
+
     for (const slot of daySchedule.slots) {
       const startMinutes = timeToMinutes(slot.start);
       const endMinutes = timeToMinutes(slot.end);
@@ -181,7 +203,7 @@ function generateSlots(cal, req, res) {
         const slotLuxon = DateTime.fromISO(`${date}T${timeStr}:00`, { zone: collabTz });
         if (slotLuxon.toMillis() - nowMs < minNoticeMs) continue;
 
-        // Check buffer conflicts with existing bookings + Google events
+        // Check buffer conflicts with existing bookings + Google events + Outlook events
         const bufferBefore = cal.bufferBefore || 0;
         const bufferAfter = cal.bufferAfter || 0;
         const slotStart = m - bufferBefore;
@@ -194,8 +216,9 @@ function generateSlots(cal, req, res) {
         });
 
         const hasGoogleConflict = googleConflicts.some(gc => slotStart < gc.end && slotEnd > gc.start);
+        const hasOutlookConflict = outlookConflicts.some(oc => slotStart < oc.end && slotEnd > oc.start);
 
-        const hasConflict = hasBookingConflict || hasGoogleConflict;
+        const hasConflict = hasBookingConflict || hasGoogleConflict || hasOutlookConflict;
 
         if (!hasConflict) {
           // Check max per day
@@ -306,6 +329,27 @@ router.post('/book', async (req, res) => {
           return res.status(409).json({ error: "Ce créneau n'est plus disponible (conflit Google Agenda)" });
         }
       } catch (e) { /* google_events table may not exist yet */ }
+    }
+
+    // V3.x.5 Phase 2B — Outlook secondary check (mirror Google secondary check above)
+    if (collaboratorId) {
+      try {
+        const collabTz2 = getCollaboratorTimezone(collaboratorId, cal.companyId);
+        const bookingDur2 = duration || cal.duration;
+        const slotStartDT2 = DateTime.fromISO(`${date}T${time}:00`, { zone: collabTz2 });
+        const slotEndDT2 = slotStartDT2.plus({ minutes: bookingDur2 });
+
+        const outlookConflict = db.prepare(
+          `SELECT id FROM outlook_events WHERE collaboratorId = ?
+           AND showAs != 'free'
+           AND ((allDay = 0 AND startTime < ? AND endTime > ?)
+             OR (allDay = 1 AND startTime <= ? AND endTime > ?))`
+        ).get(collaboratorId, slotEndDT2.toISO(), slotStartDT2.toISO(), `${date}T23:59:59`, `${date}T00:00:00`);
+
+        if (outlookConflict) {
+          return res.status(409).json({ error: "Ce créneau n'est plus disponible (conflit Outlook Agenda)" });
+        }
+      } catch (e) { /* outlook_events table may not exist yet */ }
     }
 
     const id = 'b' + Date.now();

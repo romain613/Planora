@@ -2,6 +2,9 @@
 // Source de vérité : toute route qui crée/modifie un booking doit l'appeler avant INSERT/UPDATE.
 // Règle R1 + R5 — défense profonde, un seul chemin de vérification.
 
+import { DateTime } from 'luxon';
+import { getCollaboratorTimezone } from '../../db/database.js';
+
 function toMinutes(hhmm) {
   if (!hhmm) return null;
   const [h, m] = String(hhmm).split(':').map(Number);
@@ -37,6 +40,16 @@ function checkBookingConflict(db, {
     return { conflict: false };
   }
 
+  // V3.x.5.1 — Resolve collaborator timezone for correct UTC ms comparison vs google_events / outlook_events.
+  // BUG fix : `new Date(date + 'T00:00:00')` was interpreted in process TZ (VPS=UTC),
+  // misaligning the slot ms with Google/Outlook events stored as ISO with offset.
+  // Affects VPS prod (UTC) but masked in dev Mac local (Paris). Shared by both Google + Outlook blocks below.
+  const collabRow = db.prepare('SELECT companyId FROM collaborators WHERE id = ?').get(collaboratorId);
+  const collabTz = getCollaboratorTimezone(collaboratorId, collabRow?.companyId);
+  const dayDt = DateTime.fromISO(`${date}T00:00:00`, { zone: collabTz });
+  const newStartMsTz = dayDt.plus({ minutes: newStart }).toMillis();
+  const newEndMsTz = dayDt.plus({ minutes: newEnd }).toMillis();
+
   const rows = db.prepare(
     "SELECT id, time, duration, visitorName FROM bookings WHERE collaboratorId = ? AND date = ? AND status = 'confirmed'"
   ).all(collaboratorId, date);
@@ -61,16 +74,12 @@ function checkBookingConflict(db, {
       "SELECT id, summary, startTime, endTime, allDay FROM google_events WHERE collaboratorId = ? AND startTime IS NOT NULL"
     ).all(collaboratorId);
 
-    const dayBase = new Date(date + 'T00:00:00');
-    const newStartMs = dayBase.getTime() + newStart * 60000;
-    const newEndMs = dayBase.getTime() + newEnd * 60000;
-
     for (const ge of gcalRows) {
       if (ge.allDay) continue;
       const gsMs = new Date(ge.startTime).getTime();
       const geMs = ge.endTime ? new Date(ge.endTime).getTime() : (gsMs + 30 * 60000);
       if (Number.isNaN(gsMs) || Number.isNaN(geMs) || geMs <= gsMs) continue;
-      if (newStartMs < geMs && newEndMs > gsMs) {
+      if (newStartMsTz < geMs && newEndMsTz > gsMs) {
         return {
           conflict: true,
           existingBooking: { id: ge.id, time: '(Google)', visitorName: ge.summary || 'Évent Google' },
@@ -80,6 +89,32 @@ function checkBookingConflict(db, {
     }
   } catch (e) {
     console.warn('[CONFLICT CHECK] google_events scan skip:', e?.message || e);
+  }
+
+  // V3.x.5 Phase 2B — Étendre la défense aux events Outlook synchronisés (V3.x.4 sync 60j).
+  // outlook_events est déjà pré-filtré au sync (skip isCancelled + showAs=free), mais on
+  // double-check showAs!='free' par défense en profondeur. All-day BLOQUE (Q3=oui) — donc
+  // pas de `continue` sur allDay (asymétrie volontaire avec Google qui skip allDay).
+  try {
+    const olRows = db.prepare(
+      "SELECT id, summary, startTime, endTime, allDay, showAs FROM outlook_events WHERE collaboratorId = ? AND startTime IS NOT NULL"
+    ).all(collaboratorId);
+
+    for (const oe of olRows) {
+      if (oe.showAs === 'free') continue; // défensif (déjà filtré au sync)
+      const osMs = new Date(oe.startTime).getTime();
+      const oeMs = oe.endTime ? new Date(oe.endTime).getTime() : (osMs + 30 * 60000);
+      if (Number.isNaN(osMs) || Number.isNaN(oeMs) || oeMs <= osMs) continue;
+      if (newStartMsTz < oeMs && newEndMsTz > osMs) {
+        return {
+          conflict: true,
+          existingBooking: { id: oe.id, time: '(Outlook)', visitorName: oe.summary || 'Évent Outlook' },
+          source: 'outlook',
+        };
+      }
+    }
+  } catch (e) {
+    console.warn('[CONFLICT CHECK] outlook_events scan skip:', e?.message || e);
   }
 
   return { conflict: false };
