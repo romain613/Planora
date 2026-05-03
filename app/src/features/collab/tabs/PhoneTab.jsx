@@ -19,6 +19,8 @@ import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";
 import { FicheDocsPanelScreen } from "../screens"; // hotfix 2026-04-23 — Phase 14b missed import propagation
 import { isContactInSuiviForCollab, getContactSuiviRole, getReceiverIdForSentTransfer, getActiveSentTransferBooking } from "../../../shared/utils/suivi";
+// V1.14.1.x — modale hard delete pour contacts archivés trouvés via fallback Hub SMS
+import HardDeleteContactModal from "../modals/HardDeleteContactModal";
 
 const PhoneTab = () => {
   const ctx = useCollabContext();
@@ -139,6 +141,55 @@ const PhoneTab = () => {
 
   // V1.8.27 — Recording = setting company-wide (admin only). Toggles grisés pour members.
   const _isAdminPhone = collab?.role === 'admin' || collab?.role === 'supra' || isAdminView;
+
+  // V1.14.1.x PRIORITE 1 — Fallback fetch contacts archivés (Hub SMS conversations).
+  // Backend /api/init filtre archivés (V1.12.5.a) donc contacts state ne les contient pas.
+  // Si selectedConv.contactId pointe sur un contact archivé, lookup miss -> on fetch direct
+  // /api/data/contacts/:id (qui ne filtre PAS archivés). Map<contactId, contact archivé>.
+  const [hubArchivedFallback, setHubArchivedFallback] = useState({});
+  const [hubHardDeleteTarget, setHubHardDeleteTarget] = useState(null);
+  useEffect(() => {
+    if (!selConvId) return;
+    const allConvs = (typeof appConversations!=='undefined'?appConversations:null) || [];
+    const conv = allConvs.find(c => c.id === selConvId);
+    if (!conv?.contactId) return;
+    if ((contacts||[]).some(c => c.id === conv.contactId)) return;
+    if (hubArchivedFallback[conv.contactId]) return;
+    let cancelled = false;
+    api('/api/data/contacts/' + conv.contactId).then(c => {
+      if (!cancelled && c?.id) setHubArchivedFallback(prev => ({ ...prev, [c.id]: c }));
+    }).catch(() => {});
+    return () => { cancelled = true; };
+  }, [selConvId, contacts, appConversations]);
+
+  // V1.14.1.x — Restaurer un contact archivé depuis Hub SMS.
+  // Permission Q4 : owner OU admin/supra (cohérence V1.13.2.a Q2).
+  const _hubCanRestore = (ct) => {
+    if (!ct?.id) return false;
+    const isAdmin = collab?.role === 'admin' || collab?.role === 'supra';
+    return isAdmin || ct.assignedTo === collab?.id;
+  };
+  const _hubCanHardDelete = !!(collab?.role === 'admin' || collab?.role === 'supra' || collab?.can_hard_delete_contacts);
+  const handleHubArchivedRestore = async (ct) => {
+    if (!ct?.id) return;
+    if (!window.confirm('Restaurer "' + (ct.name || 'ce contact') + '" ?\n\nLe contact redevient visible dans le CRM/Pipeline.')) return;
+    try {
+      const r = await api('/api/data/contacts/' + ct.id + '/restore', { method: 'POST' });
+      if (r?.success || r?.action === 'restored') {
+        const restored = { ...ct, archivedAt: '', archivedBy: '', archivedReason: '' };
+        setContacts(p => {
+          const exists = (p||[]).some(c => c.id === ct.id);
+          return exists ? (p||[]).map(c => c.id === ct.id ? restored : c) : [...(p||[]), restored];
+        });
+        setHubArchivedFallback(prev => { const next = { ...prev }; delete next[ct.id]; return next; });
+        showNotif('Contact restauré', 'success');
+      } else {
+        showNotif('Erreur restauration : ' + (r?.error || 'inconnu'), 'danger');
+      }
+    } catch (err) {
+      showNotif('Erreur réseau : ' + (err?.message || ''), 'danger');
+    }
+  };
 
   return (
     <>
@@ -958,6 +1009,11 @@ if (d?.success) {
     if (!selectedContact && selectedConv?.clientPhone) {
       selectedContact = matchContactByPhone(contacts, selectedConv.clientPhone, { collabId: collab.id, companyId: company.id, isAdmin: _isAdmin });
     }
+    // V1.14.1.x PRIORITE 1 — fallback contact archivé (lookup miss state mais existe en DB).
+    if (!selectedContact && selectedConv?.contactId && hubArchivedFallback[selectedConv.contactId]) {
+      selectedContact = hubArchivedFallback[selectedConv.contactId];
+    }
+    const isArchivedContact = !!(selectedContact?.archivedAt && selectedContact.archivedAt !== '');
     const isUnknownContact = !selectedContact;
     const displayName = selectedContact?.name || fmtPhone(selectedConv?.clientPhone) || 'Numéro inconnu';
     const displayInitials = selectedContact?.name
@@ -974,17 +1030,21 @@ if (d?.success) {
 <I n="arrow-left" s={15} style={{color:T.text2}}/>
 </div>
 
-{/* Contact avatar — V1.10.2 : "?" rouge si inconnu */}
-<div style={{width:40,height:40,borderRadius:20,background:isUnknownContact?'#EF444415':T.accentBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,border:isUnknownContact?'1.5px dashed #EF444450':'none'}}>
-<span style={{fontWeight:700,fontSize:15,color:isUnknownContact?'#EF4444':T.accent}}>{isUnknownContact?'?':displayInitials}</span>
+{/* Contact avatar — V1.10.2 + V1.14.1.x : 3 etats (actif / archive violet / inconnu rouge) */}
+<div style={{width:40,height:40,borderRadius:20,background:isArchivedContact?'#7C3AED15':isUnknownContact?'#EF444415':T.accentBg,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,border:isArchivedContact?'1.5px solid #7C3AED50':isUnknownContact?'1.5px dashed #EF444450':'none'}}>
+<span style={{fontWeight:700,fontSize:isArchivedContact?16:15,color:isArchivedContact?'#7C3AED':isUnknownContact?'#EF4444':T.accent}}>{isArchivedContact?'📦':isUnknownContact?'?':displayInitials}</span>
 </div>
 
-{/* Contact info — V1.10.2 : label "Contact non enregistré" si inconnu */}
+{/* Contact info — V1.10.2 + V1.14.1.x : label adapté aux 3 états */}
 <div style={{flex:1,minWidth:0,overflow:'hidden'}}>
-<div style={{fontWeight:700,fontSize:14,color:isUnknownContact?T.text2:T.text,fontStyle:isUnknownContact?'italic':'normal',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{displayName}</div>
+<div style={{fontWeight:700,fontSize:14,color:isArchivedContact?'#7C3AED':isUnknownContact?T.text2:T.text,fontStyle:isUnknownContact?'italic':'normal',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{displayName}</div>
 <div style={{fontSize:11,color:T.text3,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',minWidth:0}}>
   <span onClick={()=>{if(selectedConv?.clientPhone) setPhoneDialNumber(selectedConv.clientPhone);}} style={{color:T.accent,cursor:'pointer',borderRadius:3,padding:'0 2px',transition:'background .12s'}} onMouseEnter={e=>e.currentTarget.style.background=T.accentBg} onMouseLeave={e=>e.currentTarget.style.background='transparent'} title="Afficher sur le clavier">{fmtPhone(selectedConv?.clientPhone)}</span>
-  {isUnknownContact ? (
+  {isArchivedContact ? (
+    <span style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:10,fontWeight:700,color:'#7C3AED',background:'#7C3AED12',border:'1px solid #7C3AED40',borderRadius:6,padding:'1px 6px'}} title={selectedContact?.archivedReason||'Contact archivé'}>
+      <I n="archive" s={10} style={{color:'#7C3AED'}}/> 📦 Contact archivé
+    </span>
+  ) : isUnknownContact ? (
     <span style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:10,fontWeight:700,color:'#EF4444',background:'#EF444412',border:'1px solid #EF444430',borderRadius:6,padding:'1px 6px'}}>
       <I n="alert-circle" s={10} style={{color:'#EF4444'}}/> Contact non enregistré
     </span>
@@ -994,9 +1054,26 @@ if (d?.success) {
 </div>
 </div>
 
-{/* V1.10.2 — Action buttons : 5 actions rapides + CTA Créer fiche si inconnu */}
+{/* V1.10.2 + V1.14.1.x — Action buttons : 3 etats (archivé / inconnu / actif) */}
 <div style={{display:'flex',gap:6,flexShrink:0,alignItems:'center'}}>
-{isUnknownContact ? (
+{isArchivedContact ? (
+  <>
+    {/* V1.14.1.x PRIORITE 1 — Voir fiche + Restaurer + Supprimer définitivement (admin/can_hard_delete) */}
+    <div onClick={()=>{ if(selectedContact && setSelectedCrmContact) setSelectedCrmContact(selectedContact); }} style={{padding:'6px 10px',borderRadius:8,background:T.bg,border:`1px solid ${T.border}`,fontSize:11,fontWeight:600,color:T.text2,cursor:'pointer',display:'flex',alignItems:'center',gap:5}} title="Voir fiche">
+      <I n="eye" s={13} style={{color:T.text2}}/> Voir fiche
+    </div>
+    {_hubCanRestore(selectedContact) && (
+      <div onClick={()=>handleHubArchivedRestore(selectedContact)} style={{padding:'6px 10px',borderRadius:8,background:'#22C55E15',border:'1px solid #22C55E40',fontSize:11,fontWeight:700,color:'#22C55E',cursor:'pointer',display:'flex',alignItems:'center',gap:5}} title="Restaurer ce contact">
+        <I n="rotate-ccw" s={13} style={{color:'#22C55E'}}/> Restaurer
+      </div>
+    )}
+    {_hubCanHardDelete && (
+      <div onClick={()=>setHubHardDeleteTarget(selectedContact)} style={{padding:'6px 10px',borderRadius:8,background:'#DC2626',border:'1px solid #DC2626',fontSize:11,fontWeight:700,color:'#fff',cursor:'pointer',display:'flex',alignItems:'center',gap:5}} title="Supprimer définitivement (irréversible)">
+        <I n="trash-2" s={13} style={{color:'#fff'}}/> Supprimer déf.
+      </div>
+    )}
+  </>
+) : isUnknownContact ? (
   <div onClick={()=>{
     const norm = normalizePhoneNumber(selectedConv?.clientPhone||'');
     setPhoneQuickAddPhone(norm || selectedConv?.clientPhone || '');
@@ -9083,6 +9160,18 @@ setPostCallResultModal(null);
       CLOSING TAGS — End of Phone Tab
      ═══════════════════════════════════════════════════════════════════ */}
 </div>
+{/* V1.14.1.x PRIORITE 1 — modale hard delete pour contact archive (Hub SMS fallback) */}
+{hubHardDeleteTarget && (
+  <HardDeleteContactModal
+    contact={hubHardDeleteTarget}
+    onClose={() => setHubHardDeleteTarget(null)}
+    onSuccess={(id) => {
+      setHubArchivedFallback(prev => { const next = { ...prev }; delete next[id]; return next; });
+      // setContacts non concerne (le contact est archive donc pas dans contacts state)
+    }}
+    showNotif={showNotif}
+  />
+)}
     </>
   );
 };

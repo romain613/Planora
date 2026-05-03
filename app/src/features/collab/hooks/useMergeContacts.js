@@ -13,8 +13,9 @@ import { useState, useEffect, useCallback } from "react";
 
 export const canOpenMerge = (primary, collab) => {
   if (!primary?.id || !collab?.id) return false;
-  // Q7 : primary archivé refusé côté backend (409). On masque le bouton aussi côté UI.
-  if (primary.archivedAt && primary.archivedAt !== '') return false;
+  // V1.14.1.x PRIORITE 2 : autoriser bouton Fusionner aussi pour archivés.
+  // La modale gere une "Etape 0" Restaurer puis fusionner (backend Q7 PRIMARY_ARCHIVED preserve :
+  // le restore precede le merge, donc backend voit primary actif au moment du merge).
   // Q5/Q9 : admin/supra OU owner/shared sur le primary
   // (le backend revérifie sur les DEUX fiches au moment du merge)
   const isAdmin = collab?.role === 'admin' || collab?.role === 'supra';

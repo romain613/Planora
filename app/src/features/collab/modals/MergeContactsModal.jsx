@@ -76,6 +76,9 @@ const MergeContactsModal = ({ primary: initialPrimary, onClose, onSuccess }) => 
   const [previewLoading, setPreviewLoading] = useState(false);
   const [confirmText, setConfirmText] = useState('');
   const [submitting, setSubmitting] = useState(false);
+  // V1.14.1.x PRIORITE 2 — restore puis fusionner si primary archivé (Etape 0)
+  const [restoring, setRestoring] = useState(false);
+  const isPrimaryArchived = !!(primary?.archivedAt && primary.archivedAt !== '');
 
   // Q3 — Autocomplete : filtre live sur contacts state
   const isAdmin = collab?.role === 'admin' || collab?.role === 'supra';
@@ -131,6 +134,30 @@ const MergeContactsModal = ({ primary: initialPrimary, onClose, onSuccess }) => 
     return () => window.removeEventListener('crmContactUpdated', onUpdated);
   }, [primary?.id, secondary?.id]);
 
+  // V1.14.1.x PRIORITE 2 — Restore puis fusionner (Etape 0 si primary archivé).
+  // POST /:id/restore puis update local state primary (sans archivedAt). Le user reste dans
+  // la modale et continue le flow normal etape 1 (selection secondary). Backend Q7
+  // PRIMARY_ARCHIVED reste preserve : au moment du POST /merge, primary sera deja restaure.
+  const handleRestoreThenMerge = async () => {
+    if (!primary?.id || restoring) return;
+    setRestoring(true);
+    try {
+      const r = await api('/api/data/contacts/' + primary.id + '/restore', { method: 'POST' });
+      if (r?.success || r?.action === 'restored') {
+        setPrimary({ ...primary, archivedAt: '', archivedBy: '', archivedReason: '' });
+        showNotif?.('Fiche restaurée — sélectionnez la fiche à fusionner', 'success');
+      } else if (r?.error === 'NOT_ARCHIVED') {
+        // Idempotence : deja restauree (V1.14.1 listener crmContactUpdated possible)
+        setPrimary({ ...primary, archivedAt: '', archivedBy: '', archivedReason: '' });
+      } else {
+        showNotif?.('Erreur restauration : ' + (r?.error || 'inconnu'), 'danger');
+      }
+    } catch (err) {
+      showNotif?.('Erreur réseau restauration : ' + (err?.message || ''), 'danger');
+    }
+    setRestoring(false);
+  };
+
   // Q5 — Submit final : confirmation stricte "FUSIONNER" exact
   const handleSubmit = async () => {
     if (confirmText !== 'FUSIONNER' || submitting || !secondary?.id) return;
@@ -166,8 +193,27 @@ const MergeContactsModal = ({ primary: initialPrimary, onClose, onSuccess }) => 
     >
       {step === 1 && (
         <>
+          {/* V1.14.1.x PRIORITE 2 — Etape 0 si primary archivé : restaurer puis fusionner */}
+          {isPrimaryArchived && (
+            <div style={{ padding: 14, borderRadius: 10, background: '#7C3AED12', border: '1.5px solid #7C3AED', marginBottom: 16 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: '#7C3AED', marginBottom: 6 }}>
+                <I n="archive" s={14}/> 📦 Fiche archivée
+              </div>
+              <div style={{ fontSize: 12, color: T.text2, marginBottom: 10, lineHeight: 1.5 }}>
+                Cette fiche doit être restaurée avant la fusion. Une fois restaurée, elle redevient
+                visible dans le CRM/Pipeline et vous pourrez sélectionner la fiche secondaire à fusionner.
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <Btn small onClick={onClose} disabled={restoring}>Annuler</Btn>
+                <Btn small onClick={handleRestoreThenMerge} disabled={restoring}
+                  style={{ background: restoring ? '#7C3AED60' : '#7C3AED', borderColor: '#7C3AED', color: '#fff', cursor: restoring ? 'not-allowed' : 'pointer' }}>
+                  <I n="rotate-ccw" s={12}/> {restoring ? 'Restauration…' : 'Restaurer puis fusionner'}
+                </Btn>
+              </div>
+            </div>
+          )}
           {/* Bandeau primary + slot secondary */}
-          <div style={{ display: 'flex', gap: 10, marginBottom: 16 }}>
+          <div style={{ display: 'flex', gap: 10, marginBottom: 16, opacity: isPrimaryArchived ? 0.4 : 1, pointerEvents: isPrimaryArchived ? 'none' : 'auto' }}>
             <PanelContact label="Fiche principale (conservée)" contact={primary} accentColor="#0EA5E9" />
             <div style={{ flex: 1, minWidth: 0 }}>
               {!secondary ? (
@@ -180,8 +226,8 @@ const MergeContactsModal = ({ primary: initialPrimary, onClose, onSuccess }) => 
             </div>
           </div>
 
-          {/* Q3 — Autocomplete */}
-          {!secondary && (
+          {/* Q3 — Autocomplete (desactive tant que primary archive — V1.14.1.x) */}
+          {!secondary && !isPrimaryArchived && (
             <>
               <SectionHeader>Rechercher la fiche à fusionner</SectionHeader>
               <input
