@@ -1,20 +1,21 @@
 /**
- * Outlook Calendar Service (Phase 1 — read-only OAuth + events test)
+ * Outlook Calendar Service
  * Miroir de googleCalendar.js, basé sur @azure/msal-node + Microsoft Graph fetch.
  *
- * Phase 1 livrée :
- *   - getAuthUrl(collaboratorId)
- *   - handleCallback(code, collaboratorId)
- *   - isConnected(collaboratorId)
- *   - disconnectOutlook(collaboratorId)
- *   - getOutlookEmail(collaboratorId)
- *   - listUpcomingEventsTest(collaboratorId, days=7)  // non persisté
+ * Phase 1 (OAuth + read-only) :
+ *   - getAuthUrl, handleCallback, isConnected, disconnectOutlook,
+ *     getOutlookEmail, getOutlookLastSync, listUpcomingEventsTest
  *
- * Phase 2+ (NON livrées ici) : createEvent / updateEvent / deleteEvent / syncEventsFromOutlook.
+ * Phase 2A (sync events 60j → outlook_events) :
+ *   - syncEventsFromOutlook(collaboratorId)
+ *
+ * Phase 2B+ (à venir) : intégration outlook_events dans checkBookingConflict + generateSlots.
+ * Phase 3 (à venir) : createEvent / updateEvent / deleteEvent (push booking → Outlook).
  */
 
 import { ConfidentialClientApplication } from '@azure/msal-node';
-import { db } from '../db/database.js';
+import { db, getCollaboratorTimezone } from '../db/database.js';
+import { DateTime } from 'luxon';
 
 const SCOPES = [
   'User.Read',
@@ -230,5 +231,137 @@ export async function listUpcomingEventsTest(collaboratorId, days = 7) {
   } catch (err) {
     console.error('[OUTLOOK] listUpcomingEventsTest:', err.message);
     return { ok: false, error: err.message, events: [] };
+  }
+}
+
+/**
+ * Sync events FROM Outlook into the local outlook_events cache (Phase 2A).
+ * Mirror of syncEventsFromGoogle — pulls 60 days of upcoming events, stores busy ones,
+ * removes stale entries.
+ *
+ * Skip rules at sync time (mirror Google + MH decisions):
+ *   - isCancelled=true       → skip (do not persist)
+ *   - showAs='free'          → skip (Q2 — equivalent to Google transparency='transparent')
+ *   - showAs='tentative'     → STORE (Q1 — blocks slots in Phase 2B)
+ *   - showAs='busy'/'oof'/'workingElsewhere' → STORE
+ *   - allDay (any showAs except 'free') → STORE with 24h span (Q3 — blocks the day)
+ */
+export async function syncEventsFromOutlook(collaboratorId) {
+  const accessToken = await getAccessToken(collaboratorId);
+  if (!accessToken) {
+    return { synced: 0, errors: ['Not connected or token refresh failed'] };
+  }
+
+  const collabRow = db.prepare('SELECT companyId FROM collaborators WHERE id = ?').get(collaboratorId);
+  const tz = getCollaboratorTimezone(collaboratorId, collabRow?.companyId);
+
+  const now = DateTime.now().setZone(tz);
+  const startISO = now.toUTC().toISO();
+  const endISO = now.plus({ days: 60 }).toUTC().toISO();
+
+  const validIds = new Set();
+  let synced = 0;
+  const errors = [];
+
+  const upsert = db.prepare(
+    `INSERT OR REPLACE INTO outlook_events (id, collaboratorId, summary, startTime, endTime, allDay, status, showAs)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  );
+
+  try {
+    // Initial Graph URL — Prefer UTC so dateTime is unambiguous, then convert to collab tz for storage
+    // Note: 'status' removed from $select — not a top-level property on Microsoft.OutlookServices.Event.
+    // We rely on isCancelled (filtered above) + showAs for busy/free state.
+    let nextUrl = `/me/calendarView?startDateTime=${encodeURIComponent(startISO)}&endDateTime=${encodeURIComponent(endISO)}&$orderby=start/dateTime&$top=500&$select=id,subject,start,end,isAllDay,showAs,isCancelled`;
+
+    // Pagination loop (@odata.nextLink) — bounded to 10 pages safety cap
+    let pageGuard = 0;
+    while (nextUrl && pageGuard < 10) {
+      pageGuard++;
+
+      let data;
+      try {
+        // graphGet expects path starting with /, but @odata.nextLink is a full URL.
+        // Detect and call appropriately.
+        if (nextUrl.startsWith('http')) {
+          const res = await fetch(nextUrl, {
+            method: 'GET',
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              Accept: 'application/json',
+              Prefer: 'outlook.timezone="UTC"',
+            },
+          });
+          if (!res.ok) {
+            const txt = await res.text().catch(() => '');
+            throw new Error(`Graph nextLink → ${res.status} ${res.statusText} ${txt.slice(0, 200)}`);
+          }
+          data = await res.json();
+        } else {
+          data = await graphGet(accessToken, nextUrl);
+        }
+      } catch (pageErr) {
+        errors.push(`Page ${pageGuard}: ${pageErr.message}`);
+        break;
+      }
+
+      const items = Array.isArray(data?.value) ? data.value : [];
+      for (const event of items) {
+        try {
+          if (event.isCancelled) continue;
+          if (event.showAs === 'free') continue;
+
+          const isAllDay = !!event.isAllDay;
+          let startTime, endTime;
+
+          if (isAllDay) {
+            // Outlook all-day events come as midnight UTC start, midnight UTC end+1day
+            // Normalize to collab tz start-of-day
+            startTime = DateTime.fromISO(event.start.dateTime, { zone: 'UTC' }).setZone(tz).startOf('day').toISO();
+            endTime = DateTime.fromISO(event.end.dateTime, { zone: 'UTC' }).setZone(tz).startOf('day').toISO();
+          } else {
+            const startTz = event.start?.timeZone || 'UTC';
+            const endTz = event.end?.timeZone || 'UTC';
+            startTime = DateTime.fromISO(event.start.dateTime, { zone: startTz }).setZone(tz).toISO();
+            endTime = DateTime.fromISO(event.end.dateTime, { zone: endTz }).setZone(tz).toISO();
+          }
+
+          if (!startTime || !endTime) continue;
+
+          upsert.run(
+            event.id,
+            collaboratorId,
+            event.subject || '',
+            startTime,
+            endTime,
+            isAllDay ? 1 : 0,
+            'confirmed', // status fallback — Graph Event has no top-level status property; isCancelled already filtered above
+            event.showAs || 'busy'
+          );
+          validIds.add(event.id);
+          synced++;
+        } catch (evErr) {
+          errors.push(`Event ${event.id}: ${evErr.message}`);
+        }
+      }
+
+      nextUrl = data?.['@odata.nextLink'] || null;
+    }
+
+    // Remove stale events no longer present in Outlook (or now showAs=free / cancelled)
+    const dbEvents = db.prepare('SELECT id FROM outlook_events WHERE collaboratorId = ?').all(collaboratorId);
+    const deleteStmt = db.prepare('DELETE FROM outlook_events WHERE id = ?');
+    for (const dbEvent of dbEvents) {
+      if (!validIds.has(dbEvent.id)) deleteStmt.run(dbEvent.id);
+    }
+
+    db.prepare('UPDATE collaborators SET outlook_last_sync = ? WHERE id = ?')
+      .run(new Date().toISOString(), collaboratorId);
+
+    console.log(`\x1b[34m[OUTLOOK SYNC]\x1b[0m ${synced} events fetched from Outlook for ${collaboratorId}`);
+    return { synced, errors };
+  } catch (err) {
+    console.error('[OUTLOOK SYNC ERROR] syncEventsFromOutlook:', err.message);
+    return { synced: 0, errors: [err.message] };
   }
 }

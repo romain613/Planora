@@ -11,6 +11,7 @@ import {
   getOutlookEmail,
   getOutlookLastSync,
   listUpcomingEventsTest,
+  syncEventsFromOutlook,
 } from '../services/outlookCalendar.js';
 import { db } from '../db/database.js';
 import { requireAuth } from '../middleware/auth.js';
@@ -79,6 +80,26 @@ router.post('/disconnect', requireAuth, (req, res) => {
     disconnectOutlook(collaboratorId);
     res.json({ success: true });
   } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/outlook/sync — body { collaboratorId }
+// Phase 2A — Pull 60 days of Outlook events into outlook_events cache (NO push booking).
+router.post('/sync', requireAuth, async (req, res) => {
+  try {
+    const { collaboratorId } = req.body;
+    if (!collaboratorId) return res.status(400).json({ error: 'collaboratorId required' });
+    if (!checkOwnership(req, collaboratorId)) return res.status(403).json({ error: 'Accès interdit' });
+    if (!isConnected(collaboratorId)) return res.status(400).json({ error: 'Outlook not connected' });
+
+    const result = await syncEventsFromOutlook(collaboratorId);
+    if (result.errors && result.errors.length && result.synced === 0) {
+      return res.status(500).json({ success: false, synced: 0, errors: result.errors });
+    }
+    res.json({ success: true, synced: result.synced, errors: result.errors || [] });
+  } catch (err) {
+    console.error('[OUTLOOK SYNC ROUTE ERROR]', err.message);
     res.status(500).json({ error: err.message });
   }
 });
