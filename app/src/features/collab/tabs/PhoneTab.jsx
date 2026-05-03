@@ -1059,7 +1059,9 @@ if (d?.success) {
 {isArchivedContact ? (
   <>
     {/* V1.14.1.x PRIORITE 1 — Voir fiche + Restaurer + Supprimer définitivement (admin/can_hard_delete) */}
-    <div onClick={()=>{ if(selectedContact && setSelectedCrmContact) setSelectedCrmContact(selectedContact); }} style={{padding:'6px 10px',borderRadius:8,background:T.bg,border:`1px solid ${T.border}`,fontSize:11,fontWeight:600,color:T.text2,cursor:'pointer',display:'flex',alignItems:'center',gap:5}} title="Voir fiche">
+    {/* V1.14.1.x.1 — Force _linked:true pour fiche archivee (selectedContact vient de hubArchivedFallback,
+        ne passe pas par l'enrichment CollabPortal -> sans ce force, modale traite comme visiteur non-CRM). */}
+    <div onClick={()=>{ if(selectedContact && setSelectedCrmContact) setSelectedCrmContact({...selectedContact, _linked: true}); }} style={{padding:'6px 10px',borderRadius:8,background:T.bg,border:`1px solid ${T.border}`,fontSize:11,fontWeight:600,color:T.text2,cursor:'pointer',display:'flex',alignItems:'center',gap:5}} title="Voir fiche">
       <I n="eye" s={13} style={{color:T.text2}}/> Voir fiche
     </div>
     {_hubCanRestore(selectedContact) && (

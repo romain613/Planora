@@ -216,7 +216,11 @@ const CrmTab = () => {
       ) : (
         <div style={{display:'grid',gridTemplateColumns:'repeat(auto-fill,minmax(280px,1fr))',gap:12}}>
           {archivedContacts.map(ct => (
-            <Card key={ct.id} onClick={()=>{setSelectedCrmContact(ct);setCollabFicheTab("notes");}}
+            // V1.14.1.x.1 — Force _linked:true pour fiche archivee (archivedContacts ne passe pas par
+            // l'enrichment CollabPortal:2892,2906 -> _linked undefined par defaut). Un archive EST dans le CRM,
+            // ne doit jamais etre traite comme visiteur non-lie. Sans ce force, modale affiche bandeau
+            // "pas dans le CRM" + Ajouter ET masque la barre d'actions complete (Restaurer/SupprimerDef).
+            <Card key={ct.id} onClick={()=>{setSelectedCrmContact({...ct, _linked: true});setCollabFicheTab("notes");}}
               style={{padding:14,cursor:'pointer',opacity:0.65,border:`1px dashed ${T.border}`,position:'relative',transition:'opacity .15s'}}
               onMouseEnter={e=>e.currentTarget.style.opacity=0.85}
               onMouseLeave={e=>e.currentTarget.style.opacity=0.65}>
