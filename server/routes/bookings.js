@@ -6,7 +6,7 @@ import { sendEmail } from '../services/brevoEmail.js';
 import { bookingConfirmedEmail } from '../templates/bookingConfirmed.js';
 import { cancelledEmail } from '../templates/cancelled.js';
 import { createEvent, updateEvent, deleteEvent, isConnected } from '../services/googleCalendar.js';
-import { isConnected as outlookIsConnected, createEventOutlook } from '../services/outlookCalendar.js'; // V4.a
+import { isConnected as outlookIsConnected, createEventOutlook, updateEventOutlook } from '../services/outlookCalendar.js'; // V4.a + V4.b
 import { createFollowUpTask } from '../services/googleTasks.js';
 import { sendChatNotification, formatNewBooking, formatCancelledBooking, formatConfirmedBooking } from '../services/googleChat.js';
 import { checkBookingConflict } from '../services/bookings/checkBookingConflict.js';
@@ -450,6 +450,22 @@ router.put('/:id', requireAuth, requirePermission('bookings.edit'), (req, res) =
         if (updatedBooking.googleEventId) {
           updateEvent(updatedBooking.collaboratorId, updatedBooking.googleEventId, updatedBooking, cal || { name: '', location: '' }).catch(() => {});
         }
+      }
+    }
+
+    // V4.b — Sync to Outlook Calendar (fire-and-forget, mirror Google pattern)
+    // Guards : skip si collab ou calendar a changé (l'event Outlook actuel appartient à l'ancien collab/cal).
+    // Pour transferts : V4.c traitera la cancellation côté ancien + V4.d créera côté nouveau.
+    if (oldBooking?.collaboratorId && outlookIsConnected(oldBooking.collaboratorId)) {
+      const updatedBookingOl = db.prepare('SELECT * FROM bookings WHERE id = ?').get(req.params.id);
+      if (
+        updatedBookingOl &&
+        updatedBookingOl.outlookEventId &&
+        oldBooking.collaboratorId === updatedBookingOl.collaboratorId &&
+        oldBooking.calendarId === updatedBookingOl.calendarId
+      ) {
+        const calOl = db.prepare('SELECT name, location FROM calendars WHERE id = ?').get(updatedBookingOl.calendarId);
+        updateEventOutlook(updatedBookingOl.collaboratorId, updatedBookingOl.outlookEventId, updatedBookingOl, calOl || { name: '', location: '' }).catch(() => {});
       }
     }
 

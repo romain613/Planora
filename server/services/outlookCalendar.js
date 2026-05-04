@@ -14,7 +14,10 @@
  * Phase 4.a (write — push booking Planora → Outlook event) :
  *   - createEventOutlook(collaboratorId, bookingData, calendarData)
  *
- * Phase 4.b/4.c (à venir) : updateEvent / deleteEvent (PUT + DELETE booking → sync Outlook).
+ * Phase 4.b (write — sync UPDATE booking → Outlook event) :
+ *   - updateEventOutlook(collaboratorId, outlookEventId, bookingData, calendarData)
+ *
+ * Phase 4.c (à venir) : deleteEvent (DELETE booking → cancel/delete event Outlook).
  */
 
 import { ConfidentialClientApplication } from '@azure/msal-node';
@@ -431,6 +434,79 @@ export async function createEventOutlook(collaboratorId, bookingData, calendarDa
   } catch (err) {
     // err.message only — never log full err object (token leak risk)
     console.error('[OUTLOOK CAL ERROR] createEventOutlook:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Update an existing Outlook Calendar event from a booking (Phase 4.b — write).
+ * Mirror of googleCalendar.updateEvent. Uses Calendars.ReadWrite scope (granted Phase 1).
+ *
+ * Returns { updated: true } on success, null on failure or skip.
+ * NEVER throws — caller must remain non-blocking on Outlook failure.
+ *
+ * Skip rules (return null silent):
+ *   - outlookEventId missing (booking pré-V4.a)
+ *   - Outlook not connected (no access token)
+ *   - Token refresh failed
+ *   - Graph API error (4xx/5xx, e.g. 404 if event deleted user-side)
+ *
+ * Cancellation:
+ *   - bookingData.status === 'cancelled' → subject prefix "ANNULÉ — " + showAs='free'
+ *     (libère le slot Outlook user, cohérent V3.x.5 conflicts qui filtre showAs=free)
+ */
+export async function updateEventOutlook(collaboratorId, outlookEventId, bookingData, calendarData) {
+  if (!outlookEventId) return null;
+  const accessToken = await getAccessToken(collaboratorId);
+  if (!accessToken) return null;
+
+  const collabRow = db.prepare('SELECT companyId FROM collaborators WHERE id = ?').get(collaboratorId);
+  const tz = getCollaboratorTimezone(collaboratorId, collabRow?.companyId);
+
+  const start = DateTime.fromISO(`${bookingData.date}T${bookingData.time}:00`, { zone: tz });
+  const end = start.plus({ minutes: bookingData.duration || 30 });
+  const startDateTime = start.toFormat("yyyy-MM-dd'T'HH:mm:ss");
+  const endDateTime = end.toFormat("yyyy-MM-dd'T'HH:mm:ss");
+
+  const isCancelled = bookingData.status === 'cancelled';
+  const body = {
+    subject: isCancelled
+      ? `ANNULÉ — ${calendarData?.name || 'RDV'} — ${bookingData.visitorName || ''}`
+      : `${calendarData?.name || 'RDV'} — ${bookingData.visitorName || ''}`,
+    body: {
+      contentType: 'Text',
+      content: [
+        isCancelled ? '⚠️ CE RDV A ÉTÉ ANNULÉ' : '',
+        `Visiteur : ${bookingData.visitorName || ''}`,
+        bookingData.visitorEmail ? `Email : ${bookingData.visitorEmail}` : '',
+        bookingData.visitorPhone ? `Tél : ${bookingData.visitorPhone}` : '',
+        bookingData.notes ? `Notes : ${bookingData.notes}` : '',
+      ].filter(Boolean).join('\n'),
+    },
+    start: { dateTime: startDateTime, timeZone: tz },
+    end: { dateTime: endDateTime, timeZone: tz },
+    location: { displayName: calendarData?.location || '' },
+    showAs: isCancelled ? 'free' : 'busy', // V4.b — cancelled libère le slot (Q2)
+  };
+
+  try {
+    const res = await fetch(`${GRAPH_BASE}/me/events/${encodeURIComponent(outlookEventId)}`, {
+      method: 'PATCH',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`Graph PATCH /me/events/{id} → ${res.status} ${res.statusText} ${txt.slice(0, 200)}`);
+    }
+    console.log(`\x1b[34m[OUTLOOK CAL]\x1b[0m Event updated: ${outlookEventId}`);
+    return { updated: true };
+  } catch (err) {
+    // err.message only — never log full err object (token leak risk)
+    console.error('[OUTLOOK CAL ERROR] updateEventOutlook:', err.message);
     return null;
   }
 }
