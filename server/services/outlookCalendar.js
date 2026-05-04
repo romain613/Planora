@@ -17,7 +17,8 @@
  * Phase 4.b (write — sync UPDATE booking → Outlook event) :
  *   - updateEventOutlook(collaboratorId, outlookEventId, bookingData, calendarData)
  *
- * Phase 4.c (à venir) : deleteEvent (DELETE booking → cancel/delete event Outlook).
+ * Phase 4.c (write — true delete event Outlook) :
+ *   - deleteEventOutlook(collaboratorId, outlookEventId)
  */
 
 import { ConfidentialClientApplication } from '@azure/msal-node';
@@ -507,6 +508,50 @@ export async function updateEventOutlook(collaboratorId, outlookEventId, booking
   } catch (err) {
     // err.message only — never log full err object (token leak risk)
     console.error('[OUTLOOK CAL ERROR] updateEventOutlook:', err.message);
+    return null;
+  }
+}
+
+/**
+ * Delete an Outlook Calendar event (Phase 4.c — write).
+ * Mirror of googleCalendar.deleteEvent + V4.a/V4.b error handling.
+ *
+ * Returns { deleted: true } on success, { deleted: true, alreadyGone: true } on 404,
+ *         null on skip/failure.
+ * NEVER throws — caller must remain non-blocking on Outlook failure.
+ *
+ * Skip rules (return null silent):
+ *   - outlookEventId missing
+ *   - Outlook not connected (no access token)
+ *   - Token refresh failed
+ *
+ * Idempotence:
+ *   - Graph 404 → treated as success (event already gone user-side or wrong id)
+ *   - No retry on 5xx (MH decision V4.c)
+ */
+export async function deleteEventOutlook(collaboratorId, outlookEventId) {
+  if (!outlookEventId) return null;
+  const accessToken = await getAccessToken(collaboratorId);
+  if (!accessToken) return null;
+
+  try {
+    const res = await fetch(`${GRAPH_BASE}/me/events/${encodeURIComponent(outlookEventId)}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${accessToken}` },
+    });
+    if (res.status === 404) {
+      console.log(`\x1b[34m[OUTLOOK CAL]\x1b[0m Event already gone: ${outlookEventId}`);
+      return { deleted: true, alreadyGone: true };
+    }
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`Graph DELETE /me/events/{id} → ${res.status} ${res.statusText} ${txt.slice(0, 200)}`);
+    }
+    console.log(`\x1b[34m[OUTLOOK CAL]\x1b[0m Event deleted: ${outlookEventId}`);
+    return { deleted: true };
+  } catch (err) {
+    // err.message only — never log full err object (token leak risk)
+    console.error('[OUTLOOK CAL ERROR] deleteEventOutlook:', err.message);
     return null;
   }
 }

@@ -6,7 +6,7 @@ import { sendEmail } from '../services/brevoEmail.js';
 import { bookingConfirmedEmail } from '../templates/bookingConfirmed.js';
 import { cancelledEmail } from '../templates/cancelled.js';
 import { createEvent, updateEvent, deleteEvent, isConnected } from '../services/googleCalendar.js';
-import { isConnected as outlookIsConnected, createEventOutlook, updateEventOutlook } from '../services/outlookCalendar.js'; // V4.a + V4.b
+import { isConnected as outlookIsConnected, createEventOutlook, updateEventOutlook, deleteEventOutlook } from '../services/outlookCalendar.js'; // V4.a + V4.b + V4.c
 import { createFollowUpTask } from '../services/googleTasks.js';
 import { sendChatNotification, formatNewBooking, formatCancelledBooking, formatConfirmedBooking } from '../services/googleChat.js';
 import { checkBookingConflict } from '../services/bookings/checkBookingConflict.js';
@@ -527,6 +527,13 @@ router.delete('/:id', requireAuth, requirePermission('bookings.delete'), (req, r
     if (booking.collaboratorId && booking.googleEventId && isConnected(booking.collaboratorId)) {
       const cal = db.prepare('SELECT name, location FROM calendars WHERE id = ?').get(booking.calendarId);
       updateEvent(booking.collaboratorId, booking.googleEventId, { ...booking, status: 'cancelled' }, cal || { name: '', location: '' }).catch(() => {});
+    }
+
+    // V4.c — Delete Outlook event (true delete, mirror MH UX choice — divergence assumée vs Google soft cancel)
+    // Non-bloquant : route DELETE ne fail jamais si Outlook fail.
+    // 404 Graph = idempotent (event déjà supprimé user-side).
+    if (booking.collaboratorId && booking.outlookEventId && outlookIsConnected(booking.collaboratorId)) {
+      deleteEventOutlook(booking.collaboratorId, booking.outlookEventId).catch(err => console.error('[OUTLOOK SYNC ERROR]', err.message));
     }
 
     // V1.8.24.1 Phase 5 — DELETE retourne aussi le contact actualisé (cohérent POST/PUT)
