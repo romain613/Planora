@@ -9,8 +9,12 @@
  * Phase 2A (sync events 60j → outlook_events) :
  *   - syncEventsFromOutlook(collaboratorId)
  *
- * Phase 2B+ (à venir) : intégration outlook_events dans checkBookingConflict + generateSlots.
- * Phase 3 (à venir) : createEvent / updateEvent / deleteEvent (push booking → Outlook).
+ * Phase 2B+ (livré V3.x.5) : intégration outlook_events dans checkBookingConflict + generateSlots.
+ *
+ * Phase 4.a (write — push booking Planora → Outlook event) :
+ *   - createEventOutlook(collaboratorId, bookingData, calendarData)
+ *
+ * Phase 4.b/4.c (à venir) : updateEvent / deleteEvent (PUT + DELETE booking → sync Outlook).
  */
 
 import { ConfidentialClientApplication } from '@azure/msal-node';
@@ -363,5 +367,70 @@ export async function syncEventsFromOutlook(collaboratorId) {
   } catch (err) {
     console.error('[OUTLOOK SYNC ERROR] syncEventsFromOutlook:', err.message);
     return { synced: 0, errors: [err.message] };
+  }
+}
+
+/**
+ * Create an Outlook Calendar event from a booking (Phase 4.a — write).
+ * Mirror of googleCalendar.createEvent. Uses Calendars.ReadWrite scope (granted Phase 1).
+ *
+ * Returns { outlookEventId } on success, null on failure.
+ * NEVER throws — caller must remain non-blocking on Outlook failure.
+ *
+ * Skip rules (return null silent):
+ *   - Outlook not connected (no access token)
+ *   - Token refresh failed
+ *   - Graph API error (4xx/5xx)
+ */
+export async function createEventOutlook(collaboratorId, bookingData, calendarData) {
+  const accessToken = await getAccessToken(collaboratorId);
+  if (!accessToken) return null;
+
+  const collabRow = db.prepare('SELECT companyId FROM collaborators WHERE id = ?').get(collaboratorId);
+  const tz = getCollaboratorTimezone(collaboratorId, collabRow?.companyId);
+
+  // Build start/end with Luxon (timezone-aware, mirror Google pattern)
+  const start = DateTime.fromISO(`${bookingData.date}T${bookingData.time}:00`, { zone: tz });
+  const end = start.plus({ minutes: bookingData.duration || 30 });
+  const startDateTime = start.toFormat("yyyy-MM-dd'T'HH:mm:ss");
+  const endDateTime = end.toFormat("yyyy-MM-dd'T'HH:mm:ss");
+
+  const body = {
+    subject: `${calendarData?.name || 'RDV'} — ${bookingData.visitorName || ''}`,
+    body: {
+      contentType: 'Text',
+      content: [
+        `Visiteur : ${bookingData.visitorName || ''}`,
+        bookingData.visitorEmail ? `Email : ${bookingData.visitorEmail}` : '',
+        bookingData.visitorPhone ? `Tél : ${bookingData.visitorPhone}` : '',
+        bookingData.notes ? `Notes : ${bookingData.notes}` : '',
+      ].filter(Boolean).join('\n'),
+    },
+    start: { dateTime: startDateTime, timeZone: tz },
+    end: { dateTime: endDateTime, timeZone: tz },
+    location: { displayName: calendarData?.location || '' },
+    showAs: 'busy', // V3.x.5 cohérence : Planora-pushed events = busy
+  };
+
+  try {
+    const res = await fetch(`${GRAPH_BASE}/me/events`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const txt = await res.text().catch(() => '');
+      throw new Error(`Graph POST /me/events → ${res.status} ${res.statusText} ${txt.slice(0, 200)}`);
+    }
+    const data = await res.json();
+    console.log(`\x1b[34m[OUTLOOK CAL]\x1b[0m Event created: ${data.id}`);
+    return { outlookEventId: data.id };
+  } catch (err) {
+    // err.message only — never log full err object (token leak risk)
+    console.error('[OUTLOOK CAL ERROR] createEventOutlook:', err.message);
+    return null;
   }
 }

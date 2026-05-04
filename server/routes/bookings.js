@@ -6,6 +6,7 @@ import { sendEmail } from '../services/brevoEmail.js';
 import { bookingConfirmedEmail } from '../templates/bookingConfirmed.js';
 import { cancelledEmail } from '../templates/cancelled.js';
 import { createEvent, updateEvent, deleteEvent, isConnected } from '../services/googleCalendar.js';
+import { isConnected as outlookIsConnected, createEventOutlook } from '../services/outlookCalendar.js'; // V4.a
 import { createFollowUpTask } from '../services/googleTasks.js';
 import { sendChatNotification, formatNewBooking, formatCancelledBooking, formatConfirmedBooking } from '../services/googleChat.js';
 import { checkBookingConflict } from '../services/bookings/checkBookingConflict.js';
@@ -210,6 +211,18 @@ router.post('/', requireAuth, enforceCompany, requirePermission('bookings.create
           if (result?.meetLink) db.prepare('UPDATE bookings SET meetLink = ? WHERE id = ?').run(result.meetLink, id);
         })
         .catch(err => console.error('[GOOGLE SYNC ERROR]', err.message));
+    }
+
+    // V4.a — Push to Outlook Calendar (fire-and-forget, mirror Google pattern)
+    // Anti-dup : skip si outlookEventId déjà rempli (défense en profondeur).
+    // Non-bloquant : booking créé même si Outlook fail (R2 mitigée).
+    if (b.collaboratorId && outlookIsConnected(b.collaboratorId) && !b.outlookEventId) {
+      const calOl = db.prepare('SELECT name, location FROM calendars WHERE id = ?').get(b.calendarId);
+      createEventOutlook(b.collaboratorId, { date: b.date, time: b.time, duration: b.duration || 30, visitorName: b.visitorName, visitorEmail: b.visitorEmail, visitorPhone: b.visitorPhone, notes: b.notes }, calOl || { name: '', location: '' })
+        .then(result => {
+          if (result?.outlookEventId) db.prepare('UPDATE bookings SET outlookEventId = ? WHERE id = ?').run(result.outlookEventId, id);
+        })
+        .catch(err => console.error('[OUTLOOK SYNC ERROR]', err.message));
     }
 
     // Auto-create Google Tasks follow-up (fire-and-forget)

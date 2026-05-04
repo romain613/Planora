@@ -9,6 +9,7 @@ import { sendWhatsapp } from '../services/brevoWhatsapp.js';
 import { bookingConfirmedEmail, bookingConfirmedSms, bookingConfirmedWhatsapp } from '../templates/bookingConfirmed.js';
 import { newBookingNotifyEmail, newBookingNotifySms } from '../templates/newBookingNotify.js';
 import { createEvent, isConnected } from '../services/googleCalendar.js';
+import { isConnected as outlookIsConnected, createEventOutlook } from '../services/outlookCalendar.js'; // V4.a
 import { checkBookingConflict } from '../services/bookings/checkBookingConflict.js';
 
 const router = Router();
@@ -381,6 +382,16 @@ router.post('/book', async (req, res) => {
       } catch (err) {
         console.error('[GOOGLE SYNC ERROR]', err.message);
       }
+    }
+
+    // V4.a — Push to Outlook Calendar (fire-and-forget, ne bloque pas la response visiteur)
+    // Mirror Google pattern. Non-bloquant : booking créé même si Outlook fail.
+    if (collaboratorId && outlookIsConnected(collaboratorId)) {
+      createEventOutlook(collaboratorId, { date, time, duration: bookingDuration, visitorName, visitorEmail, visitorPhone }, { name: cal.name, location: cal.location || '' })
+        .then(result => {
+          if (result?.outlookEventId) db.prepare('UPDATE bookings SET outlookEventId = ? WHERE id = ?').run(result.outlookEventId, id);
+        })
+        .catch(err => console.error('[OUTLOOK SYNC ERROR]', err.message));
     }
 
     // 4. Send notifications (fire-and-forget)
