@@ -7,12 +7,13 @@ import { DAYS_FR, DAYS_SHORT, MONTHS_FR, getDow, fmtDate, formatDateTime, format
 import { PIPELINE_LABELS, STATUS_COLORS } from "../../../shared/utils/pipeline";
 import { sendNotification, buildNotifyPayload } from "../../../shared/utils/notifications";
 import { _T } from "../../../shared/state/tabState";
+import { api } from "../../../shared/services/api";
 import { useCollabContext } from "../context/CollabContext";
 
 const AgendaTab = () => {
   const {
     collab, company, showNotif,
-    bookings, contacts,
+    bookings, setBookings, contacts,
     calendars, setCalendars,
     weekOffset, setWeekOffset,
     monthOffset, setMonthOffset,
@@ -40,7 +41,111 @@ const AgendaTab = () => {
   googleLoading,
   // ── AST audit 2026-04-23 (v7) ──
   basePreset, dayBookings, dayDate, exportICS, googleConnected, gridTheme, hours, isAvailableSlot, monthMonth, monthYear, myGoogleEvents, myOutlookEvents, syncGoogle, syncAllExternal, outlookConnected, outlookLoading, getOutlookEventAt, today, todayStr, weekDates, ZOOM_LEVELS,
+  // Phase3 refresh fix — setters Google/Outlook events pour rafraîchir le cache frontend après drop
+  setGoogleEvents, setOutlookEvents,
   } = useCollabContext();
+
+  // Phase3 — Drag & drop reschedule RDV (HTML5 native, cohérent pattern pipeline kanban).
+  // _dragBkId : booking en cours de drag. _dragOverSlot : `${date}_${time}` actuellement survolé.
+  // Optimistic UI via updateBooking helper (rollback automatique si échec backend).
+  const [_dragBkId, _setDragBkId] = React.useState(null);
+  const [_dragOverSlot, _setDragOverSlot] = React.useState(null);
+  const _handleBkDrop = React.useCallback((bkId, targetDate, targetTime) => {
+    _setDragBkId(null);
+    _setDragOverSlot(null);
+    if (!bkId || !targetDate || !targetTime) return;
+    const _bk = (typeof myBookings !== 'undefined' ? myBookings : []).find(b => b.id === bkId);
+    if (!_bk) return;
+    if (_bk.date === targetDate && _bk.time === targetTime) return; // no-op
+    // Pré-check overlap simple (anti-collision UX) : si un autre booking confirmed du collab
+    // chevauche déjà ce slot, on bloque côté UI (cohérent backend checkBookingConflict).
+    const _dur = _bk.duration || 30;
+    const [_th, _tm] = targetTime.split(':').map(Number);
+    const _newStart = _th * 60 + _tm;
+    const _newEnd = _newStart + _dur;
+    const _conflict = (typeof myBookings !== 'undefined' ? myBookings : []).find(b2 => {
+      if (b2.id === bkId) return false;
+      if (b2.date !== targetDate) return false;
+      if (b2.status !== 'confirmed' && b2.status !== 'pending') return false;
+      const [_bh, _bm] = (b2.time || '0:0').split(':').map(Number);
+      const _bs = _bh * 60 + _bm;
+      const _be = _bs + (b2.duration || 30);
+      return _newStart < _be && _newEnd > _bs;
+    });
+    if (_conflict) {
+      if (typeof showNotif === 'function') showNotif("Créneau occupé — déplacement annulé", "danger");
+      return;
+    }
+    // Phase3 fix — Optimistic update EXPLICITE et synchrone côté AgendaTab.
+    // updateBooking (CollabPortal) fait aussi son propre optimistic + un _scheduleGlobalRefresh
+    // qui re-fetch /api/bookings et écrase le state avec la version DB non parsée. Ce double-flux
+    // créait un flicker (ancien créneau persistant). Fix : forcer setBookings ici avec date+time
+    // mis à jour AVANT le helper, pour garantir un déplacement visuel instantané et stable.
+    // Le rollback est géré par updateBooking (CollabPortal) si le PUT échoue.
+    if (typeof setBookings === 'function') {
+      setBookings(prev => (prev || []).map(b => b && b.id === bkId
+        ? { ...b, date: targetDate, time: targetTime }
+        : b));
+    }
+    if (typeof updateBooking === 'function') {
+      updateBooking(bkId, { date: targetDate, time: targetTime });
+      if (typeof showNotif === 'function') showNotif(`RDV déplacé au ${targetDate} ${targetTime}`, 'success');
+    }
+    // Phase3 refresh fix — Refetch /api/init après ~400ms pour aligner googleEvents + outlookEvents
+    // avec le cache backend (mis à jour côté services/*Calendar.js après PATCH Graph). Délai laisse
+    // le PUT booking et le PATCH externe terminer. Silencieux (pas de toast). Try/catch non-bloquant.
+    if (company?.id) {
+      setTimeout(() => {
+        api(`/api/init?companyId=${company.id}`).then(initData => {
+          if (initData && !initData.error) {
+            if (Array.isArray(initData.googleEvents) && typeof setGoogleEvents === 'function') setGoogleEvents(initData.googleEvents);
+            if (Array.isArray(initData.outlookEvents) && typeof setOutlookEvents === 'function') setOutlookEvents(initData.outlookEvents);
+          }
+        }).catch(() => {});
+      }, 400);
+    }
+  }, [myBookings, updateBooking, setBookings, showNotif, company, setGoogleEvents, setOutlookEvents]);
+
+  // Phase1 quick wins — Raccourcis clavier Agenda (t/←/→/1/2/3/n).
+  // Skip si focus dans input/textarea/select/contenteditable. Cleanup obligatoire.
+  React.useEffect(() => {
+    const onKey = (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const t = e.target;
+      const tag = (t?.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || tag === 'select' || t?.isContentEditable) return;
+      switch (e.key) {
+        case 't': case 'T':
+          if (viewMode === 'week') setWeekOffset(0);
+          else if (viewMode === 'day') setSelectedDay(null);
+          else setMonthOffset(0);
+          if (agendaScrolledRef && 'current' in agendaScrolledRef) agendaScrolledRef.current = false;
+          break;
+        case 'ArrowLeft':
+          if (viewMode === 'week') setWeekOffset(w => w - 1);
+          else if (viewMode === 'day') setSelectedDay(prev => { const d = new Date(prev || dayDate); d.setDate(d.getDate() - 1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; });
+          else setMonthOffset(m => m - 1);
+          break;
+        case 'ArrowRight':
+          if (viewMode === 'week') setWeekOffset(w => w + 1);
+          else if (viewMode === 'day') setSelectedDay(prev => { const d = new Date(prev || dayDate); d.setDate(d.getDate() + 1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`; });
+          else setMonthOffset(m => m + 1);
+          break;
+        case '1': setViewMode('day'); break;
+        case '2': setViewMode('week'); break;
+        case '3': setViewMode('month'); break;
+        case 'n': case 'N':
+          if (typeof setPhoneScheduleForm === 'function' && typeof setPhoneShowScheduleModal === 'function') {
+            setPhoneScheduleForm({ contactId:'', contactName:'', number:'', date: new Date().toISOString().split('T')[0], time:'10:00', duration:30, notes:'', calendarId: (calendars || [])[0]?.id || '', _bookingMode:true });
+            setPhoneShowScheduleModal(true);
+          }
+          break;
+        default: return;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [viewMode, dayDate, calendars, setWeekOffset, setSelectedDay, setMonthOffset, setViewMode, setPhoneScheduleForm, setPhoneShowScheduleModal]);
 
   // V3.x.6.b1 — Auto-sync au mount Agenda si dernier sync > 5 min (silent fire-and-forget)
   // Garde useRef anti-double-call : 1 trigger par mount uniquement.
@@ -62,18 +167,32 @@ const AgendaTab = () => {
   // Source : _T.agendaFilter (state global tabState) — lu via les boutons compteur du composant.
   // Si 'all' : comportement actuel (cancelled exclus de Jour/Semaine, mois respecte ≠cancelled).
   // Si 'confirmed'|'pending'|'cancelled' : recalcul depuis myBookings (source non filtrée).
+  // Phase1 quick wins — persistance localStorage 'c360-agendaFilter' : load au mount, sync _T.
+  React.useEffect(() => {
+    try {
+      const _saved = localStorage.getItem('c360-agendaFilter');
+      if (_saved && _saved !== _T.agendaFilter) {
+        _T.agendaFilter = _saved;
+        if (typeof setPortalTabKey === 'function') setPortalTabKey(k => k + 1);
+      }
+    } catch {}
+  }, []);
   const _agFilter = _T.agendaFilter || 'all';
-  const _filteredMyBookings = _agFilter === 'all'
-    ? myBookings
-    : (myBookings || []).filter(b => b.status === _agFilter);
-  const _dayBkF = _agFilter === 'all'
-    ? dayBookings
-    : (() => { const seen = new Set(); return _filteredMyBookings.filter(b => { if(seen.has(b.id)) return false; seen.add(b.id); return b.date === dayDate; }).sort((a,b) => (a.time||'').localeCompare(b.time||'')); })();
-  const _weekBkF = _agFilter === 'all'
-    ? null
-    : _filteredMyBookings.filter(b => weekDates.includes(b.date));
+  // Phase1 quick wins — useMemo sur _dayBkF + _weekBkF (perf : évite recalcul à chaque render).
+  const _filteredMyBookings = React.useMemo(() => (
+    _agFilter === 'all' ? myBookings : (myBookings || []).filter(b => b.status === _agFilter)
+  ), [myBookings, _agFilter]);
+  const _dayBkF = React.useMemo(() => (
+    _agFilter === 'all'
+      ? dayBookings
+      : (() => { const seen = new Set(); return _filteredMyBookings.filter(b => { if (seen.has(b.id)) return false; seen.add(b.id); return b.date === dayDate; }).sort((a, b) => (a.time || '').localeCompare(b.time || '')); })()
+  ), [_agFilter, dayBookings, _filteredMyBookings, dayDate]);
+  const _weekBkF = React.useMemo(() => (
+    _agFilter === 'all' ? null : _filteredMyBookings.filter(b => weekDates.includes(b.date))
+  ), [_agFilter, _filteredMyBookings, weekDates]);
 
   return (
+<div style={{ background:'#F8FAFC', borderRadius:14, padding:'18px 20px', minHeight:'100%' }}>
 <div>
   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
     <div>
@@ -109,12 +228,17 @@ const AgendaTab = () => {
         else if(viewMode==="day") setSelectedDay(prev => { const d=new Date(prev||dayDate); d.setDate(d.getDate()-1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; });
         else setMonthOffset(m=>m-1);
       }}><I n="chevL" s={14}/></Btn>
-      <Btn small onClick={() => {
-        if(viewMode==="week") setWeekOffset(0);
-        else if(viewMode==="day") setSelectedDay(null);
-        else setMonthOffset(0);
-        agendaScrolledRef.current = false;
-      }} style={{background:((typeof weekOffset!=='undefined'?weekOffset:null)===0&&!selectedDay&&(typeof monthOffset!=='undefined'?monthOffset:null)===0)?'#22C55E':'',color:((typeof weekOffset!=='undefined'?weekOffset:null)===0&&!selectedDay&&(typeof monthOffset!=='undefined'?monthOffset:null)===0)?'#fff':'',border:((typeof weekOffset!=='undefined'?weekOffset:null)===0&&!selectedDay&&(typeof monthOffset!=='undefined'?monthOffset:null)===0)?'1px solid #22C55E':'',fontWeight:700}}>Aujourd'hui</Btn>
+      {(()=>{
+        // Phase1 quick wins — Bouton Aujourd'hui : disabled/grisé quand déjà sur aujourd'hui (au lieu de vert proactif).
+        const _isToday = ((typeof weekOffset!=='undefined'?weekOffset:null)===0)&&!selectedDay&&((typeof monthOffset!=='undefined'?monthOffset:null)===0);
+        return <Btn small disabled={_isToday} onClick={() => {
+          if (_isToday) return;
+          if(viewMode==="week") setWeekOffset(0);
+          else if(viewMode==="day") setSelectedDay(null);
+          else setMonthOffset(0);
+          agendaScrolledRef.current = false;
+        }} title={_isToday?"Vous êtes déjà sur aujourd'hui":"Revenir à aujourd'hui (raccourci : t)"} style={{background:_isToday?T.bg:'',color:_isToday?T.text3:'',border:_isToday?`1px solid ${T.border}`:'',fontWeight:_isToday?500:700,opacity:_isToday?0.5:1,cursor:_isToday?'default':'pointer'}}>Aujourd'hui</Btn>;
+      })()}
       <Btn small onClick={() => {
         if(viewMode==="week") setWeekOffset(w=>w+1);
         else if(viewMode==="day") setSelectedDay(prev => { const d=new Date(prev||dayDate); d.setDate(d.getDate()+1); return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`; });
@@ -207,7 +331,8 @@ const AgendaTab = () => {
     const pending = myBk.filter(b=>b.status==='pending').length;
     const cancelled = myBk.filter(b=>b.status==='cancelled').length;
     const total = confirmed + pending + cancelled;
-    const [agendaFilter, setAgendaFilter] = [_T.agendaFilter||'all', (v)=>{_T.agendaFilter=v;setPortalTabKey(k=>k+1);}];
+    // Phase1 quick wins — persist localStorage 'c360-agendaFilter' au click.
+    const [agendaFilter, setAgendaFilter] = [_T.agendaFilter||'all', (v)=>{_T.agendaFilter=v;try{localStorage.setItem('c360-agendaFilter',v);}catch{}setPortalTabKey(k=>k+1);}];
     return <div style={{display:'flex',gap:8,marginBottom:14}}>
       {[
         {id:'confirmed',label:'Confirmés',count:confirmed,icon:'check',color:'#22C55E',bg:'#22C55E08'},
@@ -240,13 +365,18 @@ const AgendaTab = () => {
         <Badge color={gridTheme.google} bg={gridTheme.google+"18"}>{collab.google_events_private ? "Occupé" : "Synchro"}</Badge>
       </div>
     )}
-    {/* V3.x.6 Phase 2C — Legend Outlook (mirror Google) */}
-    {(myOutlookEvents||[]).length > 0 && (
-      <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:'#0078D4' }}>
-        <div style={{ width:10, height:10, borderRadius:3, background:`repeating-linear-gradient(135deg,#0078D440,#0078D440 2px,transparent 2px,transparent 4px)`, border:`1px solid #0078D4` }}/> Outlook Agenda
-        <Badge color={'#0078D4'} bg={'#0078D418'}>{collab.outlook_events_private ? "Occupé" : "Synchro"}</Badge>
-      </div>
-    )}
+    {/* V3.x.6 Phase 2C — Legend Outlook (mirror Google). Phase1 quick wins : couleur via gridTheme.outlook (fallback #0078D4). */}
+    {(myOutlookEvents||[]).length > 0 && (()=>{
+      const _olColor = (gridTheme && gridTheme.outlook) ? gridTheme.outlook : '#0078D4';
+      return <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:_olColor }}>
+        <div style={{ width:10, height:10, borderRadius:3, background:`repeating-linear-gradient(135deg,${_olColor}40,${_olColor}40 2px,transparent 2px,transparent 4px)`, border:`1px solid ${_olColor}` }}/> Outlook Agenda
+        <Badge color={_olColor} bg={_olColor+"18"}>{collab.outlook_events_private ? "Occupé" : "Synchro"}</Badge>
+      </div>;
+    })()}
+    {/* Phase1 quick wins — Légende emoji cross-collab 🤝 (signifie RDV partagé / cross-collaborateur). */}
+    <div style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:T.text3 }} title="Apparait sur les RDV avec un contact partagé entre plusieurs collaborateurs">
+      <span style={{ fontSize:14, lineHeight:1 }}>🤝</span> RDV partagé / cross-collaborateur
+    </div>
   </div>
 
   {/* ── AUTRES CALENDRIERS (accordéon) — seulement si plusieurs calendriers ── */}
@@ -282,11 +412,20 @@ const AgendaTab = () => {
     const nowSlot = `${String(nowH).padStart(2,"0")}:${nowM < 30 ? "00" : "30"}`;
     const isDayToday = dayDate === todayStr;
     return (
-    <div>
+    <div key="agenda-view-day" style={{ animation:'agendaFadeInUp .22s ease-out' }}>
       <div style={{ textAlign:"center", marginBottom:12 }}>
         <div style={{ fontSize:16, fontWeight:700, color:T.accent }}>{DAYS_FR[getDow(dayDate)]} {new Date(dayDate).getDate()} {MONTHS_FR[new Date(dayDate).getMonth()]} {new Date(dayDate).getFullYear()}</div>
         <div style={{ fontSize:12, color:T.text3, marginTop:4 }}>{_dayBkF.length} RDV{_agFilter!=='all'?` (filtre: ${_agFilter})`:''} · {myGoogleEvents.filter(ge => ge.startTime.slice(0,10) === dayDate).length} Google · {(myOutlookEvents||[]).filter(oe => (oe.startTime||'').slice(0,10) === dayDate).length} Outlook</div>
       </div>
+      {/* Phase2 — Empty state intelligent : aucun RDV ce jour ET aucun event externe */}
+      {_dayBkF.length === 0 && myGoogleEvents.filter(ge => ge.startTime.slice(0,10) === dayDate).length === 0 && (myOutlookEvents||[]).filter(oe => (oe.startTime||'').slice(0,10) === dayDate).length === 0 && (
+        <div style={{ marginBottom:12, padding:'24px 20px', borderRadius:14, background:'linear-gradient(135deg, #F0FDF4 0%, #ECFDF5 100%)', border:'1px solid #A7F3D040', textAlign:'center', animation:'agendaFadeInUp .25s ease-out' }}>
+          <div style={{ fontSize:30, marginBottom:6 }}>🚀</div>
+          <div style={{ fontSize:15, fontWeight:700, color:'#065F46', marginBottom:4 }}>Votre journée est libre</div>
+          <div style={{ fontSize:12, color:'#047857', marginBottom:12 }}>Cliquez sur un créneau ci-dessous pour créer un RDV — ou utilisez le bouton ci-contre.</div>
+          <Btn small primary onClick={()=>{setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:dayDate,time:'10:00',duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true});setPhoneShowScheduleModal(true);}}><I n="calendar-plus" s={14}/> Nouveau RDV</Btn>
+        </div>
+      )}
       <Card style={{ padding:0, overflow:"hidden", borderRadius:12 }}>
         <div ref={el => { if (el && isDayToday && !agendaScrolledRef.current) { agendaScrolledRef.current = true; const scrollTo = Math.max(0, (nowH - (agendaWorkHours?7:0) - 2) * agendaZoom * 2); setTimeout(() => el.scrollTop = scrollTo, 100); } }} style={{ maxHeight:600, overflowY:"auto", overflowX:"hidden" }}>
           {hours.map(hour => {
@@ -305,9 +444,26 @@ const AgendaTab = () => {
             const nowOffsetPx = isNow ? Math.round(((nowH*60+nowM) - slotMin) / 30 * slotH) : 0;
             return (
               <div key={hour} style={{ display:"grid", gridTemplateColumns:"56px 1fr", height:slotH, borderBottom:`1px solid ${isFullHour ? '#e5e7eb' : '#f3f4f6'}`, position:"relative" }}>
-                {isNow && <div style={{ position:"absolute", left:48, right:0, top:nowOffsetPx, height:2, background:'#EA4335', zIndex:10 }}><div style={{ position:'absolute', left:-5, top:-4, width:10, height:10, borderRadius:5, background:'#EA4335' }}/></div>}
+                {isNow && <div style={{ position:"absolute", left:48, right:0, top:nowOffsetPx, height:2, background:'#EF4444', zIndex:10 }}><div style={{ position:'absolute', left:-5, top:-4, width:10, height:10, borderRadius:5, background:'#EF4444', animation:'agendaNowPulse 2s ease-in-out infinite' }}/></div>}
                 <div style={{ padding:"0 8px", fontSize:11, color:isFullHour?'#70757a':'transparent', textAlign:"right", fontFamily:"-apple-system,sans-serif", lineHeight:slotH+'px', borderRight:'1px solid #dadce0', fontWeight:400, userSelect:'none' }}>{isFullHour ? (parseInt(hour)<10?parseInt(hour):hour.slice(0,2))+':00' : ''}</div>
-                <div onClick={()=>{if(isFreeSlot){setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:dayDate,time:hour,duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true});setPhoneShowScheduleModal(true);}}} onMouseEnter={e=>{if(isFreeSlot)e.currentTarget.style.background='#E8F5E920';}} onMouseLeave={e=>{if(isFreeSlot)e.currentTarget.style.background=isAvail?'#fff':'#f8f9fa';}} style={{ position:"relative", overflow:"visible", background: isAvail ? '#fff' : '#f8f9fa', cursor:isFreeSlot?'pointer':'default', transition:'background .1s' }}>
+                <div
+                  onClick={()=>{if(isFreeSlot){setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:dayDate,time:hour,duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true});setPhoneShowScheduleModal(true);}}}
+                  title={isFreeSlot?"+ Créer un RDV à "+hour:undefined}
+                  onMouseEnter={e=>{if(isFreeSlot)e.currentTarget.style.background='rgba(59,130,246,0.06)';}}
+                  onMouseLeave={e=>{if(isFreeSlot)e.currentTarget.style.background=isAvail?'#fff':'#f8f9fa';}}
+                  /* Phase3 drag drop : zone droppable Day. */
+                  onDragOver={e=>{if(_dragBkId){e.preventDefault();e.dataTransfer.dropEffect='move';const _slotKey=dayDate+'_'+hour;if(_dragOverSlot!==_slotKey)_setDragOverSlot(_slotKey);}}}
+                  onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget)){const _slotKey=dayDate+'_'+hour;if(_dragOverSlot===_slotKey)_setDragOverSlot(null);}}}
+                  onDrop={e=>{e.preventDefault();const _bkId=e.dataTransfer.getData('text/plain');if(_bkId)_handleBkDrop(_bkId,dayDate,hour);}}
+                  style={{
+                    position:"relative", overflow:"visible",
+                    background: (_dragOverSlot===dayDate+'_'+hour)?'rgba(59,130,246,0.14)':(isAvail ? '#fff' : '#f8f9fa'),
+                    cursor:isFreeSlot?'pointer':'default',
+                    transition:'background .12s',
+                    border:(_dragOverSlot===dayDate+'_'+hour)?'1px dashed #3B82F6':'none',
+                    boxSizing:'border-box',
+                  }}
+                >
                   {hBookings.map(b => {
                     const cal = calendars.find(c => c.id === b.calendarId);
                     const dur = b.duration || 30;
@@ -320,15 +476,33 @@ const AgendaTab = () => {
                     const blockHeight = Math.max(24, Math.round(dur / 30 * slotH));
                     const _bContact=(contacts||[]).find(c=>c.id===b.contactId||(c.email&&b.visitorEmail&&c.email.toLowerCase()===b.visitorEmail.toLowerCase()));
                     const _bColor=_bContact?.card_color||'#4285F4';
+                    // Phase2 premium : pending=#F59E0B, hover scale 1.02 + shadow renforcée
+                    const _isPending = b.status === 'pending';
+                    const _bgColor = _isPending ? '#F59E0B' : _bColor;
+                    // Phase3 drag drop : booking draggable Day. Cancel sont non draggable (grayed).
+                    const _isDragging = _dragBkId === b.id;
+                    const _canDrag = b.status !== 'cancelled';
                     return (
-                      <div key={b.id} onClick={(e) => {e.stopPropagation(); setSelectedBooking(b);}} style={{
-                        padding:"4px 10px", borderRadius:6, cursor:"pointer",
-                        background:_bColor, borderLeft:_bContact?.card_color?`4px solid ${_bColor}`:'none',
+                      <div
+                        key={b.id}
+                        draggable={_canDrag}
+                        onDragStart={e => { if (!_canDrag) { e.preventDefault(); return; } e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', b.id); _setDragBkId(b.id); }}
+                        onDragEnd={() => { _setDragBkId(null); _setDragOverSlot(null); }}
+                        onClick={(e) => {e.stopPropagation(); setSelectedBooking(b);}}
+                        onMouseEnter={e=>{ if(_dragBkId)return; e.currentTarget.style.transform='scale(1.02)'; e.currentTarget.style.boxShadow=`0 6px 16px ${_bgColor}55`; e.currentTarget.style.zIndex=5;}}
+                        onMouseLeave={e=>{e.currentTarget.style.transform='scale(1)'; e.currentTarget.style.boxShadow=`0 2px 6px ${_bgColor}40`; e.currentTarget.style.zIndex=2;}}
+                        title={_canDrag?"Glisser pour déplacer · Cliquer pour ouvrir":"Annulé"}
+                        style={{
+                        padding:"6px 10px", borderRadius:8, cursor:_canDrag?(_isDragging?'grabbing':'grab'):"pointer",
+                        background:_bgColor, borderLeft:_bContact?.card_color?`4px solid ${_bColor}`:'none',
                         fontSize:12, lineHeight:1.3,
                         height: blockHeight,
-                        position:'absolute', top: offsetPx, left:2, width:'calc(100% - 8px)', zIndex:2,
-                        opacity:b.status==="cancelled"?0.4:1,
-                        boxShadow:`0 1px 3px ${_bColor}40`, color:'#fff',
+                        position:'absolute', top: offsetPx, left:2, width:'calc(100% - 8px)', zIndex:_isDragging?6:2,
+                        opacity:_isDragging?0.55:(b.status==="cancelled"?0.4:1),
+                        transform:_isDragging?'scale(1.04)':'scale(1)',
+                        boxShadow:_isDragging?`0 12px 28px ${_bgColor}66`:`0 2px 6px ${_bgColor}40`, color:'#fff',
+                        transition:'transform .15s ease, box-shadow .15s ease, opacity .15s ease',
+                        willChange:'transform',
                       }}>
                         <div style={{ fontWeight:600, textDecoration:b.status==="cancelled"?"line-through":"none", overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{(()=>{const _ct=b.contactId?(contacts||[]).find(_c=>_c.id===b.contactId):null; const _xc=_ct?.assignedTo&&Array.isArray(_ct.shared_with)&&_ct.shared_with.length>0; return _xc?<span title="RDV cross-collaborateur">🤝 </span>:null;})()}{b.visitorName}</div>
                         <div style={{ fontSize:11, opacity:0.9 }}>{b.time} → {endTime} · {dur}min</div>
@@ -348,20 +522,22 @@ const AgendaTab = () => {
                       <svg width="16" height="16" viewBox="0 0 24 24" style={{ flexShrink:0 }}><circle cx="12" cy="12" r="10" fill="#4285F4" opacity=".2"/><path d="M12 7v5l3 3" stroke="#4285F4" strokeWidth="2" fill="none" strokeLinecap="round"/></svg>
                     </div>
                   ))}
-                  {/* V3.x.6 fix Day — Outlook events rendering (mirror Google) */}
-                  {hOutlookEvents.map(oe => (
+                  {/* V3.x.6 fix Day — Outlook events rendering (mirror Google). Phase1 quick wins : couleur via gridTheme.outlook (fallback #0078D4). */}
+                  {hOutlookEvents.map(oe => {
+                    const _olColor = (gridTheme && gridTheme.outlook) ? gridTheme.outlook : '#0078D4';
+                    return (
                     <div key={"oe-"+oe.id} style={{
                       padding:"8px 12px", borderRadius:8, marginBottom:2,
-                      background:`repeating-linear-gradient(135deg,#0078D414,#0078D414 3px,transparent 3px,transparent 6px)`,
-                      borderLeft:`3px solid #0078D4`, fontSize:12, lineHeight:1.4, opacity:0.85, display:"flex", alignItems:"center", gap:8, cursor:"default",
+                      background:`repeating-linear-gradient(135deg,${_olColor}14,${_olColor}14 3px,transparent 3px,transparent 6px)`,
+                      borderLeft:`3px solid ${_olColor}`, fontSize:12, lineHeight:1.4, opacity:0.85, display:"flex", alignItems:"center", gap:8, cursor:"default",
                     }}>
                       <div style={{ flex:1 }}>
                         <div style={{ fontWeight:700, color:T.text3 }}>{collab.outlook_events_private ? "Occupé" : (oe.summary || "Occupé")}</div>
-                        <div style={{ color:'#0078D4', fontWeight:600, fontSize:11 }}>{oe.allDay ? "Journée entière" : `${(oe.startTime||'').slice(11,16)} - ${(oe.endTime||'').slice(11,16)}`} · Outlook Agenda</div>
+                        <div style={{ color:_olColor, fontWeight:600, fontSize:11 }}>{oe.allDay ? "Journée entière" : `${(oe.startTime||'').slice(11,16)} - ${(oe.endTime||'').slice(11,16)}`} · Outlook Agenda</div>
                       </div>
-                      <svg width="16" height="16" viewBox="0 0 24 24" style={{ flexShrink:0 }}><rect x="3" y="5" width="13" height="14" rx="1.5" fill="#0078D4" opacity=".25"/><rect x="16" y="8" width="5" height="8" fill="#0078D4" opacity=".4"/></svg>
+                      <svg width="16" height="16" viewBox="0 0 24 24" style={{ flexShrink:0 }}><rect x="3" y="5" width="13" height="14" rx="1.5" fill={_olColor} opacity=".25"/><rect x="16" y="8" width="5" height="8" fill={_olColor} opacity=".4"/></svg>
                     </div>
-                  ))}
+                  );})}
                 </div>
               </div>
             );
@@ -378,7 +554,7 @@ const AgendaTab = () => {
     const nowM = today.getMinutes();
     const nowSlot = `${String(nowH).padStart(2,"0")}:${nowM < 30 ? "00" : "30"}`;
     return (
-    <Card style={{ padding:0, overflow:"hidden", borderRadius:12 }}>
+    <Card key="agenda-view-week" style={{ padding:0, overflow:"hidden", borderRadius:12, animation:'agendaFadeInUp .22s ease-out' }}>
       <div style={{ display:"grid", gridTemplateColumns:"52px repeat(7,1fr)", borderBottom:`1px solid ${T.border}` }}>
         <div style={{ padding:8, borderRight:`1px solid ${T.border}` }}/>
         {weekDates.map((ds,i) => {
@@ -407,7 +583,7 @@ const AgendaTab = () => {
           const nowOffPx = isNowRow ? Math.round(((nowH*60+nowM) - slotMin) / 30 * slotH) : 0;
           return (
           <div key={hour} style={{ display:"grid", gridTemplateColumns:"56px repeat(7,1fr)", height:slotH, borderBottom:`1px solid ${isFullHour ? '#dadce0' : '#f1f3f4'}`, position:"relative" }}>
-            {isNowRow && <div style={{ position:"absolute", left:48, right:0, top:nowOffPx, height:2, background:'#EA4335', zIndex:10, pointerEvents:'none' }}><div style={{ position:'absolute', left:-5, top:-4, width:10, height:10, borderRadius:5, background:'#EA4335' }}/></div>}
+            {isNowRow && <div style={{ position:"absolute", left:48, right:0, top:nowOffPx, height:2, background:'#EF4444', zIndex:10, pointerEvents:'none' }}><div style={{ position:'absolute', left:-5, top:-4, width:10, height:10, borderRadius:5, background:'#EF4444', animation:'agendaNowPulse 2s ease-in-out infinite' }}/></div>}
             <div style={{ padding:"0 8px", fontSize:11, color:isFullHour?'#70757a':'transparent', textAlign:"right", fontFamily:"-apple-system,sans-serif", lineHeight:slotH+'px', borderRight:'1px solid #dadce0', fontWeight:400, userSelect:'none' }}>{isFullHour ? (parseInt(hour)<10?parseInt(hour):hour.slice(0,2))+':00' : ''}</div>
             {weekDates.map((ds,i) => {
               const cellBookings = getBookingAt(ds, hour);
@@ -421,12 +597,25 @@ const AgendaTab = () => {
               const isOeStart = (oe) => { if (oe.allDay) return hour === hours[0]; const oeSlotMin = parseInt((oe.startTime||'').slice(11,13))*60+parseInt((oe.startTime||'').slice(14,16)); return oeSlotMin >= slotMin && oeSlotMin < slotMin + 30; };
               const isEmptyAvail = isAvail && cellBookings.length===0 && cellGoogleEvents.length===0 && cellOutlookEvents.length===0;
               return (
-                <div key={ds+hour} onClick={()=>{if(isEmptyAvail){setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:ds,time:hour,duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true});setPhoneShowScheduleModal(true);}}} title={isEmptyAvail?'+ Créer un RDV':undefined} onMouseEnter={e=>{if(isEmptyAvail)e.currentTarget.style.background='#E8F5E920';}} onMouseLeave={e=>{e.currentTarget.style.background=isToday?'#E8F0FE40':isAvail?'#fff':'#f8f9fa';}} style={{
-                  borderRight:i<6?'1px solid #dadce060':'none', padding:0,
-                  background: isToday ? '#E8F0FE40' : isAvail ? '#fff' : '#f8f9fa',
-                  height:slotH, position:"relative", overflow:'visible',
-                  cursor: isEmptyAvail ? 'pointer' : 'default', transition:'background .1s',
-                }}>
+                <div
+                  key={ds+hour}
+                  onClick={()=>{if(isEmptyAvail){setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:ds,time:hour,duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true});setPhoneShowScheduleModal(true);}}}
+                  title={isEmptyAvail?'+ Créer un RDV à '+hour:undefined}
+                  onMouseEnter={e=>{if(isEmptyAvail)e.currentTarget.style.background='rgba(59,130,246,0.06)';}}
+                  onMouseLeave={e=>{e.currentTarget.style.background=isToday?'#E8F0FE40':isAvail?'#fff':'#f8f9fa';}}
+                  /* Phase3 drag drop : zone droppable Week. */
+                  onDragOver={e=>{if(_dragBkId){e.preventDefault();e.dataTransfer.dropEffect='move';const _sk=ds+'_'+hour;if(_dragOverSlot!==_sk)_setDragOverSlot(_sk);}}}
+                  onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget)){const _sk=ds+'_'+hour;if(_dragOverSlot===_sk)_setDragOverSlot(null);}}}
+                  onDrop={e=>{e.preventDefault();const _bkId=e.dataTransfer.getData('text/plain');if(_bkId)_handleBkDrop(_bkId,ds,hour);}}
+                  style={{
+                    borderRight:i<6?'1px solid #dadce060':'none', padding:0,
+                    background: (_dragOverSlot===ds+'_'+hour)?'rgba(59,130,246,0.14)':(isToday ? '#E8F0FE40' : isAvail ? '#fff' : '#f8f9fa'),
+                    height:slotH, position:"relative", overflow:'visible',
+                    cursor: isEmptyAvail ? 'pointer' : 'default', transition:'background .12s',
+                    border:(_dragOverSlot===ds+'_'+hour)?'1px dashed #3B82F6':undefined,
+                    boxSizing:'border-box',
+                  }}
+                >
                   {cellBookings.filter(b => isStartSlot(b)).map(b => {
                     const dur = b.duration||30;
                     const [bH,bM] = (b.time||'0:0').split(':').map(Number);
@@ -441,15 +630,33 @@ const AgendaTab = () => {
                     const _agXC = _wContact?.assignedTo && Array.isArray(_wContact.shared_with) && _wContact.shared_with.length > 0;
                     const _agDisplay = _agXC ? '🤝 ' + bkDisplayName : bkDisplayName;
                     const _wColor=_wContact?.card_color||'#4285F4';
+                    // Phase2 premium : pending=#F59E0B, hover scale 1.03 + shadow renforcée, border-radius 6
+                    const _wIsPending = b.status === 'pending';
+                    const _wBgColor = _wIsPending ? '#F59E0B' : _wColor;
+                    // Phase3 drag drop : booking draggable Week.
+                    const _wIsDragging = _dragBkId === b.id;
+                    const _wCanDrag = b.status !== 'cancelled';
                     return (
-                      <div key={b.id} onClick={(e) => {e.stopPropagation(); setSelectedBooking(b);}} style={{
-                        padding:"2px 6px", borderRadius:4, cursor:"pointer",
-                        background:_wColor, color:'#fff',
+                      <div
+                        key={b.id}
+                        draggable={_wCanDrag}
+                        onDragStart={e => { if (!_wCanDrag) { e.preventDefault(); return; } e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain', b.id); _setDragBkId(b.id); }}
+                        onDragEnd={() => { _setDragBkId(null); _setDragOverSlot(null); }}
+                        onClick={(e) => {e.stopPropagation(); setSelectedBooking(b);}}
+                        onMouseEnter={e=>{ if(_dragBkId)return; e.currentTarget.style.transform='scale(1.03)'; e.currentTarget.style.boxShadow=`0 4px 10px ${_wBgColor}55`; e.currentTarget.style.zIndex=5;}}
+                        onMouseLeave={e=>{e.currentTarget.style.transform='scale(1)'; e.currentTarget.style.boxShadow=`0 1px 3px ${_wBgColor}40`; e.currentTarget.style.zIndex=2;}}
+                        title={_wCanDrag?"Glisser pour déplacer":undefined}
+                        style={{
+                        padding:"3px 7px", borderRadius:6, cursor:_wCanDrag?(_wIsDragging?'grabbing':'grab'):"pointer",
+                        background:_wBgColor, color:'#fff',
                         fontSize:10, lineHeight:1.2,
                         height: blockHeight, overflow:'hidden',
-                        position:'absolute', top: offsetPx, left:2, width:'calc(100% - 4px)', zIndex:2,
-                        opacity:b.status==="cancelled"?0.4:1,
-                        boxShadow:`0 1px 3px ${_wColor}40`,
+                        position:'absolute', top: offsetPx, left:2, width:'calc(100% - 4px)', zIndex:_wIsDragging?6:2,
+                        opacity:_wIsDragging?0.55:(b.status==="cancelled"?0.4:1),
+                        transform:_wIsDragging?'scale(1.05)':'scale(1)',
+                        boxShadow:_wIsDragging?`0 8px 20px ${_wBgColor}66`:`0 1px 3px ${_wBgColor}40`,
+                        transition:'transform .15s ease, box-shadow .15s ease, opacity .15s ease',
+                        willChange:'transform',
                       }}>
                         <div style={{ fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textDecoration:b.status==="cancelled"?"line-through":"none" }} title={bkDisplayName}>{_agDisplay}</div>
                         <div style={{ fontSize:9, opacity:0.85 }}>{b.time}–{endTime}</div>
@@ -472,15 +679,16 @@ const AgendaTab = () => {
                       <div style={{ fontSize:9, opacity:0.85 }}>{ge.allDay ? "Journée" : ge.startTime.slice(11,16)}</div>
                     </div>);
                   })}
-                  {/* V3.x.6 fix Week — Outlook events rendering (mirror Google) */}
+                  {/* V3.x.6 fix Week — Outlook events rendering (mirror Google). Phase1 quick wins : couleur via gridTheme.outlook. */}
                   {cellOutlookEvents.filter(oe => isOeStart(oe)).map(oe => {
                     const oeSlotMin = parseInt((oe.startTime||'').slice(11,13))*60+parseInt((oe.startTime||'').slice(14,16));
                     const offsetMin = oeSlotMin - slotMin;
                     const offsetPx = Math.round(offsetMin / 30 * slotH);
+                    const _olColor = (gridTheme && gridTheme.outlook) ? gridTheme.outlook : '#0078D4';
                     return (
                     <div key={"oe-"+oe.id} title={collab.outlook_events_private ? "Occupé" : (oe.summary || "Outlook")} style={{
                       padding:"2px 6px", borderRadius:4,
-                      background:'#0078D4', color:'#fff',
+                      background:_olColor, color:'#fff',
                       fontSize:10, lineHeight:1.2, position:'absolute', top:offsetPx, left:2, width:'calc(100% - 4px)', zIndex:1,
                       height: Math.max(20, Math.round(((new Date(oe.endTime).getTime()-new Date(oe.startTime).getTime())/60000) / 30 * slotH)),
                       overflow:'hidden', opacity:0.85, cursor:'default',
@@ -502,7 +710,7 @@ const AgendaTab = () => {
 
   {/* ── MONTH VIEW ── */}
   {viewMode === "month" && (
-    <div>
+    <div key="agenda-view-month" style={{ animation:'agendaFadeInUp .22s ease-out' }}>
       <div style={{ textAlign:"center", marginBottom:16 }}>
         <div style={{ fontSize:18, fontWeight:700 }}>{MONTHS_FR[monthMonth]} {monthYear}</div>
       </div>
@@ -523,7 +731,7 @@ const AgendaTab = () => {
             const dayOe = (myOutlookEvents||[]).filter(oe => { if (oe.allDay) return ds >= (oe.startTime||'').slice(0,10) && ds < (oe.endTime||'').slice(0,10); return (oe.startTime||'').slice(0,10) === ds; });
             const totalItems = dayBk.length + dayGe.length + dayOe.length;
             return (
-              <div key={ds} onClick={() => { setSelectedDay(ds); setViewMode("day"); }} style={{
+              <div key={ds} onClick={() => { setSelectedDay(ds); setViewMode("day"); }} title={`Voir le ${new Date(ds).toLocaleDateString('fr-FR',{day:'numeric',month:'long'})} en détail`} style={{
                 minHeight:80, padding:6, borderBottom:`1px solid ${T.border}08`, borderRight:`1px solid ${T.border}08`,
                 cursor:"pointer", background:isToday?T.accentBg:"transparent",
               }}>
@@ -545,12 +753,14 @@ const AgendaTab = () => {
                     {ge.allDay ? "Journée" : ge.startTime.slice(11,16)} {collab.google_events_private ? "Occupé" : (ge.summary || "Occupé")}
                   </div>
                 ))}
-                {/* V3.x.6 Phase 2C — Outlook events on this day (mirror Google rendering) */}
-                {dayOe.slice(0, Math.max(0, 3-dayBk.length-dayGe.length)).map(oe => (
-                  <div key={"oe-"+oe.id} title={collab.outlook_events_private ? "Occupé (Outlook)" : (oe.summary || "Outlook Agenda")} style={{ fontSize:10, padding:"2px 4px", borderRadius:3, background:'#0078D418', color:'#0078D4', fontWeight:600, marginBottom:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", cursor:"default" }}>
+                {/* V3.x.6 Phase 2C — Outlook events on this day (mirror Google rendering). Phase1 quick wins : couleur via gridTheme.outlook. */}
+                {dayOe.slice(0, Math.max(0, 3-dayBk.length-dayGe.length)).map(oe => {
+                  const _olColor = (gridTheme && gridTheme.outlook) ? gridTheme.outlook : '#0078D4';
+                  return (
+                  <div key={"oe-"+oe.id} title={collab.outlook_events_private ? "Occupé (Outlook)" : (oe.summary || "Outlook Agenda")} style={{ fontSize:10, padding:"2px 4px", borderRadius:3, background:_olColor+'18', color:_olColor, fontWeight:600, marginBottom:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", cursor:"default" }}>
                     {oe.allDay ? "Journée" : (oe.startTime||'').slice(11,16)} {collab.outlook_events_private ? "Occupé" : (oe.summary || "Occupé")}
                   </div>
-                ))}
+                );})}
                 {totalItems > 3 && <div style={{ fontSize:10, color:T.text3, fontWeight:600 }}>+{totalItems-3} de plus</div>}
               </div>
             );
@@ -696,14 +906,9 @@ const AgendaTab = () => {
         </Btn>
       </div>
 
-      {/* Footer rassurant */}
-      <div style={{ marginTop:8, display:'flex', alignItems:'center', gap:10, flexWrap:'wrap', fontSize:10, color:T.text3 }}>
-        <span style={{ display:'flex', alignItems:'center', gap:3 }}>
-          <span style={{ color:'#22C55E' }}>●</span> Lien sécurisé
-        </span>
-        <span style={{ display:'flex', alignItems:'center', gap:3 }}>🕒 Disponible 24h/24</span>
-        <span style={{ display:'flex', alignItems:'center', gap:3 }}>⚡ Réservation instantanée</span>
-        <span style={{ marginLeft:'auto', fontStyle:'italic' }}>Partagez-le avec vos clients pour qu'ils réservent directement</span>
+      {/* Footer compact (Phase1 quick wins) — réduit de 4 mentions à 1 seule ligne discrète */}
+      <div style={{ marginTop:8, fontSize:10, color:T.text3, fontStyle:'italic' }}>
+        <span style={{ color:'#22C55E', marginRight:4 }}>●</span> Lien sécurisé · partagez-le pour permettre la réservation directe
       </div>
     </div>;
   })()}
@@ -893,36 +1098,23 @@ const AgendaTab = () => {
     </Modal>;
   })()}
 
-  {/* ── MES RENDEZ-VOUS (liste intégrée) ── */}
+  {/* ── MES RENDEZ-VOUS (liste intégrée) ──
+      Phase1 quick wins : DOUBLON compteurs supprimé. La liste suit le filtre du haut (_agFilter)
+      uniquement. mrStatusFilter conservé en backstop legacy mais inutilisé en pratique. */}
   {(()=>{
-    // V1.8.24.5 — Liste view : intersection mrStatusFilter (filtre interne stat) ET _agFilter (filtre agenda global)
-    const _mrFilter = (typeof mrStatusFilter!=='undefined'?mrStatusFilter:null);
-    const filteredBookings = (() => {
-      let base = myBookings;
-      if (_agFilter !== 'all') base = base.filter(b => b.status === _agFilter);
-      if (_mrFilter && _mrFilter !== 'all') base = base.filter(b => b.status === _mrFilter);
-      return base;
-    })();
+    const filteredBookings = _agFilter === 'all' ? myBookings : myBookings.filter(b => b.status === _agFilter);
     return <div style={{ marginTop:24 }}>
     <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:12 }}>
       <h2 style={{ fontSize:16, fontWeight:700, color:T.text, display:'flex', alignItems:'center', gap:8 }}>
         <I n="list" s={16} color={T.accent}/> Mes Rendez-vous
-        {(typeof mrStatusFilter!=='undefined'?mrStatusFilter:null) !== 'all' && <span style={{ padding:'2px 10px', borderRadius:6, background:T.accentBg, color:T.accent, fontSize:10, fontWeight:700, display:'flex', alignItems:'center', gap:4 }}>
-          Filtre : {mrStatusFilter==='confirmed'?'Confirmés':(typeof mrStatusFilter!=='undefined'?mrStatusFilter:null)==='pending'?'En attente':'Annulés'}
-          <span onClick={()=>setMrStatusFilter('all')} style={{ cursor:'pointer', marginLeft:2, fontSize:11 }}>×</span>
+        {_agFilter !== 'all' && <span style={{ padding:'2px 10px', borderRadius:6, background:T.accentBg, color:T.accent, fontSize:10, fontWeight:700, display:'flex', alignItems:'center', gap:4 }}>
+          Filtre : {_agFilter==='confirmed'?'Confirmés':_agFilter==='pending'?'En attente':'Annulés'}
         </span>}
       </h2>
-      {mrStatusFilter !== 'all' && <span onClick={()=>(typeof setMrStatusFilter==='function'?setMrStatusFilter:function(){})('all')} style={{ fontSize:11, color:T.accent, cursor:'pointer', fontWeight:600 }}>Tout afficher</span>}
-    </div>
-    <div style={{ display:'flex', gap:8, marginBottom:12 }}>
-      <Stat label="Confirmés" value={myBookings.filter(b=>b.status==="confirmed").length} icon="check" color={T.success} onClick={()=>(typeof setMrStatusFilter==='function'?setMrStatusFilter:function(){})(mrStatusFilter==='confirmed'?'all':'confirmed')} active={mrStatusFilter==='confirmed'}/>
-      <Stat label="En attente" value={myBookings.filter(b=>b.status==="pending").length} icon="clock" color={T.warning} onClick={()=>(typeof setMrStatusFilter==='function'?setMrStatusFilter:function(){})(mrStatusFilter==='pending'?'all':'pending')} active={mrStatusFilter==='pending'}/>
-      <Stat label="Annulés" value={myBookings.filter(b=>b.status==="cancelled").length} icon="x" color={T.danger} onClick={()=>(typeof setMrStatusFilter==='function'?setMrStatusFilter:function(){})(mrStatusFilter==='cancelled'?'all':'cancelled')} active={mrStatusFilter==='cancelled'}/>
-      <Stat label="Total" value={myBookings.length} icon="calendar" color={T.accent} onClick={()=>(typeof setMrStatusFilter==='function'?setMrStatusFilter:function(){})('all')} active={mrStatusFilter==='all'}/>
     </div>
     {filteredBookings.length === 0 ? (
       <div style={{ textAlign:'center', padding:30, color:T.text3, fontSize:12 }}>
-        {mrStatusFilter === 'all' ? 'Aucun rendez-vous pour le moment' : `Aucun rendez-vous ${mrStatusFilter==='confirmed'?'confirmé':mrStatusFilter==='pending'?'en attente':'annulé'}`}
+        {_agFilter === 'all' ? 'Aucun rendez-vous pour le moment' : `Aucun rendez-vous ${_agFilter==='confirmed'?'confirmé':_agFilter==='pending'?'en attente':'annulé'}`}
       </div>
     ) : (
       <Card style={{ padding:0, overflow:'hidden' }}>
@@ -954,6 +1146,7 @@ const AgendaTab = () => {
     )}
   </div>;
   })()}
+</div>
 </div>
   );
 };

@@ -138,15 +138,16 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const [aiSuggestionEdit, setAiSuggestionEdit] = useState(null);
   const [aiHistoryDetail, setAiHistoryDetail] = useState(null);
   // Grid color customization (persisted per collaborator)
+  // Phase1 quick wins : couleur outlook désormais incluse dans chaque preset (fallback hardcodé #0078D4 conservé côté AgendaTab pour rétro-compat).
   const gridColorPresets = [
-    { id:"ocean", label:"Océan", avail:"#DBEAFE", unavail:"#F1F5F9", accent:"#2563EB", border:"#93C5FD", nowLine:"#2563EB", booking:"#3B82F6", google:"#9CA3AF", pause:"#FDE68A" },
-    { id:"emerald", label:"Émeraude", avail:"#D1FAE5", unavail:"#F1F5F9", accent:"#059669", border:"#6EE7B7", nowLine:"#059669", booking:"#10B981", google:"#9CA3AF", pause:"#FDE68A" },
-    { id:"violet", label:"Violet", avail:"#EDE9FE", unavail:"#F5F3FF", accent:"#7C3AED", border:"#C4B5FD", nowLine:"#7C3AED", booking:"#8B5CF6", google:"#9CA3AF", pause:"#FDE68A" },
-    { id:"rose", label:"Rosé", avail:"#FFE4E6", unavail:"#FFF5F5", accent:"#E11D48", border:"#FDA4AF", nowLine:"#E11D48", booking:"#F43F5E", google:"#9CA3AF", pause:"#FDE68A" },
-    { id:"amber", label:"Ambre", avail:"#FEF3C7", unavail:"#FEFCE8", accent:"#D97706", border:"#FCD34D", nowLine:"#D97706", booking:"#F59E0B", google:"#9CA3AF", pause:"#FDE68A" },
-    { id:"slate", label:"Neutre", avail:"#E2E8F0", unavail:"#F8FAFC", accent:"#475569", border:"#CBD5E1", nowLine:"#475569", booking:"#64748B", google:"#9CA3AF", pause:"#FDE68A" },
+    { id:"ocean", label:"Océan", avail:"#DBEAFE", unavail:"#F1F5F9", accent:"#2563EB", border:"#93C5FD", nowLine:"#2563EB", booking:"#3B82F6", google:"#9CA3AF", outlook:"#0078D4", pause:"#FDE68A" },
+    { id:"emerald", label:"Émeraude", avail:"#D1FAE5", unavail:"#F1F5F9", accent:"#059669", border:"#6EE7B7", nowLine:"#059669", booking:"#10B981", google:"#9CA3AF", outlook:"#0EA5E9", pause:"#FDE68A" },
+    { id:"violet", label:"Violet", avail:"#EDE9FE", unavail:"#F5F3FF", accent:"#7C3AED", border:"#C4B5FD", nowLine:"#7C3AED", booking:"#8B5CF6", google:"#9CA3AF", outlook:"#6366F1", pause:"#FDE68A" },
+    { id:"rose", label:"Rosé", avail:"#FFE4E6", unavail:"#FFF5F5", accent:"#E11D48", border:"#FDA4AF", nowLine:"#E11D48", booking:"#F43F5E", google:"#9CA3AF", outlook:"#0078D4", pause:"#FDE68A" },
+    { id:"amber", label:"Ambre", avail:"#FEF3C7", unavail:"#FEFCE8", accent:"#D97706", border:"#FCD34D", nowLine:"#D97706", booking:"#F59E0B", google:"#9CA3AF", outlook:"#0078D4", pause:"#FDE68A" },
+    { id:"slate", label:"Neutre", avail:"#E2E8F0", unavail:"#F8FAFC", accent:"#475569", border:"#CBD5E1", nowLine:"#475569", booking:"#64748B", google:"#9CA3AF", outlook:"#0078D4", pause:"#FDE68A" },
   ];
-  const defaultCustomColors = { avail:"#DBEAFE", unavail:"#F1F5F9", accent:"#2563EB", border:"#93C5FD", nowLine:"#2563EB", booking:"#3B82F6", google:"#9CA3AF", pause:"#FDE68A" };
+  const defaultCustomColors = { avail:"#DBEAFE", unavail:"#F1F5F9", accent:"#2563EB", border:"#93C5FD", nowLine:"#2563EB", booking:"#3B82F6", google:"#9CA3AF", outlook:"#0078D4", pause:"#FDE68A" };
   const [gridThemeId, _setGridThemeId] = useState(() => { try { return localStorage.getItem(`c360-gridTheme-${collab.id}`) || "ocean"; } catch { return "ocean"; } });
   const setGridThemeId = (id) => { _setGridThemeId(id); localStorage.setItem(`c360-gridTheme-${collab.id}`, id); };
   const [customGridColors, _setCustomGridColors] = useState(() => { try { return JSON.parse(localStorage.getItem(`c360-gridCustom-${collab.id}`)) || null; } catch { return null; } });
@@ -4298,6 +4299,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       getLeadTemperature,
       googleEventsProp,
       outlookEventsProp,
+      // Phase3 refresh fix — setters exposés pour permettre refetch /api/init après drop
+      setGoogleEvents,
+      setOutlookEvents,
       handleCollabDeleteContact,
       handleCollabUpdateContact,
       handleColumnDragStart,
@@ -4336,7 +4340,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
 @keyframes shimmer{0%{background-position:200% 0;}100%{background-position:-200% 0;}}
 @keyframes fadeIn{from{opacity:0;}to{opacity:1;}}
 @keyframes fadeInScale{from{opacity:0;transform:scale(0.95);}to{opacity:1;transform:scale(1);}}
-@keyframes slideInRight{from{opacity:0;transform:translateX(30px);}to{opacity:1;transform:translateX(0);}}`}</style>
+@keyframes slideInRight{from{opacity:0;transform:translateX(30px);}to{opacity:1;transform:translateX(0);}}
+@keyframes agendaNowPulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0.55);}50%{box-shadow:0 0 0 6px rgba(239,68,68,0);}}
+@keyframes agendaFadeInUp{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}`}</style>
 
             {/* V7 TRANSFER MODAL */}
             {v7TransferModal && (

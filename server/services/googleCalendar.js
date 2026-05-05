@@ -131,6 +131,20 @@ export async function createEvent(collaboratorId, bookingData, calendarData) {
     const meetLink = res.data.hangoutLink || null;
     if (meetLink) console.log(`\x1b[32m[GOOGLE CAL]\x1b[0m Meet link created: ${meetLink}`);
     console.log(`\x1b[32m[GOOGLE CAL]\x1b[0m Event created: ${res.data.id}`);
+    // Cache fix — UPSERT google_events local pour cohérence immédiate (sans attendre cron 10min).
+    // transparency='opaque' = busy par défaut (cohérent avec syncEventsFromGoogle). Try/catch non-bloquant.
+    try {
+      db.prepare(
+        `INSERT OR REPLACE INTO google_events
+         (id, collaboratorId, summary, startTime, endTime, allDay, status, transparency)
+         VALUES (?, ?, ?, ?, ?, 0, 'confirmed', 'opaque')`
+      ).run(
+        res.data.id, collaboratorId,
+        event.summary || '',
+        start.toISO(),
+        end.toISO(),
+      );
+    } catch (cacheErr) { console.error('[GOOGLE CACHE] post-create local upsert failed:', cacheErr.message); }
     return { googleEventId: res.data.id, meetLink };
   } catch (err) {
     console.error('[GOOGLE CAL ERROR] createEvent:', err.message);
@@ -174,6 +188,19 @@ export async function updateEvent(collaboratorId, googleEventId, bookingData, ca
   try {
     await cal.events.update({ calendarId: 'primary', eventId: googleEventId, requestBody: event });
     console.log(`\x1b[32m[GOOGLE CAL]\x1b[0m Event updated: ${googleEventId}`);
+    // Cache fix — UPDATE google_events local pour refléter immédiatement le nouveau créneau.
+    // Sans ce sync, le cache local restait obsolète jusqu'au cron 10min, créant un bloc fantôme.
+    try {
+      db.prepare(
+        `UPDATE google_events SET summary = ?, startTime = ?, endTime = ?, transparency = ? WHERE id = ?`
+      ).run(
+        event.summary || '',
+        start.toISO(),
+        end.toISO(),
+        isCancelled ? 'transparent' : 'opaque',
+        googleEventId,
+      );
+    } catch (cacheErr) { console.error('[GOOGLE CACHE] post-update local sync failed:', cacheErr.message); }
   } catch (err) {
     console.error('[GOOGLE CAL ERROR] updateEvent:', err.message);
   }
@@ -189,6 +216,8 @@ export async function deleteEvent(collaboratorId, googleEventId) {
   try {
     await cal.events.delete({ calendarId: 'primary', eventId: googleEventId });
     console.log(`\x1b[32m[GOOGLE CAL]\x1b[0m Event deleted: ${googleEventId}`);
+    // Cache fix — DELETE local pour cohérence immédiate (sans attendre cron 10min). Idempotent.
+    try { db.prepare('DELETE FROM google_events WHERE id = ?').run(googleEventId); } catch (cacheErr) { console.error('[GOOGLE CACHE] post-delete local cleanup failed:', cacheErr.message); }
   } catch (err) {
     console.error('[GOOGLE CAL ERROR] deleteEvent:', err.message);
   }

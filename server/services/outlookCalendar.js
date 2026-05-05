@@ -431,6 +431,20 @@ export async function createEventOutlook(collaboratorId, bookingData, calendarDa
     }
     const data = await res.json();
     console.log(`\x1b[34m[OUTLOOK CAL]\x1b[0m Event created: ${data.id}`);
+    // Cache fix — UPSERT outlook_events local pour cohérence immédiate (sans attendre cron 10min).
+    // showAs='busy' par défaut (V3.x.5 cohérence). Try/catch pour ne JAMAIS bloquer si DB échoue.
+    try {
+      db.prepare(
+        `INSERT OR REPLACE INTO outlook_events
+         (id, collaboratorId, summary, startTime, endTime, allDay, status, showAs)
+         VALUES (?, ?, ?, ?, ?, 0, 'confirmed', 'busy')`
+      ).run(
+        data.id, collaboratorId,
+        body.subject,
+        DateTime.fromFormat(startDateTime, "yyyy-MM-dd'T'HH:mm:ss", { zone: tz }).toISO(),
+        DateTime.fromFormat(endDateTime, "yyyy-MM-dd'T'HH:mm:ss", { zone: tz }).toISO(),
+      );
+    } catch (cacheErr) { console.error('[OUTLOOK CACHE] post-create local upsert failed:', cacheErr.message); }
     return { outlookEventId: data.id };
   } catch (err) {
     // err.message only — never log full err object (token leak risk)
@@ -504,6 +518,19 @@ export async function updateEventOutlook(collaboratorId, outlookEventId, booking
       throw new Error(`Graph PATCH /me/events/{id} → ${res.status} ${res.statusText} ${txt.slice(0, 200)}`);
     }
     console.log(`\x1b[34m[OUTLOOK CAL]\x1b[0m Event updated: ${outlookEventId}`);
+    // Cache fix — UPDATE outlook_events local pour refléter immédiatement le nouveau créneau.
+    // Sans ce sync, le cache local restait obsolète jusqu'au cron 10min, créant un bloc fantôme.
+    try {
+      db.prepare(
+        `UPDATE outlook_events SET summary = ?, startTime = ?, endTime = ?, showAs = ? WHERE id = ?`
+      ).run(
+        body.subject,
+        DateTime.fromFormat(startDateTime, "yyyy-MM-dd'T'HH:mm:ss", { zone: tz }).toISO(),
+        DateTime.fromFormat(endDateTime, "yyyy-MM-dd'T'HH:mm:ss", { zone: tz }).toISO(),
+        isCancelled ? 'free' : 'busy',
+        outlookEventId,
+      );
+    } catch (cacheErr) { console.error('[OUTLOOK CACHE] post-update local sync failed:', cacheErr.message); }
     return { updated: true };
   } catch (err) {
     // err.message only — never log full err object (token leak risk)
@@ -541,6 +568,8 @@ export async function deleteEventOutlook(collaboratorId, outlookEventId) {
     });
     if (res.status === 404) {
       console.log(`\x1b[34m[OUTLOOK CAL]\x1b[0m Event already gone: ${outlookEventId}`);
+      // Cache fix — DELETE local idempotent (no-op si pas en cache).
+      try { db.prepare('DELETE FROM outlook_events WHERE id = ?').run(outlookEventId); } catch (cacheErr) { console.error('[OUTLOOK CACHE] post-delete-404 local cleanup failed:', cacheErr.message); }
       return { deleted: true, alreadyGone: true };
     }
     if (!res.ok) {
@@ -548,6 +577,8 @@ export async function deleteEventOutlook(collaboratorId, outlookEventId) {
       throw new Error(`Graph DELETE /me/events/{id} → ${res.status} ${res.statusText} ${txt.slice(0, 200)}`);
     }
     console.log(`\x1b[34m[OUTLOOK CAL]\x1b[0m Event deleted: ${outlookEventId}`);
+    // Cache fix — DELETE local pour cohérence immédiate (sans attendre cron 10min).
+    try { db.prepare('DELETE FROM outlook_events WHERE id = ?').run(outlookEventId); } catch (cacheErr) { console.error('[OUTLOOK CACHE] post-delete local cleanup failed:', cacheErr.message); }
     return { deleted: true };
   } catch (err) {
     // err.message only — never log full err object (token leak risk)
