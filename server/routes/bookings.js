@@ -175,6 +175,7 @@ router.post('/', requireAuth, enforceCompany, requirePermission('bookings.create
       visitorName: b.visitorName,
       visitorEmail: b.visitorEmail || '',
       visitorPhone: b.visitorPhone || '',
+      title: (b.title || '').trim(),  // V3.x.9 — titre custom RDV (Outlook subject + display grille)
       status: b.status || 'confirmed',
       notes: b.notes || '',
       noShow: b.noShow ? 1 : 0,
@@ -218,7 +219,7 @@ router.post('/', requireAuth, enforceCompany, requirePermission('bookings.create
     // Non-bloquant : booking créé même si Outlook fail (R2 mitigée).
     if (b.collaboratorId && outlookIsConnected(b.collaboratorId) && !b.outlookEventId) {
       const calOl = db.prepare('SELECT name, location FROM calendars WHERE id = ?').get(b.calendarId);
-      createEventOutlook(b.collaboratorId, { date: b.date, time: b.time, duration: b.duration || 30, visitorName: b.visitorName, visitorEmail: b.visitorEmail, visitorPhone: b.visitorPhone, notes: b.notes }, calOl || { name: '', location: '' })
+      createEventOutlook(b.collaboratorId, { date: b.date, time: b.time, duration: b.duration || 30, visitorName: b.visitorName, visitorEmail: b.visitorEmail, visitorPhone: b.visitorPhone, notes: b.notes, title: b.title || '' }, calOl || { name: '', location: '' })
         .then(result => {
           if (result?.outlookEventId) db.prepare('UPDATE bookings SET outlookEventId = ? WHERE id = ?').run(result.outlookEventId, id);
         })
@@ -365,6 +366,7 @@ router.put('/:id', requireAuth, requirePermission('bookings.edit'), (req, res) =
           startTime: newTime,
           duration: newDuration,
           excludeBookingId: req.params.id,
+          excludeOutlookEventId: oldBooking.outlookEventId || null,  // V3.x.9 — skip miroir du booking courant
         });
         if (conflict) {
           console.log(`[BOOKING-PUT CONFLICT] id=${req.params.id} new=${newCollabId}@${newDate}T${newTime} vs existing=${existingBooking.id}@${existingBooking.time}`);

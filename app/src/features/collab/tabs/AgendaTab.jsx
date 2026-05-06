@@ -439,7 +439,8 @@ const AgendaTab = () => {
             // V3.x.6 fix Day — Outlook events at this slot (mirror Google)
             const hOutlookEvents = (typeof getOutlookEventAt==='function'?getOutlookEventAt:()=>[])(dayDate, hour).filter(oe => { if (oe.allDay) return hour === hours[0]; const oeMin = parseInt((oe.startTime||'').slice(11,13))*60+parseInt((oe.startTime||'').slice(14,16)); return oeMin >= slotMin && oeMin < slotMin + 30; });
             const isAvail = isAvailableSlot(dayDate, hour);
-            const isFreeSlot = isAvail && hBookings.length === 0;
+            // V3.x.6 fix Day — slot bloqué si Google/Outlook event présent (mirror Week L598)
+            const isFreeSlot = isAvail && hBookings.length === 0 && hGoogleEvents.length === 0 && hOutlookEvents.length === 0;
             const isNow = isDayToday && Math.abs(slotMin - (nowH*60+nowM)) < 30 && slotMin <= nowH*60+nowM;
             const nowOffsetPx = isNow ? Math.round(((nowH*60+nowM) - slotMin) / 30 * slotH) : 0;
             return (
@@ -504,7 +505,7 @@ const AgendaTab = () => {
                         transition:'transform .15s ease, box-shadow .15s ease, opacity .15s ease',
                         willChange:'transform',
                       }}>
-                        <div style={{ fontWeight:600, textDecoration:b.status==="cancelled"?"line-through":"none", overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{(()=>{const _ct=b.contactId?(contacts||[]).find(_c=>_c.id===b.contactId):null; const _xc=_ct?.assignedTo&&Array.isArray(_ct.shared_with)&&_ct.shared_with.length>0; return _xc?<span title="RDV cross-collaborateur">🤝 </span>:null;})()}{b.visitorName}</div>
+                        <div style={{ fontWeight:600, textDecoration:b.status==="cancelled"?"line-through":"none", overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{(()=>{const _ct=b.contactId?(contacts||[]).find(_c=>_c.id===b.contactId):null; const _xc=_ct?.assignedTo&&Array.isArray(_ct.shared_with)&&_ct.shared_with.length>0; return _xc?<span title="RDV cross-collaborateur">🤝 </span>:null;})()}{b.title || b.visitorName}</div>
                         <div style={{ fontSize:11, opacity:0.9 }}>{b.time} → {endTime} · {dur}min</div>
                       </div>
                     );
@@ -626,7 +627,7 @@ const AgendaTab = () => {
                     const offsetPx = Math.round(offsetMin / 30 * slotH);
                     const blockHeight = Math.max(20, Math.round(dur / 30 * slotH));
                     const _wContact=b.contactId&&(contacts||[]).find(c=>c.id===b.contactId);
-                    const bkDisplayName = _wContact?.name || b.visitorName;
+                    const bkDisplayName = b.title || _wContact?.name || b.visitorName;
                     const _agXC = _wContact?.assignedTo && Array.isArray(_wContact.shared_with) && _wContact.shared_with.length > 0;
                     const _agDisplay = _agXC ? '🤝 ' + bkDisplayName : bkDisplayName;
                     const _wColor=_wContact?.card_color||'#4285F4';
@@ -740,7 +741,7 @@ const AgendaTab = () => {
                   const cal = calendars.find(c => c.id === b.calendarId);
                   const _mContact=b.contactId&&(contacts||[]).find(c=>c.id===b.contactId);
                   const _mXC = _mContact?.assignedTo && Array.isArray(_mContact.shared_with) && _mContact.shared_with.length > 0;
-                  const bkName = (_mXC ? '🤝 ' : '') + (_mContact?.name || b.visitorName);
+                  const bkName = (_mXC ? '🤝 ' : '') + (b.title || _mContact?.name || b.visitorName);
                   const _mColor=_mContact?.card_color||gridTheme.booking;
                   return (
                     <div key={b.id} title={`${b.time} — ${bkName}`} style={{ fontSize:10, padding:"2px 4px", borderRadius:3, background:_mColor+"18", color:_mColor, fontWeight:600, marginBottom:1, whiteSpace:"nowrap", overflow:"hidden", textOverflow:"ellipsis", borderLeft:`2px solid ${_mColor}` }}>
@@ -1130,7 +1131,7 @@ const AgendaTab = () => {
             <div key={b.id} style={{ display:'flex', alignItems:'center', gap:14, padding:'12px 16px', borderBottom:`1px solid ${T.border}08`, opacity:b.status==='cancelled'?0.5:1 }}>
               <div style={{ width:4, height:36, borderRadius:2, background:cal?.color, flexShrink:0 }}/>
               <div style={{ flex:1, minWidth:0 }}>
-                <div style={{ fontSize:13, fontWeight:600, color:T.text }}>{(()=>{const _ct=b.contactId?(contacts||[]).find(_c=>_c.id===b.contactId):null; const _xc=_ct?.assignedTo&&Array.isArray(_ct.shared_with)&&_ct.shared_with.length>0; return _xc?<span title="RDV cross-collaborateur">🤝 </span>:null;})()}{b.visitorName}</div>
+                <div style={{ fontSize:13, fontWeight:600, color:T.text }}>{(()=>{const _ct=b.contactId?(contacts||[]).find(_c=>_c.id===b.contactId):null; const _xc=_ct?.assignedTo&&Array.isArray(_ct.shared_with)&&_ct.shared_with.length>0; return _xc?<span title="RDV cross-collaborateur">🤝 </span>:null;})()}{b.title || b.visitorName}</div>
                 <div style={{ fontSize:11, color:T.text3 }}>{cal?.name} · {fmtDate(b.date)} · {b.time} · {b.duration}min</div>
               </div>
               <Badge color={b.status==='confirmed'?T.success:b.status==='pending'?T.warning:T.danger}>{b.status==='confirmed'?'Confirmé':b.status==='pending'?'Attente':'Annulé'}</Badge>

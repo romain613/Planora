@@ -6,7 +6,7 @@ import { _T } from "../../shared/state/tabState";
 
 // Phase 1A extractions
 import { T, T_LIGHT, T_DARK, setTheme } from "../../theme";
-import { formatPhoneFR, displayPhone, normalizePhoneNumber, phoneMatchKey, maskPhoneVisual } from "../../shared/utils/phone";
+import { formatPhoneFR, displayPhone, normalizePhoneNumber, phoneMatchKey, maskPhoneVisual, phoneFor } from "../../shared/utils/phone";
 import { isValidEmail, isValidPhone } from "../../shared/utils/validators";
 import { COMMON_TIMEZONES, genCode } from "../../shared/utils/constants";
 // V2.1 — helper unifié pré-check anti-doublon (Quick Add Hub SMS + linkVisitor + futurs sites)
@@ -1975,7 +1975,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
 
       // Mode edit: modifier un RDV existant
       if(f._editBookingId) {
-        const updates = {date:f.date, time:f.time, duration:f.duration||30, notes:f.notes||'', rdv_category:f.rdv_category||'', rdv_subcategory:f.rdv_subcategory||''};
+        const updates = {date:f.date, time:f.time, duration:f.duration||30, title:(f.title||'').trim(), notes:f.notes||'', rdv_category:f.rdv_category||'', rdv_subcategory:f.rdv_subcategory||''};
         if(f.calendarId) updates.calendarId = f.calendarId;
         setBookings(p=>p.map(b=>b.id===f._editBookingId?{...b,...updates}:b));
         api('/api/bookings/'+f._editBookingId, {method:'PUT', body:updates}).catch(()=>showNotif('Erreur modification RDV','danger'));
@@ -2063,7 +2063,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       console.log('[BOOKING DEBUG] calId:', calId, 'calendars:', calendars?.length, 'collab.id:', collab.id, 'defaultCal:', defaultCal?.id);
       if(!calId) { setBookErr('Aucun calendrier trouvé pour votre compte — contactez votre admin'); console.error('[BOOKING BLOCK] No calendarId found'); return false; }
       const prevStage = ct?.pipeline_stage||'nouveau';
-      const bk = {id:bkId, companyId:company.id, collaboratorId:f.collaboratorId||collab.id, agendaOwnerId:f.collaboratorId||collab.id, bookedByCollaboratorId:collab.id, calendarId:calId, contactId:f.contactId, visitorName:ct?.name||f.contactName||'', visitorEmail:ct?.email||'', visitorPhone:f.number||ct?.phone||'', date:f.date, time:f.time, duration:f.duration||30, status:'confirmed', source:'pipeline', notes:f.notes||'RDV depuis pipeline', rdv_category:f.rdv_category||'', rdv_subcategory:f.rdv_subcategory||''};
+      const bk = {id:bkId, companyId:company.id, collaboratorId:f.collaboratorId||collab.id, agendaOwnerId:f.collaboratorId||collab.id, bookedByCollaboratorId:collab.id, calendarId:calId, contactId:f.contactId, visitorName:ct?.name||f.contactName||'', visitorEmail:ct?.email||'', visitorPhone:f.number||ct?.phone||'', title:(f.title||'').trim(), date:f.date, time:f.time, duration:f.duration||30, status:'confirmed', source:'pipeline', notes:f.notes||'RDV depuis pipeline', rdv_category:f.rdv_category||'', rdv_subcategory:f.rdv_subcategory||''};
       // Ajouter immédiatement au state local (optimistic)
       setBookings(p=>[...p,bk]);
       // Déplacer en rdv_programme (optimistic)
@@ -2651,7 +2651,10 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   // Google Calendar events (busy blocks)
   const myGoogleEvents = (googleEventsProp || []).filter(ge => ge.collaboratorId === collab.id);
   // V3.x.6 Phase 2C — Outlook events (mirror Google)
-  const myOutlookEvents = (outlookEventsProp || []).filter(oe => oe.collaboratorId === collab.id);
+  // V3.x.9 dédoublonnage : exclure les events Outlook qui sont le miroir d'un booking Planora
+  // (id présent dans bookings.outlookEventId). Garde les vrais events Outlook externes visibles/bloquants.
+  const _planoraOutlookIds = new Set((bookings || []).filter(b => b && b.outlookEventId).map(b => b.outlookEventId));
+  const myOutlookEvents = (outlookEventsProp || []).filter(oe => oe.collaboratorId === collab.id && !_planoraOutlookIds.has(oe.id));
   const getGoogleEventAt = (date, hour) => {
     const slotMin = parseInt(hour) * 60 + parseInt(hour.slice(3));
     return myGoogleEvents.filter(ge => {
@@ -6685,6 +6688,11 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                     {(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).rdv_category && RDV_CATEGORIES[(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).rdv_category] && Object.entries(RDV_CATEGORIES[(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).rdv_category].subcategories).map(([k,v])=><option key={k} value={k}>{v.label}</option>)}
                   </select>
                 </div>
+              </div>}
+              {/* V3.x.9 — Titre du RDV (optionnel). Fallback : "{contactName} — {time}". */}
+              {(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{})._bookingMode && <div>
+                <label style={{fontSize:12,fontWeight:600,color:T.text2,marginBottom:4,display:'block'}}>Titre du RDV (optionnel)</label>
+                <input value={(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).title||''} onChange={e=>(typeof setPhoneScheduleForm==='function'?setPhoneScheduleForm:function(){})(p=>({...p,title:e.target.value}))} placeholder={`${(phoneScheduleForm?.contactName||phoneScheduleForm?._newFirstName||'Contact')} — ${phoneScheduleForm?.time||'00:00'}`} style={{width:'100%',padding:'10px 14px',borderRadius:10,border:'1px solid #e5e7eb',background:'#f9fafb',fontSize:13,color:'#111',outline:'none',fontFamily:'inherit'}}/>
               </div>}
               <details style={{background:'transparent'}}>
                 <summary style={{cursor:'pointer',fontSize:12,fontWeight:600,color:T.text2,padding:'4px 0',userSelect:'none'}}>Notes</summary>

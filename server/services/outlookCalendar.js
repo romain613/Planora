@@ -399,8 +399,12 @@ export async function createEventOutlook(collaboratorId, bookingData, calendarDa
   const startDateTime = start.toFormat("yyyy-MM-dd'T'HH:mm:ss");
   const endDateTime = end.toFormat("yyyy-MM-dd'T'HH:mm:ss");
 
+  // V3.x.9 — subject custom : title fourni > fallback "{visitorName} — {time}"
+  const _subjectFinal = (bookingData.title && bookingData.title.trim())
+    ? bookingData.title.trim()
+    : `${bookingData.visitorName || 'RDV'} — ${bookingData.time || ''}`;
   const body = {
-    subject: `${calendarData?.name || 'RDV'} — ${bookingData.visitorName || ''}`,
+    subject: _subjectFinal,
     body: {
       contentType: 'Text',
       content: [
@@ -484,10 +488,12 @@ export async function updateEventOutlook(collaboratorId, outlookEventId, booking
   const endDateTime = end.toFormat("yyyy-MM-dd'T'HH:mm:ss");
 
   const isCancelled = bookingData.status === 'cancelled';
+  // V3.x.9 — subject custom : title fourni > fallback "{visitorName} — {time}"
+  const _subjBase = (bookingData.title && bookingData.title.trim())
+    ? bookingData.title.trim()
+    : `${bookingData.visitorName || 'RDV'} — ${bookingData.time || ''}`;
   const body = {
-    subject: isCancelled
-      ? `ANNULÉ — ${calendarData?.name || 'RDV'} — ${bookingData.visitorName || ''}`
-      : `${calendarData?.name || 'RDV'} — ${bookingData.visitorName || ''}`,
+    subject: isCancelled ? `ANNULÉ — ${_subjBase}` : _subjBase,
     body: {
       contentType: 'Text',
       content: [

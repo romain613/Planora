@@ -2040,7 +2040,7 @@ if (n === ph) matched.set(c.id, c);
             <div><span style={{fontSize:10,fontWeight:700,color:T.text}}>{new Date(b.date).toLocaleDateString('fr-FR',{weekday:'short',day:'numeric',month:'short'})}</span><span style={{fontSize:10,color:T.text2,marginLeft:4}}>{b.time}</span></div>
             <div style={{display:'flex',alignItems:'center',gap:4}}>
               <span style={{fontSize:9,padding:'2px 6px',borderRadius:4,background:'#22C55E15',color:'#22C55E',fontWeight:600}}>{b.duration||30}min</span>
-              <div onClick={()=>{setPhoneScheduleForm({contactId:ct.id,contactName:ct.name,number:ct.phone||'',date:b.date,time:b.time,duration:b.duration||30,notes:'Modification RDV',calendarId:b.calendarId||'',rdv_category:b.rdv_category||'',rdv_subcategory:b.rdv_subcategory||'',_bookingMode:true,_editBookingId:b.id});setPhoneShowScheduleModal(true);}} style={{cursor:'pointer',padding:'2px 4px',borderRadius:4,color:T.text3}} title="Modifier"><I n="edit-2" s={10}/></div>
+              <div onClick={()=>{setPhoneScheduleForm({contactId:ct.id,contactName:ct.name,number:ct.phone||'',date:b.date,time:b.time,duration:b.duration||30,title:b.title||'',notes:'Modification RDV',calendarId:b.calendarId||'',rdv_category:b.rdv_category||'',rdv_subcategory:b.rdv_subcategory||'',_bookingMode:true,_editBookingId:b.id});setPhoneShowScheduleModal(true);}} style={{cursor:'pointer',padding:'2px 4px',borderRadius:4,color:T.text3}} title="Modifier"><I n="edit-2" s={10}/></div>
               <div onClick={()=>{if(confirm('Annuler ce RDV ?')){cancelBookingAndCascade(b.id);showNotif('RDV annulé');}}} style={{cursor:'pointer',padding:'2px 4px',borderRadius:4,color:'#EF4444'}} title="Annuler"><I n="x" s={10}/></div>
             </div>
           </div>)}

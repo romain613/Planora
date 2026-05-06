@@ -21,6 +21,7 @@ function checkBookingConflict(db, {
   endTime,
   duration,
   excludeBookingId = null,
+  excludeOutlookEventId = null,  // V3.x.9 — éviter qu'un booking se bloque lui-même via son miroir Outlook lors d'un UPDATE
 }) {
   if (!db) throw new Error('DB_REQUIRED');
   if (!collaboratorId || !date || !startTime) {
@@ -102,6 +103,7 @@ function checkBookingConflict(db, {
 
     for (const oe of olRows) {
       if (oe.showAs === 'free') continue; // défensif (déjà filtré au sync)
+      if (excludeOutlookEventId && oe.id === excludeOutlookEventId) continue; // V3.x.9 — skip miroir du booking courant
       const osMs = new Date(oe.startTime).getTime();
       const oeMs = oe.endTime ? new Date(oe.endTime).getTime() : (osMs + 30 * 60000);
       if (Number.isNaN(osMs) || Number.isNaN(oeMs) || oeMs <= osMs) continue;

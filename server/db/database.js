@@ -409,6 +409,8 @@ try { db.exec('ALTER TABLE collaborators ADD COLUMN outlook_last_sync TEXT'); } 
 try { db.exec('ALTER TABLE collaborators ADD COLUMN outlook_events_private INTEGER DEFAULT 1'); } catch {}
 try { db.exec('ALTER TABLE collaborators ADD COLUMN outlook_account_id TEXT'); } catch {}
 try { db.exec('ALTER TABLE bookings ADD COLUMN outlookEventId TEXT'); } catch {}
+// V3.x.9 — Titre custom RDV (subject Outlook + display grille). Fallback : "{visitorName} — {time}".
+try { db.exec("ALTER TABLE bookings ADD COLUMN title TEXT DEFAULT ''"); } catch {}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS outlook_events (
