@@ -52,7 +52,7 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
           const [statusFilter, setStatusFilter] = useState('');
           const [selectedRuleEnv, setSelectedRuleEnv] = useState('');
           const [newSource, setNewSource] = useState({ name:'', type:'csv', config:{}, sync_mode:'manual', gsheet_url:'', sync_envelope_id:'' });
-          const [newEnvelope, setNewEnvelope] = useState({ name:'', dispatch_type:'manual', dispatch_mode:'percentage', dispatch_time:'09:00', dispatch_limit:0, auto_dispatch:false, dispatch_start_date:'', dispatch_end_date:'', _collabs:[] });
+          const [newEnvelope, setNewEnvelope] = useState({ name:'', dispatch_type:'manual', dispatch_mode:'percentage', dispatch_time:'09:00', dispatch_limit:0, auto_dispatch:false, dispatch_start_date:'', dispatch_end_date:'', mask_phone_mode:'open', _collabs:[] });
           const [showManualDispatch, setShowManualDispatch] = useState(null);
           const [manualDispatchForm, setManualDispatchForm] = useState({ count:5, collaboratorIds:[] });
           const [showDistribPopup, setShowDistribPopup] = useState(null);
@@ -150,7 +150,7 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
               if(checkedCollabs.length>0) {
                 Promise.all(checkedCollabs.map(c=>api('/api/leads/dispatch-rules', { method:'POST', body:{ companyId:company.id, envelope_id:r.id, collaborator_id:c.id, percentage:c.percentage||0, priority:1, dispatch_count:0, max_daily:c.maxDaily||0 } }))).then(()=>{ loadData(); });
               } else { loadData(); }
-              setShowAddEnvelope(false); setNewEnvelope({name:'',color:DEFAULT_ENVELOPE_COLOR,icon:DEFAULT_ENVELOPE_ICON,priority:DEFAULT_ENVELOPE_PRIORITY,dispatch_type:'manual',dispatch_mode:'percentage',dispatch_time:'09:00',dispatch_limit:0,auto_dispatch:false,dispatch_start_date:'',dispatch_end_date:'',_collabs:[]});
+              setShowAddEnvelope(false); setNewEnvelope({name:'',color:DEFAULT_ENVELOPE_COLOR,icon:DEFAULT_ENVELOPE_ICON,priority:DEFAULT_ENVELOPE_PRIORITY,dispatch_type:'manual',dispatch_mode:'percentage',dispatch_time:'09:00',dispatch_limit:0,auto_dispatch:false,dispatch_start_date:'',dispatch_end_date:'',mask_phone_mode:'open',_collabs:[]});
             });
           };
           const handleDeleteEnvelope = (id) => { api(`/api/leads/envelopes/${id}`, { method:'DELETE' }).then(loadData); };
@@ -388,7 +388,7 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
                   }
                 });
                 Promise.all(promises).then(()=>{ loadData(); if(selectedRuleEnv===editEnvId) loadRules(editEnvId); });
-                setEditEnvId(null); setShowAddEnvelope(false); setNewEnvelope({name:'',color:DEFAULT_ENVELOPE_COLOR,icon:DEFAULT_ENVELOPE_ICON,priority:DEFAULT_ENVELOPE_PRIORITY,dispatch_type:'manual',dispatch_mode:'percentage',dispatch_time:'09:00',dispatch_limit:0,auto_dispatch:false,dispatch_start_date:'',dispatch_end_date:'',_collabs:[]}); pushNotification('Enveloppe modifiee','','success');
+                setEditEnvId(null); setShowAddEnvelope(false); setNewEnvelope({name:'',color:DEFAULT_ENVELOPE_COLOR,icon:DEFAULT_ENVELOPE_ICON,priority:DEFAULT_ENVELOPE_PRIORITY,dispatch_type:'manual',dispatch_mode:'percentage',dispatch_time:'09:00',dispatch_limit:0,auto_dispatch:false,dispatch_start_date:'',dispatch_end_date:'',mask_phone_mode:'open',_collabs:[]}); pushNotification('Enveloppe modifiee','','success');
               }
             });
           };
@@ -727,6 +727,7 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
                       dispatch_time:env.dispatch_time||'09:00', dispatch_limit:env.dispatch_limit||0,
                       auto_dispatch:!!env.auto_dispatch, dispatch_start_date:env.dispatch_start_date||'',
                       dispatch_end_date:env.dispatch_end_date||'', dispatch_interval_minutes:env.dispatch_interval_minutes||0,
+                      mask_phone_mode:env.mask_phone_mode||'open',
                       _collabs:(collabs||[]).map(c=>{
                         const er=existingRules.find(r=>r.collaborator_id===c.id);
                         return {id:c.id,name:c.name,color:c.color,checked:!!er,percentage:er?.percentage||0,maxDaily:er?.max_daily||0,ruleId:er?.id||null};
@@ -962,7 +963,10 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
                           <td style={{padding:'8px 12px'}}><input type="checkbox" checked={(typeof selectedBulk!=='undefined'?selectedBulk:{}).includes(lead.id)} onChange={e=>(typeof setSelectedBulk==='function'?setSelectedBulk:function(){})(e.target.checked?[...selectedBulk,lead.id]:(typeof selectedBulk!=='undefined'?selectedBulk:{}).filter(x=>x!==lead.id))}/></td>
                           <td style={{padding:'8px 12px',fontSize:11,color:T.text2}}>{lead.created_at?.slice(0,10)}</td>
                           <td style={{padding:'8px 12px',fontWeight:600}}>{lead.assigned_to && <span style={{display:'inline-block',width:8,height:8,borderRadius:'50%',background:collabColor,marginRight:6,verticalAlign:'middle',boxShadow:`0 0 0 2px ${collabColor}30`}}/>}{[lead.first_name,lead.last_name].filter(Boolean).join(' ')||'-'}</td>
-                          <td style={{padding:'8px 12px',fontSize:12}}>{lead.phone||'-'}</td>
+                          <td style={{padding:'8px 12px',fontSize:12, color: lead._phoneMasked ? T.text3 : T.text}}>
+                            {lead.phone || '-'}
+                            {lead._phoneMasked && <span title='Prenez le lead pour révéler le numéro' style={{marginLeft:6, fontSize:11, color:'#F59E0B', verticalAlign:'middle'}}>🔒</span>}
+                          </td>
                           <td style={{padding:'8px 12px',fontSize:12}}>{lead.email||'-'}</td>
                           <td style={{padding:'8px 12px'}}><span style={{fontSize:11,fontWeight:600,padding:'2px 8px',borderRadius:6,background:sColor+'18',color:sColor}}>{STATUS_LABELS[lead.status]||lead.status}</span></td>
                           <td style={{padding:'8px 12px',textAlign:'center'}}>{(()=>{const ct=(contacts||[]).find(c=>c.id===lead.contact_id);const s=ct?.lead_score||0;if(!s)return <span style={{color:T.text3,fontSize:10}}>-</span>;return <span style={{fontSize:11,fontWeight:700,padding:'2px 6px',borderRadius:6,background:s>60?'#22C55E15':s>30?'#F59E0B15':'#EF444415',color:s>60?'#22C55E':s>30?'#F59E0B':'#EF4444'}}>{s}</span>;})()}</td>
@@ -1529,6 +1533,15 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
                     </select>
                     <div style={{fontSize:11,color:T.text3,marginTop:4}}>{(typeof newEnvelope!=='undefined'?newEnvelope:{}).dispatch_limit>0?`${(typeof newEnvelope!=='undefined'?newEnvelope:{}).dispatch_limit} lead${(typeof newEnvelope!=='undefined'?newEnvelope:{}).dispatch_limit>1?'s':''} distribue${(typeof newEnvelope!=='undefined'?newEnvelope:{}).dispatch_limit>1?'s':''} a chaque passage`:'Tous les leads en attente seront distribues a chaque passage'}</div>
                   </div>}
+                  {/* Phase Envelope-Mask V1 — Confidentialité numéros (mode unique masked-until-claim) */}
+                  <div style={{padding:12,borderRadius:8,background:T.bg,border:`1px solid ${T.border}`,display:'flex',flexDirection:'column',gap:8,marginTop:4}}>
+                    <div style={{fontSize:11,fontWeight:700,color:T.text2,textTransform:'uppercase',letterSpacing:0.5,display:'flex',alignItems:'center',gap:6}}>🔒 Confidentialité numéros</div>
+                    <select value={(typeof newEnvelope!=='undefined'?newEnvelope:{}).mask_phone_mode || 'open'} onChange={e=>(typeof setNewEnvelope==='function'?setNewEnvelope:function(){})({...newEnvelope,mask_phone_mode:e.target.value})} style={{padding:10,borderRadius:8,border:`1px solid ${T.border}`,fontSize:13,background:T.card,color:T.text}}>
+                      <option value="open">Public — Numéros visibles pour tous</option>
+                      <option value="masked-until-claim">Masqué — Numéros masqués pour les commerciaux (admins exemptés)</option>
+                    </select>
+                    {((typeof newEnvelope!=='undefined'?newEnvelope:{}).mask_phone_mode === 'masked-until-claim') && <div style={{fontSize:11,color:T.text3,padding:'8px 10px',background:'#F59E0B10',border:'1px solid #F59E0B30',borderRadius:6,lineHeight:1.5}}>Quand cette option est activée, les numéros des leads distribués depuis cette enveloppe sont masqués à l'affichage pour les commerciaux. Exemple : <code>06XXXX6876</code>. Les appels restent possibles via la plateforme. Les admins conservent l'accès au numéro complet.</div>}
+                  </div>
                   <div style={{display:'flex',justifyContent:'space-between',gap:8,marginTop:8}}>
                     <Btn onClick={()=>setWizardStep(0)}><I n="arrow-left" s={13}/> Retour</Btn>
                     <Btn primary onClick={()=>setWizardStep(2)}><I n="arrow-right" s={13}/> Suivant</Btn>

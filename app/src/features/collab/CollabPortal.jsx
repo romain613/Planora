@@ -6,7 +6,7 @@ import { _T } from "../../shared/state/tabState";
 
 // Phase 1A extractions
 import { T, T_LIGHT, T_DARK, setTheme } from "../../theme";
-import { formatPhoneFR, displayPhone, normalizePhoneNumber, phoneMatchKey } from "../../shared/utils/phone";
+import { formatPhoneFR, displayPhone, normalizePhoneNumber, phoneMatchKey, maskPhoneVisual } from "../../shared/utils/phone";
 import { isValidEmail, isValidPhone } from "../../shared/utils/validators";
 import { COMMON_TIMEZONES, genCode } from "../../shared/utils/constants";
 // V2.1 — helper unifié pré-check anti-doublon (Quick Add Hub SMS + linkVisitor + futurs sites)
@@ -334,6 +334,13 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   // VoIP helpers for phone tab
   const [phoneSubTab, setPhoneSubTab] = useState('pipeline');
   const [phoneDialNumber, setPhoneDialNumber] = useState('');
+  // Mask V2.1 SECURITY — affichage masqué du dialer (ex: "+33 6 XX XX 39 60").
+  // 🔒 phoneDialNumber RESTE VIDE pour les contacts masqués (pas de full phone côté browser).
+  // Le bouton call détecte phoneDialMaskedContact et appelle via contactId server-side.
+  const [phoneDialDisplay, setPhoneDialDisplay] = useState('');
+  // 🔒 V2.1 — contact masqué prefill : objet (id + _phoneMasked) utilisé par bouton call → contactId.
+  // null si user tape un numéro libre OU contact non masqué.
+  const [phoneDialMaskedContact, setPhoneDialMaskedContact] = useState(null);
   const [phonePipeSearch, setPhonePipeSearch] = useState('');
   // Conversations sub-tab state
   const [selConvId, setSelConvId] = useState(null);
@@ -861,10 +868,16 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   }, []);
 
   // Real VoIP call function (SDK v2: device.connect returns Promise<Call>)
+  // 🔒 SECURITY V2.1 — Pour un contact masqué (phone non exposé en JSON),
+  // on envoie contactId aux params Twilio et le backend /twiml/outbound résout le phone DB
+  // server-side avant de faire le <Dial>. Le browser n'a JAMAIS le numéro réel.
   const startVoipCall = async (phoneNumber, contact = null) => {
+    const _maskedContact = !!(contact && contact._phoneMasked);
     if (!voipDeviceRef.current) {
       showNotif('VoIP non initialisé, appel via téléphone','warning');
-      window.open('tel:'+phoneNumber);
+      // Fallback tel: link uniquement si contact non masqué (sinon on n'a pas le phone côté browser)
+      if (!_maskedContact && phoneNumber) window.open('tel:'+phoneNumber);
+      else showNotif('Numéro confidentiel — appel direct indisponible','warning');
       return false;
     }
     if ((typeof voipCredits!=='undefined'?voipCredits:null) <= 0) { showNotif('Crédits VoIP insuffisants !','danger'); return false; }
@@ -872,7 +885,11 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     const callStartedAt = new Date().toISOString();
     setVoipState('connecting');
     try {
-      const call = await voipDeviceRef.current.connect({ params:{ To:phoneNumber, companyId:company.id, collaboratorId:collab.id, fromNumber, skipHoursCheck:'true' } });
+      // 🔒 V2.1 — Choix params : contactId (server-side resolve) si contact masqué, sinon To (legacy direct)
+      const _twilioParams = _maskedContact && contact?.id
+        ? { contactId: contact.id, companyId: company.id, collaboratorId: collab.id, fromNumber, skipHoursCheck: 'true' }
+        : { To: phoneNumber, companyId: company.id, collaboratorId: collab.id, fromNumber, skipHoursCheck: 'true' };
+      const call = await voipDeviceRef.current.connect({ params: _twilioParams });
       voipCallRef.current = call;
       console.log('[COLLAB VOIP] Call connected, attaching events...');
       call.on('ringing', () => setVoipState('ringing'));
@@ -2118,12 +2135,34 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     return clean || num;
   };
 
-  // Pre-fill keypad with a number (for click-to-call from history/pipeline/contacts)
-  const prefillKeypad = (number) => {
-    setPhoneDialNumber(autoFormatFR(number) || '');
-    setPhoneDialerMinimized(false);
-    setSelectedCrmContact(null);
-    if (portalTab !== 'phone') _setPortalTab('phone');
+  // Mask V2.1 Option β — Pre-fill keypad (mask-aware).
+  // 🔒 Si le number matche un contact masqué : phoneDialNumber reste VIDE (pas de full phone browser),
+  // phoneDialDisplay affiche le format masqué, phoneDialMaskedContact stocke l'objet contact
+  // pour que le bouton call envoie contactId vers /twiml/outbound (résolution server-side).
+  //
+  // Options :
+  //   - skipNav: true → ne change pas l'onglet portal (utile pour SMS Hub / actions inline)
+  const prefillKeypad = (number, opts = {}) => {
+    const _input = autoFormatFR(number) || '';
+    let _realNumber = _input;       // par défaut : saisie clair (utilisateur tape ou contact non masqué)
+    let _displayNumber = '';        // '' = input affiche phoneDialNumber
+    let _maskedCt = null;           // objet contact masqué (sans full phone) pour appel server-side
+    if (_input && contacts && contacts.length) {
+      const _ct = contacts.find(c => c && c._phoneMasked && c.id && (c.phone === number || c.phone === _input));
+      if (_ct) {
+        _realNumber = '';                          // 🔒 pas de full phone côté browser
+        _displayNumber = maskPhoneVisual(_ct.phone); // 🔒 V2.1 — format compact MH "+336XXXX6876"
+        _maskedCt = _ct;                          // bouton call → startVoipCall('', _maskedCt) → contactId server-side
+      }
+    }
+    setPhoneDialNumber(_realNumber);
+    setPhoneDialDisplay(_displayNumber);
+    setPhoneDialMaskedContact(_maskedCt);
+    if (!opts.skipNav) {
+      setPhoneDialerMinimized(false);
+      setSelectedCrmContact(null);
+      if (portalTab !== 'phone') _setPortalTab('phone');
+    }
   };
 
   // Start a real VoIP call (or fallback to tel: if not configured)
@@ -4266,6 +4305,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       portalTab, setPortalTab,
       portalTabKey, setPortalTabKey,
       phoneDialNumber, setPhoneDialNumber,
+      // Mask V2 — display séparé du payload (pour clavier téléphone)
+      phoneDialDisplay, setPhoneDialDisplay,
+      phoneDialMaskedContact, setPhoneDialMaskedContact,
       phoneRightTab, setPhoneRightTab,
       pipelineRightContact, setPipelineRightContact,
       phoneShowScheduleModal, setPhoneShowScheduleModal,
@@ -6441,7 +6483,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                 {schedSearchResults.map(ct=>(
                   <div key={ct.id} onClick={()=>{setPhoneScheduleForm(p=>({...p,contactId:ct.id,contactName:ct.name||ct.firstName||'',number:ct.phone||p.number}));setSchedSearchQ('');}} style={{padding:'8px 12px',cursor:'pointer',fontSize:12,display:'flex',justifyContent:'space-between',borderBottom:'1px solid #f3f4f6'}} onMouseEnter={e=>e.currentTarget.style.background='#f3f4f6'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
                     <span style={{fontWeight:600}}>{ct.name}</span>
-                    <span style={{color:'#9ca3af'}}>{ct.phone||ct.email||''}</span>
+                    <span style={{color:'#9ca3af'}}>{phoneFor(ct) || ct.email || ''}</span>
                   </div>
                 ))}
               </div>}
@@ -7452,7 +7494,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       // V1.9.1 — Factories d'actions. Règle UX MH : la bannière ne se ferme JAMAIS automatiquement (uniquement sur clic croix ou fin d'appel).
       const makeRdvAction = () => ({ label:'Créer le RDV', icon:'calendar-plus', tip:'Ouvrir le formulaire RDV pré-rempli avec ce contact', kicker:'🔥 Opportunité RDV', action: () => { baseLog(); if(ctValid){ setPhoneScheduleForm({contactId:ct.id,contactName:ctName,number:ctPhone,date:new Date(Date.now()+86400000).toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true}); setPhoneShowScheduleModal(true); showNotif('Formulaire RDV ouvert','success'); } else { showNotif('Créez le contact avant de programmer un RDV','info'); } } });
       const makeEmailAction = (mode) => ({ label: mode==='dicte'?'Envoyer email':'Envoyer la plaquette', icon: mode==='dicte'?'mail':'send', tip: mode==='dicte'?'Ouvrir le composeur email avec l\'adresse dictée':'Ouvrir le composeur email pour envoyer la plaquette/document', kicker: mode==='dicte'?'📧 Email dicté':'📎 Demande document', action: () => { baseLog(); const dictee = (slide?.text||'').match(/[\w.+-]+@[\w-]+\.[\w.-]+/)?.[0]; const email = (mode==='dicte'?(dictee||ct.email||''):(ct.email||'')); if(email){ const subj = mode==='dicte' ? 'Suite à notre échange' : 'Documentation suite à notre échange'; window.open('mailto:'+email+'?subject='+encodeURIComponent(subj)); showNotif('Email prêt à envoyer ('+email+')','success'); } else { showNotif("Pas d'email valide pour ce contact",'info'); } } });
-      const makeSmsAction = () => ({ label:'Envoyer un SMS', icon:'message-square', tip:'Préparer un SMS au contact (panneau droit)', kicker:'📱 Canal SMS', action: () => { baseLog(); setPhoneDialNumber(ctPhone||''); setPhoneRightTab('sms'); if(typeof setPhoneRightCollapsed==='function')setPhoneRightCollapsed(false); showNotif('Composeur SMS ouvert (panneau droit)','success'); } });
+      const makeSmsAction = () => ({ label:'Envoyer un SMS', icon:'message-square', tip:'Préparer un SMS au contact (panneau droit)', kicker:'📱 Canal SMS', action: () => { baseLog(); prefillKeypad(ctPhone||'', { skipNav: true }); setPhoneRightTab('sms'); if(typeof setPhoneRightCollapsed==='function')setPhoneRightCollapsed(false); showNotif('Composeur SMS ouvert (panneau droit)','success'); } });
       const makeValidateClientAction = () => ({ label:'Passer en client', icon:'check-circle', tip:'Passer le contact en Client Validé', kicker:'✅ Accord client', action: () => { baseLog(); if(ctValid && typeof handleCollabUpdateContact==='function'){ handleCollabUpdateContact(ct.id, { pipeline_stage:'client_valide' }); showNotif('Contact passé en Client Validé','success'); } else { showNotif('Contact requis pour cette action','info'); } } });
       const makeQualifyAction = () => ({ label:'Marquer comme intéressé', icon:'star', tip:'Passer le contact en Intéressé', kicker:'🎯 Lead qualifié', action: () => { baseLog(); if(ctValid && typeof handleCollabUpdateContact==='function'){ handleCollabUpdateContact(ct.id, { pipeline_stage:'qualifie' }); showNotif('Contact passé en Intéressé','success'); } else { showNotif('Contact requis pour cette action','info'); } } });
       const makeObjectionAction = () => ({ label:'Ajouter une objection', icon:'alert-triangle', tip:'Ajouter l\'objection aux notes du contact', kicker:'⚠️ Objection détectée', action: () => { baseLog(); if(!ctValid){ showNotif('Contact requis pour enregistrer la note','info'); return; } if(appendNote(slide?.label||'Objection', slide?.text||'')) showNotif('Objection ajoutée aux notes du contact','success'); else showNotif('Erreur enregistrement note','danger'); } });
@@ -7609,7 +7651,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                   <span style={{position:'relative',zIndex:1}}>RDV</span>
                 </div>
                 {/* SMS — couleur bleue */}
-                <div className={'cockpitBtn'+(vib.sms?' cockpitVibrate':'')+(lvl.sms>=3?' cockpitGaugeReady':'')} onClick={()=>{ consumeIntent('sms'); setPhoneDialNumber(ctPhone||''); setPhoneRightTab('sms'); if(typeof setPhoneRightCollapsed==='function')setPhoneRightCollapsed(false); }} style={{padding:'10px 13px',borderRadius:10,background:'rgba(14,165,233,0.08)',color:'#0369A1',fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:5,border:'1px solid rgba(14,165,233,0.32)'}} title={lvl.sms>=3?'Action prioritaire — canal SMS demandé':'Envoyer un SMS'}>
+                <div className={'cockpitBtn'+(vib.sms?' cockpitVibrate':'')+(lvl.sms>=3?' cockpitGaugeReady':'')} onClick={()=>{ consumeIntent('sms'); prefillKeypad(ctPhone||'', { skipNav: true }); setPhoneRightTab('sms'); if(typeof setPhoneRightCollapsed==='function')setPhoneRightCollapsed(false); }} style={{padding:'10px 13px',borderRadius:10,background:'rgba(14,165,233,0.08)',color:'#0369A1',fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:5,border:'1px solid rgba(14,165,233,0.32)'}} title={lvl.sms>=3?'Action prioritaire — canal SMS demandé':'Envoyer un SMS'}>
                   {renderGauge(lvl.sms, 'rgba(14,165,233,0.20)')}
                   <I n="message-square" s={13} style={{position:'relative',zIndex:1}}/>
                   <span style={{position:'relative',zIndex:1}}>SMS</span>
@@ -7813,7 +7855,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
               <div style={{display:'flex',flexDirection:'column',gap:4}}>
                 {[
                   {icon:'calendar',label:'Prendre RDV',color:'#0EA5E9',action:()=>{const tomorrow=new Date();tomorrow.setDate(tomorrow.getDate()+1);setPhoneScheduleForm({contactId:ct.id,contactName:ct.name,number:ct.phone||(typeof phoneActiveCall!=='undefined'?phoneActiveCall:{}).number,date:tomorrow.toISOString().split('T')[0],time:'10:00',notes:'',_bookingMode:true});setPhoneShowScheduleModal(true);}},
-                  {icon:'message-square',label:'Envoyer SMS',color:'#7C3AED',action:()=>{setPhoneDialNumber(ct.phone||(typeof phoneActiveCall!=='undefined'?phoneActiveCall:{}).number);setPhoneSubTab('sms');}},
+                  {icon:'message-square',label:'Envoyer SMS',color:'#7C3AED',action:()=>{prefillKeypad(ct.phone||(typeof phoneActiveCall!=='undefined'?phoneActiveCall:{}).number, { skipNav: true });setPhoneSubTab('sms');}},
                   {icon:'mail',label:'Envoyer Email',color:'#F59E0B',action:()=>{if(ct.email)window.open('mailto:'+ct.email+'?subject=Suivi - '+encodeURIComponent(ct.name||''));}},
                   {icon:'file-text',label:'Formulaire appel',color:'#8B5CF6',action:()=>{setPhoneRightTab('forms');setPhoneRightCollapsed(false);}},
                   {icon:'tag',label:'Ajouter tag',color:'#22C55E',action:()=>{const tag=prompt('Ajouter un tag :');if(tag&&tag.trim()&&ct.id){const newTags=[...(ct.tags||[]),tag.trim()];handleCollabUpdateContact(ct.id,{tags:newTags});showNotif('Tag ajouté');}}},

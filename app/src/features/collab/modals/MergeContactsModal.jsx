@@ -24,6 +24,7 @@ import React, { useState, useEffect, useMemo, useContext } from "react";
 import { T } from "../../../theme";
 import { I, Btn, Modal, Spinner, Avatar } from "../../../shared/ui";
 import { api } from "../../../shared/services/api";
+import { phoneFor } from "../../../shared/utils/phone";
 import { CollabContext } from "../context/CollabContext";
 import {
   filterMergeablePeers,
@@ -56,7 +57,7 @@ const PanelContact = ({ label, contact, accentColor }) => {
       </div>
       <div style={{ fontSize: 11, color: T.text3, lineHeight: 1.6 }}>
         {contact?.email && <div><I n="mail" s={10}/> {contact.email}</div>}
-        {contact?.phone && <div><I n="phone" s={10}/> {contact.phone}</div>}
+        {contact?.phone && <div><I n="phone" s={10}/> {phoneFor(contact)}</div>}
         {contact?.assignedName && <div><I n="user" s={10}/> {contact.assignedName}</div>}
         {(contact?.pipeline_stage || contact?.pipelineStage) && <div><I n="layers" s={10}/> {contact.pipeline_stage || contact.pipelineStage}</div>}
       </div>

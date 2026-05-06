@@ -1828,6 +1828,9 @@ try { db.exec("CREATE INDEX IF NOT EXISTS idx_contacts_score_dirty ON contacts(l
 try { db.exec("ALTER TABLE lead_dispatch_rules ADD COLUMN last_rr_index INTEGER DEFAULT 0"); } catch {}
 try { db.exec("ALTER TABLE lead_envelopes ADD COLUMN dispatch_interval_minutes INTEGER DEFAULT 0"); } catch {}
 try { db.exec("ALTER TABLE lead_envelopes ADD COLUMN last_dispatch_at TEXT DEFAULT ''"); } catch {}
+// Phase Envelope-Mask V1 — masquage numéros téléphone par enveloppe (mode unique 'masked-until-claim').
+// Default 'open' = comportement actuel inchangé. ALTER additif idempotent (pattern V1.12.1).
+try { db.exec("ALTER TABLE lead_envelopes ADD COLUMN mask_phone_mode TEXT DEFAULT 'open'"); } catch {}
 
 // ─── NOTIFICATIONS (générique, extensible) ─────
 try { db.exec(`CREATE TABLE IF NOT EXISTS notifications (

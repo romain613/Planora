@@ -15,6 +15,7 @@ const HomeTab = () => {
     portalTab, setPortalTab,
     portalTabKey, setPortalTabKey,
     phoneDialNumber, setPhoneDialNumber,
+    prefillKeypad,
     phoneRightTab, setPhoneRightTab,
     pipelineRightContact, setPipelineRightContact,
     phoneShowScheduleModal, setPhoneShowScheduleModal,
@@ -398,7 +399,7 @@ return <div style={{padding:'0 4px'}}>
     const doAction = () => {
       if (card.action === 'qualifier') { const liveRdv2=(bookings||[]).find(b=>b.contactId===ct.id&&b.status==='confirmed'); setRdvPasseModal({contact:ct,rdvDate:liveRdv2?.date||ct.next_rdv_date,bookingId:liveRdv2?.id}); }
       else if (card.action === 'appeler') { setPortalTab('phone'); if(ct.phone) setTimeout(()=>startPhoneCall(ct.phone,ct), 300); }
-      else if (card.action === 'sms') { setPipelineRightContact(ct); setPhoneRightTab('sms'); setPhoneDialNumber(ct.phone||''); setPortalTab('phone'); }
+      else if (card.action === 'sms') { setPipelineRightContact(ct); setPhoneRightTab('sms'); prefillKeypad(ct.phone||'', { skipNav: true }); setPortalTab('phone'); }
       else { setPipelineRightContact(ct); setPhoneRightTab('fiche'); setPortalTab('phone'); }
       showNotif('Action : '+ct.name, 'success');
     };

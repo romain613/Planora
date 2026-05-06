@@ -370,7 +370,54 @@ router.get('/compliance/call-frequency', requireAuth, enforceCompany, (req, res)
 // Dual mode: marketplace (caller ID from phone_numbers) or legacy (from voip_settings)
 router.post('/twiml/outbound', validateTwilioWebhook, (req, res) => {
   try {
-    const { To, From, companyId, collaboratorId, fromNumber, skipHoursCheck } = req.body;
+    const { From, companyId, collaboratorId, fromNumber, skipHoursCheck } = req.body;
+    let To = req.body.To;
+
+    // 🔒 SECURITY V2.1 — Si contactId / leadId fourni, on RÉSOUT le phone server-side.
+    // Le browser n'envoie JAMAIS le numéro réel pour les contacts masqués.
+    // Validation permission :
+    //   - contact/lead doit appartenir à companyId fourni (cohérence stricte multi-tenant)
+    //   - le user (collaboratorId) authentifié via Twilio token a déjà accès à ce scope
+    //     (filtre /api/data/contacts garantit qu'il ne récupère que ses contacts visibles)
+    const _contactId = req.body.contactId;
+    const _leadId = req.body.leadId;
+    if (_contactId && companyId) {
+      try {
+        const _ct = db.prepare('SELECT phone, companyId FROM contacts WHERE id = ?').get(_contactId);
+        if (_ct && _ct.companyId === companyId && _ct.phone) {
+          To = _ct.phone;
+          console.log('[VOIP TWIML] Resolved contactId server-side (phone hidden)');
+        } else {
+          console.warn('[VOIP TWIML] contactId not in company or no phone:', _contactId);
+          res.type('text/xml');
+          return res.send('<Response><Say language="fr-FR">Numéro indisponible</Say><Hangup/></Response>');
+        }
+      } catch (err) {
+        console.error('[VOIP TWIML] contactId lookup error:', err);
+      }
+    } else if (_leadId && companyId) {
+      try {
+        const _lead = db.prepare('SELECT phone, envelope_id FROM incoming_leads WHERE id = ?').get(_leadId);
+        if (_lead && _lead.phone) {
+          const _env = db.prepare('SELECT companyId FROM lead_envelopes WHERE id = ?').get(_lead.envelope_id);
+          if (_env && _env.companyId === companyId) {
+            To = _lead.phone;
+            console.log('[VOIP TWIML] Resolved leadId server-side (phone hidden)');
+          } else {
+            console.warn('[VOIP TWIML] leadId envelope not in company:', _leadId);
+            res.type('text/xml');
+            return res.send('<Response><Say language="fr-FR">Numéro indisponible</Say><Hangup/></Response>');
+          }
+        }
+      } catch (err) {
+        console.error('[VOIP TWIML] leadId lookup error:', err);
+      }
+    }
+    if (!To) {
+      console.warn('[VOIP TWIML] No To resolved (no contactId/leadId/To param)');
+      res.type('text/xml');
+      return res.send('<Response><Say language="fr-FR">Numéro non fourni</Say><Hangup/></Response>');
+    }
 
     // ── FRENCH REGULATORY: Calling hours (informational only) ──
     // Calendar360 is used for SAV/service calls, not cold-calling/démarchage

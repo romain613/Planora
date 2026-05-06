@@ -5,6 +5,8 @@ import { requirePermission } from '../middleware/permissions.js';
 import { uid, logHistory, cleanPhoneForCompare, checkDuplicate, parseCSV, autoDetectMapping, executeImport, extractCustomFieldsArray, autoDetectMappingV2, enrichContactCustomFields } from '../services/leadImportEngine.js';
 import { createNotification } from './notifications.js';
 import { dispatchEnvelope } from '../cron/leadDispatch.js';
+// Phase Envelope-Mask V1 — masquage numéros téléphone dans enveloppes
+import { maskLeadPhones, userCanRevealLead } from '../services/leadPhoneMasking.js';
 
 const router = Router();
 
@@ -196,6 +198,27 @@ router.get('/incoming', requireAdmin, enforceCompany, requirePermission('leads.v
   try {
     const { companyId, status, envelope_id, source_id, import_id, search, limit = '200', offset = '0' } = req.query;
     if (!companyId) return res.status(400).json({ error: 'companyId requis' });
+    // Phase Envelope-Mask V1 — Désactivation silencieuse search by phone si enveloppe masquée + user non autorisé.
+    // Détection : search contient ≥4 chiffres ET majoritairement chiffres → search "phone-like".
+    // Si envelope_id ciblé masked-until-claim ET user pas admin/supra → exclure phone LIKE.
+    // Si pas d'envelope_id (cross-envelopes) ET company a ≥1 enveloppe masquée → exclure aussi par défaut (safe).
+    // Aucun message bloquant : la recherche continue sur first_name/last_name/email.
+    let _excludePhoneFromSearch = false;
+    const _isAdminOrSupra = req.auth?.role === 'admin' || req.auth?.isSupra;
+    if (search && !_isAdminOrSupra) {
+      const _digits = (search || '').replace(/[^\d]/g, '');
+      const _isPhoneLike = _digits.length >= 4 && _digits.length / Math.max(search.length, 1) > 0.5;
+      if (_isPhoneLike) {
+        if (envelope_id) {
+          const _env = db.prepare('SELECT mask_phone_mode FROM lead_envelopes WHERE id = ?').get(envelope_id);
+          if (_env?.mask_phone_mode === 'masked-until-claim') _excludePhoneFromSearch = true;
+        } else {
+          const _hasMasked = db.prepare("SELECT 1 FROM lead_envelopes WHERE companyId = ? AND mask_phone_mode = 'masked-until-claim' LIMIT 1").get(companyId);
+          if (_hasMasked) _excludePhoneFromSearch = true;
+        }
+      }
+    }
+
     let sql = 'SELECT * FROM incoming_leads WHERE companyId = ?';
     const params = [companyId];
     if (status) { sql += ' AND status = ?'; params.push(status); }
@@ -203,15 +226,20 @@ router.get('/incoming', requireAdmin, enforceCompany, requirePermission('leads.v
     if (source_id) { sql += ' AND source_id = ?'; params.push(source_id); }
     if (import_id) { sql += ' AND import_id = ?'; params.push(import_id); }
     if (search) {
-      sql += " AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR phone LIKE ?)";
       const s = '%' + search + '%';
-      params.push(s, s, s, s);
+      if (_excludePhoneFromSearch) {
+        sql += " AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ?)";
+        params.push(s, s, s);
+      } else {
+        sql += " AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR phone LIKE ?)";
+        params.push(s, s, s, s);
+      }
     }
     sql += ' ORDER BY created_at DESC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), parseInt(offset));
     const rows = db.prepare(sql).all(...params);
 
-    // Also get total count for pagination
+    // Also get total count for pagination — applique le même flag pour cohérence
     let countSql = 'SELECT COUNT(*) as cnt FROM incoming_leads WHERE companyId = ?';
     const countParams = [companyId];
     if (status) { countSql += ' AND status = ?'; countParams.push(status); }
@@ -219,22 +247,39 @@ router.get('/incoming', requireAdmin, enforceCompany, requirePermission('leads.v
     if (source_id) { countSql += ' AND source_id = ?'; countParams.push(source_id); }
     if (import_id) { countSql += ' AND import_id = ?'; countParams.push(import_id); }
     if (search) {
-      countSql += " AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR phone LIKE ?)";
       const s = '%' + search + '%';
-      countParams.push(s, s, s, s);
+      if (_excludePhoneFromSearch) {
+        countSql += " AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ?)";
+        countParams.push(s, s, s);
+      } else {
+        countSql += " AND (first_name LIKE ? OR last_name LIKE ? OR email LIKE ? OR phone LIKE ?)";
+        countParams.push(s, s, s, s);
+      }
     }
     const total = db.prepare(countSql).get(...countParams)?.cnt || 0;
 
-    // Enrich leads with source and envelope names
+    // Enrich leads with source and envelope names + Phase Envelope-Mask V1 masquage backend
+    const _envCache = new Map(); // cache (envelope_id → { name, mask_phone_mode }) pour éviter SELECT N+1
     const leads = rows.map(r => {
-      const parsed = parseRow('incoming_leads', r);
+      let parsed = parseRow('incoming_leads', r);
       if (r.source_id) {
         const src = db.prepare('SELECT name FROM lead_sources WHERE id = ?').get(r.source_id);
         parsed.source_name = src?.name || '';
       }
       if (r.envelope_id) {
-        const env = db.prepare('SELECT name FROM lead_envelopes WHERE id = ?').get(r.envelope_id);
-        parsed.envelope_name = env?.name || '';
+        let env = _envCache.get(r.envelope_id);
+        if (!env) {
+          env = db.prepare('SELECT name, mask_phone_mode FROM lead_envelopes WHERE id = ?').get(r.envelope_id) || {};
+          _envCache.set(r.envelope_id, env);
+        }
+        parsed.envelope_name = env.name || '';
+        // Phase Envelope-Mask V1 — masquage si enveloppe en 'masked-until-claim' ET user pas autorisé.
+        // Backend masking obligatoire (anti DevTools bypass). Admin/supra/assigné voient le clair.
+        const _mode = env.mask_phone_mode || 'open';
+        if (_mode === 'masked-until-claim') {
+          const _canReveal = userCanRevealLead(parsed, req, db);
+          parsed = maskLeadPhones(parsed, _mode, _canReveal);
+        }
       }
       return parsed;
     });
@@ -492,7 +537,9 @@ router.get('/envelopes', requireAdmin, enforceCompany, requirePermission('leads.
         rules: rulesWithCounts,
         source_name: src?.name || '', source_type: src?.type || '', source_last_sync: src?.last_sync || '',
         source_last_row_count: src?.last_row_count || 0, source_gsheet_url: src?.gsheet_url || '',
-        source_sync_mode: src?.sync_mode || 'manual', lastImport
+        source_sync_mode: src?.sync_mode || 'manual', lastImport,
+        // Phase Envelope-Mask V1 — exposer le mode pour conditional render frontend (modal édition)
+        mask_phone_mode: env.mask_phone_mode || 'open',
       };
     });
     res.json(enriched);
@@ -519,6 +566,8 @@ router.post('/envelopes', requireAdmin, enforceCompany, requirePermission('leads
       dispatch_end_date: e.dispatch_end_date || '',
       dispatch_interval_minutes: e.dispatch_interval_minutes || 0,
       last_dispatch_at: '',
+      // Phase Envelope-Mask V1 — masquage numéros (whitelist values)
+      mask_phone_mode: ['open', 'masked-until-claim'].includes(e.mask_phone_mode) ? e.mask_phone_mode : 'open',
       created_at: new Date().toISOString()
     });
     logHistory(e.companyId, 'envelope_created', { envelope_id: id, name: e.name }, { user_id: req.auth?.userId, user_name: req.auth?.name });
@@ -1013,6 +1062,38 @@ function assignLeadToCollab(lead, collabId, ruleId, companyId, now, envelope_id,
     lead_id: lead.id, collaborator_id: collabId, collaborator_name: cName,
     contact_id: contactId, envelope_id, mode: 'dispatch'
   }, { lead_id: lead.id, contact_id: contactId, user_id: userId, user_name: userName });
+
+  // Phase Envelope-Mask V1 — audit log immutable révélation phone si l'enveloppe était masquée.
+  // Permet au manager de tracer qui a "pris" un lead et donc révélé son numéro. RGPD-friendly.
+  try {
+    let _envMode = 'open';
+    if (envelope_id) {
+      const _envRow = db.prepare('SELECT mask_phone_mode FROM lead_envelopes WHERE id = ?').get(envelope_id);
+      _envMode = _envRow?.mask_phone_mode || 'open';
+    }
+    if (_envMode === 'masked-until-claim') {
+      const _auditId = 'aud' + Date.now() + Math.random().toString(36).slice(2, 6);
+      db.prepare(
+        `INSERT INTO audit_logs (id, companyId, userId, userName, userRole, action, category, entityType, entityId, detail, metadata_json, ipAddress, userAgent, createdAt)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).run(
+        _auditId,
+        companyId,
+        userId || '',
+        userName || cName,
+        'admin',
+        'lead_phone_revealed',
+        'leads_security',
+        'incoming_lead',
+        lead.id,
+        `Lead pris par ${cName} → numéro révélé (envelope ${envelope_id})`,
+        JSON.stringify({ envelopeId: envelope_id, leadId: lead.id, collabId, contactId, mode: _envMode }),
+        '',
+        '',
+        now
+      );
+    }
+  } catch (e) { console.error('[ENVELOPE-MASK] audit log lead_phone_revealed failed:', e.message); }
 
   return { contactId, collabName: cName, collabId };
 }

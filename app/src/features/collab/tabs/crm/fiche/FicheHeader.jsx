@@ -6,6 +6,7 @@ import React from "react";
 import { T } from "../../../../../theme";
 import { I, Avatar, Badge } from "../../../../../shared/ui";
 import { _T } from "../../../../../shared/state/tabState";
+import { phoneFor } from "../../../../../shared/utils/phone";
 import { useCollabContext } from "../../../context/CollabContext";
 
 const FicheHeader = ({ ct, stg, sc }) => {
@@ -31,7 +32,7 @@ const FicheHeader = ({ ct, stg, sc }) => {
                 <div style={{fontSize:12,color:T.text3,marginTop:2}}>
                   {ct.email&&<span style={{display:'inline-flex',alignItems:'center',gap:3}}><I n="mail" s={10}/> {ct.email}</span>}
                   {ct.email&&ct.phone&&<span style={{margin:'0 6px'}}>·</span>}
-                  {ct.phone&&<span style={{display:'inline-flex',alignItems:'center',gap:3}}><I n="phone" s={10}/> {ct.phone}</span>}
+                  {ct.phone&&<span style={{display:'inline-flex',alignItems:'center',gap:3}}><I n="phone" s={10}/> {phoneFor(ct)}</span>}
                 </div>
               </div>
             ) : (
@@ -40,7 +41,7 @@ const FicheHeader = ({ ct, stg, sc }) => {
                 <div style={{fontSize:13,color:T.text3,marginTop:2}}>
                   <span style={{display:'inline-flex',alignItems:'center',gap:3}}><I n="mail" s={10}/> {ct.email||"Email non renseigné"}</span>
                   <span style={{margin:'0 6px'}}>·</span>
-                  <span style={{display:'inline-flex',alignItems:'center',gap:3}}><I n="phone" s={10}/> {ct.phone||"Téléphone non renseigné"}</span>
+                  <span style={{display:'inline-flex',alignItems:'center',gap:3}}><I n="phone" s={10}/> {phoneFor(ct, "Téléphone non renseigné")}</span>
                 </div>
                 <div style={{marginTop:6,fontSize:11,color:T.accent,fontWeight:600}}>Ajoutez ce contact au CRM pour modifier ses informations</div>
               </div>

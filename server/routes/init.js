@@ -1,6 +1,8 @@
 import { Router } from 'express';
 import { getAll, getByCompany, db } from '../db/database.js';
 import { logAudit } from '../helpers/audit.js';
+// Mask V2 — masquage phone contacts ex-leads selon mode envelope + role/assignation user
+import { maskContactIfFromMaskedEnvelope } from '../services/leadPhoneMasking.js';
 
 const router = Router();
 
@@ -118,7 +120,12 @@ router.get('/', (req, res) => {
     const workflows = getByCompany('workflows', companyId);
     const routings = getByCompany('routings', companyId);
     const polls = getByCompany('polls', companyId);
-    const contacts = getByCompany('contacts', companyId).filter(c => !c.archivedAt || c.archivedAt === ''); // V1.12.5.a — exclusion archivés
+    let contacts = getByCompany('contacts', companyId).filter(c => !c.archivedAt || c.archivedAt === ''); // V1.12.5.a — exclusion archivés
+    // Mask V2 — masquage phone contacts ex-leads selon mode envelope + role/assignation user
+    {
+      const _envCache = new Map();
+      contacts = contacts.map(c => maskContactIfFromMaskedEnvelope(c, req, db, _envCache));
+    }
     const customTables = getByCompany('custom_tables', companyId);
 
     // Google Calendar events
@@ -266,8 +273,12 @@ router.get('/', (req, res) => {
         noShow: !!b.noShow, checkedIn: !!b.checkedIn, reconfirmed: !!b.reconfirmed,
       }));
 
+      // Mask V2 — supra/admin global view : pas de masquage (supra bypass canReveal)
+      // Le helper retourne le contact inchangé pour supra/admin → safe par construction.
+      const _envCacheGlobal = new Map();
       const allContacts = getAll('contacts').filter(c => !c.archivedAt || c.archivedAt === '').map(ct => ({ // V1.12.5.a — exclusion archivés cross-company
-        ...ct, companyName: companies.find(co => co.id === ct.companyId)?.name || '',
+        ...maskContactIfFromMaskedEnvelope(ct, req, db, _envCacheGlobal),
+        companyName: companies.find(co => co.id === ct.companyId)?.name || '',
       }));
 
       return res.json({

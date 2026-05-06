@@ -47,6 +47,7 @@ import { T } from "../../../theme";
 import { I, Btn } from "../../../shared/ui";
 import { api } from "../../../shared/services/api";
 import { RDV_CATEGORIES } from "../../../shared/utils/pipeline";
+import { phoneFor } from "../../../shared/utils/phone";
 import { useCollabContext } from "../context/CollabContext";
 
 const ScheduleRdvModal = () => {
@@ -106,7 +107,7 @@ const ScheduleRdvModal = () => {
             {schedSearchResults.map(ct=>(
               <div key={ct.id} onClick={()=>{setPhoneScheduleForm(p=>({...p,contactId:ct.id,contactName:ct.name||ct.firstName||'',number:ct.phone||p.number}));setSchedSearchQ('');}} style={{padding:'8px 12px',cursor:'pointer',fontSize:12,display:'flex',justifyContent:'space-between',borderBottom:'1px solid #f3f4f6'}} onMouseEnter={e=>e.currentTarget.style.background='#f3f4f6'} onMouseLeave={e=>e.currentTarget.style.background='#fff'}>
                 <span style={{fontWeight:600}}>{ct.name}</span>
-                <span style={{color:'#9ca3af'}}>{ct.phone||ct.email||''}</span>
+                <span style={{color:'#9ca3af'}}>{phoneFor(ct) || ct.email || ''}</span>
               </div>
             ))}
           </div>}

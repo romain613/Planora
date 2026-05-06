@@ -10,6 +10,8 @@ import { markScoreDirty, computeDirtyScores } from '../services/leadScoring.js';
 import { computeNextActions } from '../services/nextBestAction.js';
 import { requirePipelineFreeMode } from '../middleware/requirePipelineFreeMode.js';
 import { resolvePipelineStages } from '../services/pipelineTemplates/resolve.js';
+// Mask V2 — masquage phone contacts ex-leads selon mode envelope + role/assignation user
+import { maskContactIfFromMaskedEnvelope } from '../services/leadPhoneMasking.js';
 const router = Router();
 
 // ─── WORKFLOWS ───
@@ -117,11 +119,17 @@ router.get('/contacts', requireAuth, enforceCompany, requirePermission('contacts
     const companyId = req.query.companyId;
     if (!companyId) return res.status(400).json({ error: 'companyId requis' });
     // Isolation collaborateur : collab voit seulement ses contacts
+    let rows;
     if (!req.auth.isSupra && !req.auth.isAdmin) {
-      const rows = db.prepare('SELECT * FROM contacts WHERE companyId = ? AND (assignedTo = ? OR sharedWithId = ? OR shared_with_json LIKE ?)').all(companyId, req.auth.collaboratorId, req.auth.collaboratorId, '%' + req.auth.collaboratorId + '%');
-      return res.json(rows);
+      rows = db.prepare('SELECT * FROM contacts WHERE companyId = ? AND (assignedTo = ? OR sharedWithId = ? OR shared_with_json LIKE ?)').all(companyId, req.auth.collaboratorId, req.auth.collaboratorId, '%' + req.auth.collaboratorId + '%');
+    } else {
+      rows = getByCompany('contacts', companyId);
     }
-    res.json(getByCompany('contacts', companyId));
+    // Mask V2 — masquage phone contacts ex-leads issus d'enveloppe masked-until-claim
+    // pour user non-admin/non-assigné. Cache envCache évite SELECT N+1.
+    const _envCache = new Map();
+    const _processed = (rows || []).map(c => maskContactIfFromMaskedEnvelope(c, req, db, _envCache));
+    res.json(_processed);
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -136,19 +144,22 @@ router.get('/contacts/archived', requireAuth, enforceCompany, requirePermission(
   try {
     const companyId = req.query.companyId;
     if (!companyId) return res.status(400).json({ error: 'companyId requis' });
+    let rows;
     if (!req.auth.isSupra && !req.auth.isAdmin) {
-      const rows = db.prepare(
+      rows = db.prepare(
         "SELECT * FROM contacts WHERE companyId = ? AND archivedAt IS NOT NULL AND archivedAt != '' " +
         "AND (assignedTo = ? OR sharedWithId = ? OR shared_with_json LIKE ?) " +
         "ORDER BY archivedAt DESC"
       ).all(companyId, req.auth.collaboratorId, req.auth.collaboratorId, '%' + req.auth.collaboratorId + '%');
-      return res.json(rows);
+    } else {
+      rows = db.prepare(
+        "SELECT * FROM contacts WHERE companyId = ? AND archivedAt IS NOT NULL AND archivedAt != '' " +
+        "ORDER BY archivedAt DESC"
+      ).all(companyId);
     }
-    const rows = db.prepare(
-      "SELECT * FROM contacts WHERE companyId = ? AND archivedAt IS NOT NULL AND archivedAt != '' " +
-      "ORDER BY archivedAt DESC"
-    ).all(companyId);
-    res.json(rows);
+    // Mask V2 — applique masquage idem GET /contacts
+    const _envCache = new Map();
+    res.json((rows || []).map(c => maskContactIfFromMaskedEnvelope(c, req, db, _envCache)));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
@@ -269,7 +280,8 @@ router.get('/contacts/:id', requireAuth, requirePermission('contacts.view'), (re
         return res.status(403).json({ error: 'Accès interdit' });
       }
     }
-    res.json(contact);
+    // Mask V2 — masquage phone si contact ex-lead enveloppe masked-until-claim + user non-admin/non-assigné
+    res.json(maskContactIfFromMaskedEnvelope(contact, req, db));
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 

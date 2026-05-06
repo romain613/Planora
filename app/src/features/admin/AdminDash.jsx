@@ -5,7 +5,7 @@ import { _T } from "../../shared/state/tabState";
 
 // Phase 1A extractions
 import { T, T_LIGHT, T_DARK, setTheme } from "../../theme";
-import { formatPhoneFR, displayPhone } from "../../shared/utils/phone";
+import { formatPhoneFR, displayPhone, phoneFor } from "../../shared/utils/phone";
 import { isValidEmail, isValidPhone } from "../../shared/utils/validators";
 import { COMMON_TIMEZONES, genCode } from "../../shared/utils/constants";
 
@@ -7178,7 +7178,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                         <tr key={ct.id} style={{borderBottom:`1px solid ${T.border}22`}}>
                           <td style={{padding:"12px 14px"}}><div style={{display:"flex",alignItems:"center",gap:8}}><Avatar name={ct.name} size={28} color={T.accent}/><span style={{fontWeight:600}}>{ct.name}</span></div></td>
                           <td style={{padding:"12px 14px",fontSize:12,color:T.text2}}>{ct.email||"—"}</td>
-                          <td style={{padding:"12px 14px",fontSize:12,color:T.text2}}>{ct.phone||"—"}</td>
+                          <td style={{padding:"12px 14px",fontSize:12,color:T.text2}}>{phoneFor(ct, "—")}</td>
                           <td style={{padding:"12px 14px"}}><Badge color={T.purple}>{ct.companyName}</Badge></td>
                           <td style={{padding:"12px 14px",textAlign:"center",fontWeight:700}}>{ct.totalBookings||0}</td>
                           <td style={{padding:"12px 14px",fontSize:12,color:T.text2}}>{ct.lastVisit?fmtDate(ct.lastVisit):"—"}</td>
@@ -8886,7 +8886,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                           <span style={{fontSize:14,fontWeight:700}}>{c.name}</span>
                           {callCounts[c.id] > 0 && <span style={{fontSize:10,fontWeight:600,padding:'1px 6px',borderRadius:4,background:'#7C3AED12',color:'#7C3AED'}}>{callCounts[c.id]} appel{callCounts[c.id]>1?'s':''}</span>}
                         </div>
-                        <div style={{fontSize:12,color:T.text3}}>{displayPhone(c.phone)}{c.company?' · '+c.company:''}{c.email?' · '+c.email:''}</div>
+                        <div style={{fontSize:12,color:T.text3}}>{phoneFor(c)}{c.company?' · '+c.company:''}{c.email?' · '+c.email:''}</div>
                       </div>
                       <div style={{display:'flex',gap:6}}>
                         <div onClick={()=>startVoipCall(c.phone,c)} style={{width:32,height:32,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#22C55E10',border:'1px solid #22C55E30'}}><I n="phone" s={14} style={{color:'#22C55E'}}/></div>
@@ -8920,7 +8920,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                               <Avatar name={c.name} color={T.accent} s={40}/>
                               <div title={c.name} style={{fontSize:13,fontWeight:700,marginTop:8,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
                               <div style={{fontSize:10,color:'#7C3AED',fontWeight:700,marginTop:2}}>{callCounts[c.id]} appel{callCounts[c.id]>1?'s':''}</div>
-                              <div title={displayPhone(c.phone)} style={{fontSize:11,color:T.text3,marginTop:2}}>{displayPhone(c.phone)}</div>
+                              <div title={phoneFor(c)} style={{fontSize:11,color:T.text3,marginTop:2}}>{phoneFor(c)}</div>
                               <div style={{display:'flex',gap:8,justifyContent:'center',marginTop:10}}>
                                 <div onClick={()=>startVoipCall(c.phone,c)} style={{width:36,height:36,borderRadius:10,background:'#22C55E10',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',border:'1px solid #22C55E30'}}><I n="phone" s={15} style={{color:'#22C55E'}}/></div>
                                 <div style={{width:36,height:36,borderRadius:10,background:T.bg,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',border:`1px solid ${T.border}`}}><I n="message-circle" s={15} style={{color:T.text3}}/></div>
@@ -11005,7 +11005,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
                       <Avatar name={ct.name} color={T.accent} size={56}/>
                       <div>
                         <div style={{fontSize:20,fontWeight:800,color:T.text}}>{ct.name}</div>
-                        <div style={{fontSize:13,color:T.text3,marginTop:2}}>{ct.email||"Pas d'email"} · {ct.phone||"Pas de téléphone"}</div>
+                        <div style={{fontSize:13,color:T.text3,marginTop:2}}>{ct.email||"Pas d'email"} · {phoneFor(ct, "Pas de téléphone")}</div>
                         <div style={{display:"flex",gap:6,alignItems:"center",marginTop:6,flexWrap:"wrap"}}>
                           {(()=>{const sc=getLeadScore(ct);return <span style={{padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,background:scoreColor(sc)+"18",color:scoreColor(sc)}}>Score {sc} — {scoreLabel(sc)}</span>})()}
                           {(()=>{const stg=stageLookup[ct.pipeline_stage||"nouveau"]||CRM_STAGES[0];return <span style={{padding:"3px 10px",borderRadius:20,fontSize:11,fontWeight:700,background:stg.color+"18",color:stg.color}}>{stg.label}</span>})()}

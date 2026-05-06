@@ -7,6 +7,7 @@ import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { T } from "../../../theme";
 import { I, Btn, Card, Spinner, Avatar, Badge, EmptyState } from "../../../shared/ui";
 import { api } from "../../../shared/services/api";
+import { phoneFor } from "../../../shared/utils/phone";
 
 const PAGE_SIZE = 50;
 
@@ -182,7 +183,7 @@ const DuplicatesPanel = ({ company, onOpenContact, onOpenMerge, notif }) => {
                     </div>
                     <div style={{ fontSize: 11, color: T.text3, display: 'flex', gap: 10, flexWrap: 'wrap', marginTop: 2 }}>
                       {c.email && <span><I n="mail" s={10}/> {c.email}</span>}
-                      {c.phone && <span><I n="phone" s={10}/> {c.phone}</span>}
+                      {c.phone && <span><I n="phone" s={10}/> {phoneFor(c)}</span>}
                       {c.assignedName && <span><I n="user" s={10}/> {c.assignedName}</span>}
                       {c.pipelineStage && (
                         <span style={{ color: STAGE_COLORS[c.pipelineStage] || T.text3, fontWeight: 600 }}>

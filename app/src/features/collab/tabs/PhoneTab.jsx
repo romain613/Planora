@@ -7,7 +7,7 @@
 import React, { useState, useMemo, useEffect, useRef, Fragment } from "react";
 import { T } from "../../../theme";
 import { I, Btn, Card, Avatar, Badge, Modal, Input, ValidatedInput, Stars, Spinner, Stat, EmptyState, HelpTip, HookIsolator, ErrorBoundary } from "../../../shared/ui";
-import { displayPhone, formatPhoneFR, normalizePhoneNumber, phoneMatchKey, matchContactByPhone } from "../../../shared/utils/phone";
+import { displayPhone, formatPhoneFR, normalizePhoneNumber, phoneMatchKey, matchContactByPhone, maskPhoneVisual, phoneFor } from "../../../shared/utils/phone";
 import { isValidEmail, isValidPhone } from "../../../shared/utils/validators";
 import { fmtDate, DAYS_FR, DAYS_SHORT, MONTHS_FR, getDow, formatDateTime, formatDate } from "../../../shared/utils/dates";
 import { PIPELINE_CARD_COLORS_DEFAULT, RDV_CATEGORIES, PIPELINE_LABELS, STATUS_COLORS } from "../../../shared/utils/pipeline";
@@ -93,6 +93,9 @@ const PhoneTab = () => {
     phoneRightAccordion, setPhoneRightAccordion,
     phoneLeftCollapsed, setPhoneLeftCollapsed,
     phoneDialNumber, setPhoneDialNumber,
+    // Mask V2 — display séparé du payload Twilio (clavier téléphone)
+    phoneDialDisplay, setPhoneDialDisplay,
+    phoneDialMaskedContact, setPhoneDialMaskedContact,
     phoneShowScheduleModal, setPhoneShowScheduleModal,
     phoneScheduleForm, setPhoneScheduleForm,
     voipDevice, voipCall, voipCallRef,
@@ -515,9 +518,11 @@ const PhoneTab = () => {
 
             {/* ── NUMBER INPUT ── */}
             <div style={{position:'relative',marginBottom:10}}>
-              <input value={phoneDialNumber} onChange={e=>{if(!(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)&&(typeof voipState!=='undefined'?voipState:null)!=='incoming')(typeof setPhoneDialNumber==='function'?setPhoneDialNumber:function(){})(e.target.value);}} onKeyDown={e=>{if(e.key==='Enter'&&(typeof phoneDialNumber!=='undefined'?phoneDialNumber:{}).length>4&&!(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)&&(typeof voipState!=='undefined'?voipState:null)!=='incoming'){startPhoneCall(phoneDialNumber,null);}}} readOnly={!!(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)||(typeof voipState!=='undefined'?voipState:null)==='incoming'} placeholder={voipState==='incoming'?'Appel entrant...':'+33 6 12 34 56 78'} style={{width:'100%',padding:'12px 40px 12px 16px',borderRadius:14,border:'1.5px solid '+((typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)?'rgba(34,197,94,0.3)':(typeof voipState!=='undefined'?voipState:null)==='incoming'?'rgba(245,158,11,0.3)':'rgba(255,255,255,0.08)'),background:(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)?'rgba(34,197,94,0.06)':(typeof voipState!=='undefined'?voipState:null)==='incoming'?'rgba(245,158,11,0.06)':'rgba(255,255,255,0.04)',fontSize:20,fontWeight:700,fontFamily:'monospace',color:'#fff',outline:'none',letterSpacing:1.5,textAlign:'center',boxShadow:phoneDialNumber?'0 0 20px rgba(34,197,94,0.08)':'none'}}/>
-              {!(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)&&(typeof voipState!=='undefined'?voipState:null)!=='incoming'&&(typeof phoneDialNumber!=='undefined'?phoneDialNumber:{}).length>0 && (
-                <div onClick={()=>setPhoneDialNumber('')} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',width:24,height:24,borderRadius:12,background:'rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',transition:'background .15s'}} onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.15)'} onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.08)'}>
+              {/* Mask V2 — input value: priorité phoneDialDisplay (masqué) sinon phoneDialNumber (clair).
+                  Si user tape manuellement, on reset display à '' et on update payload avec sa saisie. */}
+              <input value={(typeof phoneDialDisplay!=='undefined' && phoneDialDisplay) ? phoneDialDisplay : (phoneDialNumber||'')} onChange={e=>{if(!(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)&&(typeof voipState!=='undefined'?voipState:null)!=='incoming'){if(typeof setPhoneDialDisplay==='function')setPhoneDialDisplay('');if(typeof setPhoneDialMaskedContact==='function')setPhoneDialMaskedContact(null);setPhoneDialNumber(e.target.value);}}} onKeyDown={e=>{if(e.key==='Enter'&&(typeof phoneDialNumber!=='undefined'?phoneDialNumber:{}).length>4&&!(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)&&(typeof voipState!=='undefined'?voipState:null)!=='incoming'){startPhoneCall(phoneDialNumber,null);}}} readOnly={!!(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)||(typeof voipState!=='undefined'?voipState:null)==='incoming'} placeholder={voipState==='incoming'?'Appel entrant...':'+33 6 12 34 56 78'} style={{width:'100%',padding:'12px 40px 12px 16px',borderRadius:14,border:'1.5px solid '+((typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)?'rgba(34,197,94,0.3)':(typeof voipState!=='undefined'?voipState:null)==='incoming'?'rgba(245,158,11,0.3)':'rgba(255,255,255,0.08)'),background:(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)?'rgba(34,197,94,0.06)':(typeof voipState!=='undefined'?voipState:null)==='incoming'?'rgba(245,158,11,0.06)':'rgba(255,255,255,0.04)',fontSize:20,fontWeight:700,fontFamily:'monospace',color:'#fff',outline:'none',letterSpacing:1.5,textAlign:'center',boxShadow:phoneDialNumber?'0 0 20px rgba(34,197,94,0.08)':'none'}}/>
+              {!(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)&&(typeof voipState!=='undefined'?voipState:null)!=='incoming'&&((typeof phoneDialNumber!=='undefined'?phoneDialNumber:{}).length>0 || (typeof phoneDialDisplay!=='undefined'&&phoneDialDisplay)) && (
+                <div onClick={()=>{setPhoneDialNumber('');if(typeof setPhoneDialDisplay==='function')setPhoneDialDisplay('');if(typeof setPhoneDialMaskedContact==='function')setPhoneDialMaskedContact(null);}} style={{position:'absolute',right:10,top:'50%',transform:'translateY(-50%)',width:24,height:24,borderRadius:12,background:'rgba(255,255,255,0.08)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',transition:'background .15s'}} onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.15)'} onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.08)'}>
                   <I n="x" s={12} style={{color:'#94A3B8'}}/>
                 </div>
               )}
@@ -636,8 +641,15 @@ const PhoneTab = () => {
                   <span style={{fontSize:22,color:'#fff',lineHeight:1,fontWeight:300}}>⌫</span>
                 </div> : <div style={{width:40,height:40}}/>}
                 <div data-dial-call-btn onClick={()=>{
-                  if((typeof phoneDialNumber!=='undefined'?phoneDialNumber:{}).length>4){startPhoneCall(phoneDialNumber,null);}
-                  else showNotif('Entrez un numero','danger');
+                  // 🔒 V2.1 — Si contact masqué prefill : appel via contactId server-side (phone DB).
+                  const _maskedCt = (typeof phoneDialMaskedContact!=='undefined'?phoneDialMaskedContact:null);
+                  if (_maskedCt && _maskedCt.id) {
+                    startPhoneCall('', _maskedCt.id);
+                  } else if ((typeof phoneDialNumber!=='undefined'?phoneDialNumber:{}).length>4) {
+                    startPhoneCall(phoneDialNumber, null);
+                  } else {
+                    showNotif('Entrez un numero','danger');
+                  }
                 }} style={{width:56,height:56,borderRadius:28,background:'linear-gradient(135deg,#22C55E,#16A34A)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',boxShadow:'0 0 30px rgba(34,197,94,0.35),0 4px 16px rgba(34,197,94,0.25)',transition:'transform .15s'}} onMouseEnter={e=>{e.currentTarget.style.transform='scale(1.08)';}} onMouseLeave={e=>{e.currentTarget.style.transform='scale(1)';}}>
                   <I n="phone" s={22} style={{color:'#fff'}}/>
                 </div>
@@ -759,7 +771,7 @@ const PhoneTab = () => {
                   const foundCt = ct || { id: conv.contactId||'tmp_'+conv.id, name: conv.contactName||displayPhone(conv.clientPhone)||'Numéro inconnu', phone: conv.clientPhone, pipeline_stage: 'nouveau', _isUnknown: true };
                   setPipelineRightContact(foundCt);
                   setPhoneRightTab('sms');
-                  setPhoneDialNumber(conv.clientPhone||'');
+                  prefillKeypad(conv.clientPhone||'', { skipNav: true });
                   if(phoneRightCollapsed){(typeof setPhoneRightCollapsed==='function'?setPhoneRightCollapsed:function(){})(false);try{localStorage.setItem('c360-phone-right-collapsed-'+collab.id,'0');}catch{}}
                   if(_T.smsCache){const k='sms_'+phoneMatchKey(conv.clientPhone||'');delete _T.smsCache[k];}
                   setPhoneRightAccordion(p=>({...p,_smsR:Date.now()}));
@@ -1039,7 +1051,7 @@ if (d?.success) {
 <div style={{flex:1,minWidth:0,overflow:'hidden'}}>
 <div style={{fontWeight:700,fontSize:14,color:isArchivedContact?'#7C3AED':isUnknownContact?T.text2:T.text,fontStyle:isUnknownContact?'italic':'normal',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{displayName}</div>
 <div style={{fontSize:11,color:T.text3,display:'flex',alignItems:'center',gap:6,flexWrap:'wrap',minWidth:0}}>
-  <span onClick={()=>{if(selectedConv?.clientPhone) setPhoneDialNumber(selectedConv.clientPhone);}} style={{color:T.accent,cursor:'pointer',borderRadius:3,padding:'0 2px',transition:'background .12s'}} onMouseEnter={e=>e.currentTarget.style.background=T.accentBg} onMouseLeave={e=>e.currentTarget.style.background='transparent'} title="Afficher sur le clavier">{fmtPhone(selectedConv?.clientPhone)}</span>
+  <span onClick={()=>{if(selectedConv?.clientPhone) prefillKeypad(selectedConv.clientPhone, { skipNav: true });}} style={{color:T.accent,cursor:'pointer',borderRadius:3,padding:'0 2px',transition:'background .12s'}} onMouseEnter={e=>e.currentTarget.style.background=T.accentBg} onMouseLeave={e=>e.currentTarget.style.background='transparent'} title="Afficher sur le clavier">{fmtPhone(selectedConv?.clientPhone)}</span>
   {isArchivedContact ? (
     <span style={{display:'inline-flex',alignItems:'center',gap:3,fontSize:10,fontWeight:700,color:'#7C3AED',background:'#7C3AED12',border:'1px solid #7C3AED40',borderRadius:6,padding:'1px 6px'}} title={selectedContact?.archivedReason||'Contact archivé'}>
       <I n="archive" s={10} style={{color:'#7C3AED'}}/> 📦 Contact archivé
@@ -1175,7 +1187,7 @@ if (isCall) {
   /* ── Compact single-line for simple calls ── */
   if (!hasExtras) {
     return (
-      <div key={ev.id} onClick={()=>{if(selectedConv?.clientPhone) setPhoneDialNumber(selectedConv.clientPhone);}} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 16px',borderRadius:10,background:bgColor,border:'1px solid '+borderColor,cursor:'pointer',transition:'all .12s'}} onMouseEnter={e=>e.currentTarget.style.opacity='0.85'} onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
+      <div key={ev.id} onClick={()=>{if(selectedConv?.clientPhone) prefillKeypad(selectedConv.clientPhone, { skipNav: true });}} style={{display:'flex',alignItems:'center',gap:10,padding:'8px 16px',borderRadius:10,background:bgColor,border:'1px solid '+borderColor,cursor:'pointer',transition:'all .12s'}} onMouseEnter={e=>e.currentTarget.style.opacity='0.85'} onMouseLeave={e=>e.currentTarget.style.opacity='1'}>
         <I n={isOutbound?'phone-outgoing':'phone-incoming'} s={13} style={{color:accentColor,flexShrink:0}}/>
         <span style={{fontSize:12,fontWeight:600,color:T.text}}>{isOutbound?'Sortant':'Entrant'}</span>
         {durLong && <span style={{fontSize:11,color:T.text3}}>{durLong}</span>}
@@ -1535,7 +1547,7 @@ return <div key={ev.id} style={{fontSize:11,color:T.text3,textAlign:'center',pad
   <Avatar name={c.name} color={c.card_color||T.accent} size={24}/>
   <div style={{flex:1,minWidth:0}}>
     <div style={{fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{c.name}</div>
-    <div style={{fontSize:10,color:T.text3}}>{c.phone||c.email||'—'}</div>
+    <div style={{fontSize:10,color:T.text3}}>{phoneFor(c) || c.email || '—'}</div>
   </div>
   <span onClick={e=>{e.stopPropagation();setPipeSelectedIds(p=>p.filter(x=>x!==c.id));}} style={{cursor:'pointer',color:T.text3,flexShrink:0}}><I n="x" s={12}/></span>
 </div>)}
@@ -1650,7 +1662,7 @@ if (n === ph) matched.set(c.id, c);
 <div style={{flex:1,minWidth:0}}>
   <div style={{fontSize:14,fontWeight:800,color:T.text}}>{ct.name}</div>
       {(typeof v7FollowersMap!=='undefined'?v7FollowersMap:null)[ct.id]?.executor && (typeof v7FollowersMap!=='undefined'?v7FollowersMap:null)[ct.id].executor.collaboratorId !== collab.id && <span style={{display:'inline-block',padding:'0 5px',borderRadius:4,fontSize:7,fontWeight:700,background:'#8B5CF620',color:'#8B5CF6',marginLeft:6}} title={'Chez '+(typeof v7FollowersMap!=='undefined'?v7FollowersMap:null)[ct.id].executor.collaboratorName}>{((typeof v7FollowersMap!=='undefined'?v7FollowersMap:null)[ct.id].executor.collaboratorName||'').split(' ')[0]}</span>}
-  {(ct.phone||ct.mobile) && <div style={{fontSize:10,color:T.text3,marginTop:1}}>{ct.phone||ct.mobile}</div>}
+  {(ct.phone||ct.mobile) && <div style={{fontSize:10,color:T.text3,marginTop:1}}>{phoneFor(ct)}</div>}
   <div style={{display:'flex',alignItems:'center',gap:4,marginTop:2}}>
     <div style={{width:6,height:6,borderRadius:3,background:ctStage.color}}/>
     <span style={{fontSize:10,fontWeight:600,color:ctStage.color}}>{ctStage.label}</span>
@@ -1665,7 +1677,7 @@ if (n === ph) matched.set(c.id, c);
 <div style={{display:'flex',gap:4,marginTop:10}}>
 {[
   {icon:'phone',color:'#22C55E',tip:'Appeler',action:()=>startPhoneCall(ctNum||ct.phone||ct.mobile,ct.id)},
-  {icon:'message-square',color:'#0EA5E9',tip:'SMS',action:()=>{setPhoneDialNumber(ctNum||ct.phone||ct.mobile||'');setPhoneRightTab('sms');}},
+  {icon:'message-square',color:'#0EA5E9',tip:'SMS',action:()=>{prefillKeypad(ctNum||ct.phone||ct.mobile||'', { skipNav: true });setPhoneRightTab('sms');}},
   {icon:'layout-grid',color:'#7C3AED',tip:'Pipeline',action:()=>{setPhoneSubTab('pipeline');}},
   {icon:'users',color:'#8B5CF6',tip:'Transférer',action:()=>{setV7TransferModal({contact:ct,fromPhonePipeline:true});setV7TransferTarget('');}},
   {icon:'calendar-plus',color:'#F59E0B',tip:'RDV',action:()=>{if(ct.id){setPhoneScheduleForm({contactId:ct.id,contactName:ct.name,number:ct.phone||ctNum||'',date:new Date(Date.now()+86400000).toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true});setPhoneShowScheduleModal(true);}else{showNotif('Creez le contact avant de programmer un RDV','info');}}},
@@ -2247,7 +2259,7 @@ if (n === ph) matched.set(c.id, c);
     <I n="message-square" s={10} style={{color:'#0EA5E9'}}/>
     <span style={{fontSize:10,fontWeight:700,color:T.text3}}>SMS</span>
   </div>
-  <div onClick={()=>{setPhoneDialNumber(ctNum||ct.phone||ct.mobile||'');setPhoneSubTab('sms');}} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:8,cursor:'pointer',background:'#0EA5E908',border:'1px solid #0EA5E918',transition:'all .12s'}} onMouseEnter={e=>{e.currentTarget.style.background='#0EA5E914';}} onMouseLeave={e=>{e.currentTarget.style.background='#0EA5E908';}}>
+  <div onClick={()=>{prefillKeypad(ctNum||ct.phone||ct.mobile||'', { skipNav: true });setPhoneSubTab('sms');}} style={{display:'flex',alignItems:'center',gap:8,padding:'8px 10px',borderRadius:8,cursor:'pointer',background:'#0EA5E908',border:'1px solid #0EA5E918',transition:'all .12s'}} onMouseEnter={e=>{e.currentTarget.style.background='#0EA5E914';}} onMouseLeave={e=>{e.currentTarget.style.background='#0EA5E908';}}>
     <div style={{width:28,height:28,borderRadius:8,background:'#0EA5E912',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}><I n="send" s={12} style={{color:'#0EA5E9'}}/></div>
     <div style={{flex:1}}>
       <div style={{fontSize:11,fontWeight:600,color:T.text}}>Ouvrir la conversation</div>
@@ -4403,7 +4415,7 @@ return (
                 {/* Callback */}
                 <div onClick={()=>prefillKeypad(cl.direction==='outbound'?cl.toNumber:cl.fromNumber)} style={{width:28,height:28,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#22C55E10',border:'1px solid #22C55E30'}} title="Rappeler"><I n="phone" s={12} style={{color:'#22C55E'}}/></div>
                 {/* SMS */}
-                <div onClick={()=>{const num=cl.direction==='outbound'?cl.toNumber:cl.fromNumber;setPhoneDialNumber(num||'');setPhoneSubTab('sms');}} style={{width:28,height:28,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#0EA5E910',border:'1px solid #0EA5E930'}} title="Envoyer SMS"><I n="message-square" s={12} style={{color:'#0EA5E9'}}/></div>
+                <div onClick={()=>{const num=cl.direction==='outbound'?cl.toNumber:cl.fromNumber;prefillKeypad(num||'', { skipNav: true });setPhoneSubTab('sms');}} style={{width:28,height:28,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#0EA5E910',border:'1px solid #0EA5E930'}} title="Envoyer SMS"><I n="message-square" s={12} style={{color:'#0EA5E9'}}/></div>
                 {/* WhatsApp */}
                 <div onClick={()=>{const num=(cl.direction==='outbound'?cl.toNumber:cl.fromNumber)||'';const clean=num.replace(/[^0-9+]/g,'');window.open('https://wa.me/'+clean.replace('+',''),'_blank');}} style={{width:28,height:28,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#25D36610',border:'1px solid #25D36630'}} title="WhatsApp"><I n="message-circle" s={12} style={{color:'#25D366'}}/></div>
                 {/* Email */}
@@ -4479,7 +4491,7 @@ return (
 </div>
 <div style={{display:'flex',gap:6}}>
 <div onClick={()=>startPhoneCall(num,ct?.id)} style={{width:36,height:36,borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#22C55E15',border:'1px solid #22C55E30'}} title="Rappeler"><I n="phone" s={15} style={{color:'#22C55E'}}/></div>
-<div onClick={()=>{setPhoneDialNumber(num||'');setPhoneSubTab('sms');}} style={{width:36,height:36,borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#0EA5E910',border:'1px solid #0EA5E930'}} title="SMS"><I n="message-square" s={15} style={{color:'#0EA5E9'}}/></div>
+<div onClick={()=>{prefillKeypad(num||'', { skipNav: true });setPhoneSubTab('sms');}} style={{width:36,height:36,borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#0EA5E910',border:'1px solid #0EA5E930'}} title="SMS"><I n="message-square" s={15} style={{color:'#0EA5E9'}}/></div>
 <div onClick={()=>{setPhoneShowCallNoteModal(cl.id);setPhoneCallNoteText(notes);}} style={{width:36,height:36,borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#F59E0B10',border:'1px solid #F59E0B30'}} title="Notes"><I n="file-text" s={15} style={{color:'#F59E0B'}}/></div>
 {!ct && <div onClick={()=>{setPhoneQuickAddPhone(num);setPhoneQuickAddName('');}} style={{width:36,height:36,borderRadius:10,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:T.accentBg,border:'1px solid '+T.accent+'30'}} title="Ajouter contact"><I n="user-plus" s={15} style={{color:T.accent}}/></div>}
 </div>
@@ -4844,7 +4856,7 @@ return (
             {calls > 0 && <span style={{fontSize:9,fontWeight:600,padding:'1px 5px',borderRadius:4,background:'#7C3AED12',color:'#7C3AED'}}>{calls} appel{calls>1?'s':''}</span>}
           </div>
           <div style={{display:'flex',alignItems:'center',gap:8,marginTop:2}}>
-            {c.phone && <span style={{fontSize:11,color:T.text3,display:'flex',alignItems:'center',gap:2}}><I n="phone" s={10}/> {displayPhone(c.phone)}</span>}
+            {c.phone && <span style={{fontSize:11,color:T.text3,display:'flex',alignItems:'center',gap:2}}><I n="phone" s={10}/> {phoneFor(c)}</span>}
             {c.email && <span style={{fontSize:11,color:T.text3,display:'flex',alignItems:'center',gap:2}}><I n="mail" s={10}/> {c.email}</span>}
             {c.company && <span style={{fontSize:11,color:T.text3,display:'flex',alignItems:'center',gap:2}}><I n="briefcase" s={10}/> {c.company}</span>}
           </div>
@@ -4854,7 +4866,7 @@ return (
         {lastCall && <span style={{fontSize:10,color:T.text3,flexShrink:0}}>{new Date(lastCall.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})}</span>}
         {/* Action buttons */}
         <div style={{display:'flex',gap:4,flexShrink:0}}>
-          {c.phone && <div onClick={()=>{setPhoneSubTab('sms');setPhoneDialNumber(c.phone);}} style={{width:30,height:30,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#2563EB10',border:'1px solid #2563EB20'}} title="SMS"><I n="message-square" s={13} style={{color:'#2563EB'}}/></div>}
+          {c.phone && <div onClick={()=>{setPhoneSubTab('sms');prefillKeypad(c.phone, { skipNav: true });}} style={{width:30,height:30,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#2563EB10',border:'1px solid #2563EB20'}} title="SMS"><I n="message-square" s={13} style={{color:'#2563EB'}}/></div>}
           {c.phone && <div onClick={()=>prefillKeypad(c.phone)} style={{width:30,height:30,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#22C55E10',border:'1px solid #22C55E20'}} title="Appeler"><I n="phone" s={13} style={{color:'#22C55E'}}/></div>}
           {c.phone && <div onClick={()=>{const clean=(c.phone||'').replace(/[^0-9+]/g,'');window.open('https://wa.me/'+clean.replace('+',''),'_blank');}} style={{width:30,height:30,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#25D36610',border:'1px solid #25D36620'}} title="WhatsApp"><I n="message-circle" s={13} style={{color:'#25D366'}}/></div>}
           <div onClick={()=>{setPhoneContactDetailId(c.id);setPhoneContactDetailTab('info');setPhoneContactEditMode(false);setPhoneSubTab('contact-detail');}} style={{width:30,height:30,borderRadius:8,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#7C3AED10',border:'1px solid #7C3AED20'}} title="Fiche complete"><I n="external-link" s={13} style={{color:'#7C3AED'}}/></div>
@@ -4900,14 +4912,14 @@ return (
 <div style={{flex:1}}>
   <div style={{fontSize:18,fontWeight:800,color:'#fff'}}>{c.name}</div>
   <div style={{display:'flex',gap:10,marginTop:4,flexWrap:'wrap'}}>
-    {c.phone && <span style={{fontSize:11,color:'#ffffffcc',display:'flex',alignItems:'center',gap:3}}><I n="phone" s={10}/> {displayPhone(c.phone)}</span>}
+    {c.phone && <span style={{fontSize:11,color:'#ffffffcc',display:'flex',alignItems:'center',gap:3}}><I n="phone" s={10}/> {phoneFor(c)}</span>}
     {c.email && <span style={{fontSize:11,color:'#ffffffcc',display:'flex',alignItems:'center',gap:3}}><I n="mail" s={10}/> {c.email}</span>}
     {c.company && <span style={{fontSize:11,color:'#ffffffcc',display:'flex',alignItems:'center',gap:3}}><I n="briefcase" s={10}/> {c.company}</span>}
   </div>
 </div>
 <div style={{display:'flex',gap:4}}>
   {c.phone && <div onClick={()=>prefillKeypad(c.phone)} style={{width:36,height:36,borderRadius:10,background:'rgba(255,255,255,0.2)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><I n="phone" s={16} style={{color:'#fff'}}/></div>}
-  {c.phone && <div onClick={()=>{setPhoneDialNumber(c.phone);setPhoneSubTab('sms');}} style={{width:36,height:36,borderRadius:10,background:'rgba(255,255,255,0.2)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><I n="message-square" s={16} style={{color:'#fff'}}/></div>}
+  {c.phone && <div onClick={()=>{prefillKeypad(c.phone, { skipNav: true });setPhoneSubTab('sms');}} style={{width:36,height:36,borderRadius:10,background:'rgba(255,255,255,0.2)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><I n="message-square" s={16} style={{color:'#fff'}}/></div>}
   {c.phone && <div onClick={()=>{const clean=(c.phone||'').replace(/[^0-9+]/g,'');window.open('https://wa.me/'+clean.replace('+',''),'_blank');}} style={{width:36,height:36,borderRadius:10,background:'rgba(255,255,255,0.2)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><I n="message-circle" s={16} style={{color:'#fff'}}/></div>}
   {c.email && <div onClick={()=>window.open('mailto:'+c.email)} style={{width:36,height:36,borderRadius:10,background:'rgba(255,255,255,0.2)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer'}}><I n="mail" s={16} style={{color:'#fff'}}/></div>}
 </div>
@@ -5616,15 +5628,15 @@ return(
           ) : _isReady ? (
             <div onClick={e=>{e.stopPropagation();const btn=document.querySelector('[data-dial-call-btn]');if(btn)btn.click();else if(typeof startVoipCall==='function')startVoipCall(ct.phone,ct);}} style={{display:'flex',alignItems:'center',gap:4,padding:'4px 8px',borderRadius:8,background:'#3B82F610',border:'2px solid #3B82F640',marginBottom:3,cursor:'pointer',transition:'all .15s'}} onMouseEnter={e=>e.currentTarget.style.background='#3B82F620'} onMouseLeave={e=>e.currentTarget.style.background='#3B82F610'}>
               <I n="phone" s={11} style={{color:'#3B82F6',flexShrink:0}}/>
-              <span style={{fontSize:11,fontWeight:700,color:T.text,flex:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{displayPhone(ct.phone)}</span>
+              <span style={{fontSize:11,fontWeight:700,color:T.text,flex:1,whiteSpace:'nowrap'}}>{phoneFor(ct)}</span>
               <span style={{fontSize:8,fontWeight:700,color:'#3B82F6',padding:'1px 6px',borderRadius:4,background:'#3B82F615',flexShrink:0}}>Appeler</span>
               <div style={{width:22,height:22,borderRadius:11,background:'#22C55E',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:'0 1px 4px #22C55E40'}}><I n="phone" s={11} style={{color:'#fff'}}/></div>
             </div>
           ) : (
-            <div onClick={e=>{e.stopPropagation();setPhoneDialNumber(ct.phone);setPipelineRightContact(ct);}} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 6px',borderRadius:6,background:'#22C55E06',border:'1px solid #22C55E20',marginBottom:3,cursor:'pointer',transition:'all .12s'}} onMouseEnter={e=>e.currentTarget.style.background='#22C55E12'} onMouseLeave={e=>e.currentTarget.style.background='#22C55E06'}>
+            <div onClick={e=>{e.stopPropagation();prefillKeypad(ct.phone);setPipelineRightContact(ct);}} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 6px',borderRadius:6,background:'#22C55E06',border:'1px solid #22C55E20',marginBottom:3,cursor:'pointer',transition:'all .12s'}} onMouseEnter={e=>e.currentTarget.style.background='#22C55E12'} onMouseLeave={e=>e.currentTarget.style.background='#22C55E06'}>
               <I n="phone" s={11} style={{color:'#22C55E',flexShrink:0}}/>
-              <span style={{fontSize:11,fontWeight:700,color:T.text,flex:1,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis'}}>{displayPhone(ct.phone)}</span>
-              <div style={{width:22,height:22,borderRadius:11,background:'#22C55E',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:'0 1px 4px #22C55E40'}} onClick={e=>{e.stopPropagation();setPhoneDialNumber(ct.phone);}} title="Préparer l'appel"><I n="phone" s={11} style={{color:'#fff'}}/></div>
+              <span style={{fontSize:11,fontWeight:700,color:T.text,flex:1,whiteSpace:'nowrap'}}>{phoneFor(ct)}</span>
+              <div style={{width:22,height:22,borderRadius:11,background:'#22C55E',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,boxShadow:'0 1px 4px #22C55E40'}} onClick={e=>{e.stopPropagation();prefillKeypad(ct.phone);}} title="Préparer l'appel"><I n="phone" s={11} style={{color:'#fff'}}/></div>
             </div>
           );
         })()}
@@ -5926,7 +5938,7 @@ api('/api/conversations?companyId='+company.id).then(d=>{if(Array.isArray(d))set
     </div>
     {(typeof phoneDialNumber!=='undefined'?phoneDialNumber:{}).length>=2 && <div style={{marginTop:4,display:'flex',gap:4,flexWrap:'wrap'}}>
       {contacts.filter(c=>c.phone&&((c.name||'').toLowerCase().includes((typeof phoneDialNumber!=='undefined'?phoneDialNumber:{}).toLowerCase())||(c.phone||'').includes(phoneDialNumber))).slice(0,5).map(c=>
-        <div key={c.id} onClick={()=>setPhoneDialNumber(c.phone)} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:6,background:T.bg,border:'1px solid '+T.border,cursor:'pointer',fontSize:10}}><Avatar name={c.name} color={T.accent} s={16}/> {c.name}</div>
+        <div key={c.id} onClick={()=>prefillKeypad(c.phone, { skipNav: true })} style={{display:'flex',alignItems:'center',gap:4,padding:'3px 8px',borderRadius:6,background:T.bg,border:'1px solid '+T.border,cursor:'pointer',fontSize:10}}><Avatar name={c.name} color={T.accent} s={16}/> {c.name}</div>
       )}
     </div>}
   </div>
@@ -5964,7 +5976,7 @@ api('/api/conversations?companyId='+company.id).then(d=>{if(Array.isArray(d))set
     <div style={{fontSize:10,color:T.text3}}>{_fmtPhone(selectedConv?.clientPhone)}</div>
   </div>
   <div style={{display:'flex',gap:4}}>
-    <div onClick={()=>{if(selectedConv?.clientPhone){setPhoneDialNumber(selectedConv.clientPhone);setPhoneSubTab('pipeline');}}} style={{width:28,height:28,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#22C55E12',border:'1px solid #22C55E30'}} title="Appeler"><I n="phone" s={12} style={{color:'#22C55E'}}/></div>
+    <div onClick={()=>{if(selectedConv?.clientPhone){prefillKeypad(selectedConv.clientPhone, { skipNav: true });setPhoneSubTab('pipeline');}}} style={{width:28,height:28,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#22C55E12',border:'1px solid #22C55E30'}} title="Appeler"><I n="phone" s={12} style={{color:'#22C55E'}}/></div>
     {selectedContact && <div onClick={()=>{setPipelineRightContact(selectedContact);setPhoneRightCollapsed(false);}} style={{width:28,height:28,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:T.accentBg,border:'1px solid '+T.accent+'30'}} title="Fiche contact"><I n="user" s={12} style={{color:T.accent}}/></div>}
   </div>
 </div>
@@ -8367,7 +8379,7 @@ else showNotif(res?.error || 'Erreur CRM', 'error');
       <label key={c.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 8px',borderRadius:8,cursor:'pointer',fontSize:12}}>
         <input type="checkbox" className={'campaign-contact-'+c.id} style={{accentColor:T.accent}}/>
         <span style={{fontWeight:600}}>{c.name}</span>
-        <span style={{color:T.text3,marginLeft:'auto'}}>{c.phone||c.mobile||'—'}</span>
+        <span style={{color:T.text3,marginLeft:'auto'}}>{phoneFor(c) || '—'}</span>
       </label>
     ))}
   </div>
@@ -8519,7 +8531,7 @@ else showNotif(res?.error || 'Erreur CRM', 'error');
 <div style={{padding:'14px 24px',display:'flex',gap:8,borderBottom:'1px solid '+T.border}}>
 {[
   {icon:'phone',label:'Appeler',color:'#22C55E',bg:'#22C55E',action:()=>{setPipelinePopupContact(null);prefillKeypad(ct.phone);}},
-  {icon:'message-square',label:'SMS',color:'#7C3AED',bg:'#7C3AED',action:()=>{setPipelinePopupContact(null);setCollabTab('telephone');setPhoneDialNumber(ct.phone||'');setPhoneSubTab('sms');}},
+  {icon:'message-square',label:'SMS',color:'#7C3AED',bg:'#7C3AED',action:()=>{setPipelinePopupContact(null);setCollabTab('telephone');prefillKeypad(ct.phone||'', { skipNav: true });setPhoneSubTab('sms');}},
   {icon:'calendar',label:'RDV',color:'#0EA5E9',bg:'#0EA5E9',action:()=>{const tomorrow=new Date();tomorrow.setDate(tomorrow.getDate()+1);setPhoneScheduleForm({contactId:ct.id,contactName:ct.name,number:ct.phone||'',date:tomorrow.toISOString().split('T')[0],time:'10:00',notes:'',_bookingMode:true});setPhoneShowScheduleModal(true);setPipelinePopupContact(null);}},
   {icon:'mail',label:'Email',color:'#F59E0B',bg:'#F59E0B',action:()=>ct.email?window.open('mailto:'+ct.email):showNotif('Pas d\'email','danger')},
 ].map((a,i)=>(
