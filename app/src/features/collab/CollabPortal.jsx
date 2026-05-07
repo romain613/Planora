@@ -11,6 +11,8 @@ import { isValidEmail, isValidPhone } from "../../shared/utils/validators";
 import { COMMON_TIMEZONES, genCode } from "../../shared/utils/constants";
 // V2.1 — helper unifié pré-check anti-doublon (Quick Add Hub SMS + linkVisitor + futurs sites)
 import { precheckCreate } from "../../shared/utils/duplicateCheck";
+// V3.x.13 — Default calendar must match active collaborator, not first company calendar
+import { getCollaboratorDefaultCalendarId } from "../../shared/utils/calendars";
 
 // Phase 1B — UI atomics barrel
 import { HookIsolator, Logo, I, Avatar, Badge, Btn, Stars, Toggle, LoadBar, Card, Spinner, Req, Skeleton, Input, Stat, Modal, ConfirmModal, EmptyState, HelpTip, ValidatedInput, ErrorBoundary, MiniMonthCalendar } from "../../shared/ui";
@@ -165,6 +167,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const [outlookConnected, setOutlookConnected] = useState(false);
   const [outlookLoading, setOutlookLoading] = useState(false);
   const [outlookEmail, setOutlookEmail] = useState(null);
+  // V3.x.11 — Microsoft 365 enterprise admin consent flow (5 UI states)
+  const [outlookConsentStatus, setOutlookConsentStatus] = useState('');  // '' | pending_admin_consent | admin_consent_granted | connected | error
+  const [outlookConsentError, setOutlookConsentError] = useState('');
   // Online/offline connection indicator
   const [isOnline, setIsOnline] = useState(typeof navigator !== "undefined" ? navigator.onLine : true);
   useEffect(() => {
@@ -297,11 +302,34 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   }, [collab.id]);
 
   // V3.x.7 — Check Outlook Calendar connection status
+  // V3.x.11 — also fetch persistent consent status (pending_admin_consent / admin_consent_granted / connected / error)
   useEffect(() => {
     api('/api/outlook/status?collaboratorId=' + collab.id)
-      .then(d => { if (d && !d.error) { setOutlookConnected(!!d.connected); setOutlookEmail(d.email || null); } })
+      .then(d => {
+        if (d && !d.error) {
+          setOutlookConnected(!!d.connected);
+          setOutlookEmail(d.email || null);
+          setOutlookConsentStatus(d.consentStatus || '');
+          setOutlookConsentError(d.consentError || '');
+        }
+      })
       .catch(() => {});
   }, [collab.id]);
+
+  // V3.x.11 — Humanize Microsoft AADSTS error codes for end-users
+  const _humanizeOutlookError = (err) => {
+    if (!err) return 'Erreur de connexion Outlook';
+    const _e = String(err);
+    if (_e.includes('AADSTS65001')) return 'Consentement administrateur requis pour cette application Microsoft.';
+    if (_e.includes('AADSTS50105')) return 'Votre administrateur Microsoft doit vous assigner à cette application.';
+    if (_e.includes('AADSTS50020')) return 'Votre compte Microsoft n\'est pas autorisé dans ce tenant d\'entreprise.';
+    if (_e.includes('AADSTS500011')) return 'Application introuvable dans votre tenant Microsoft. Contactez votre administrateur.';
+    if (_e.includes('AADSTS9002326')) return 'Accès cross-tenant bloqué par la politique de votre organisation Microsoft.';
+    if (_e.includes('AADSTS70011')) return 'Permissions Microsoft mal configurées (scope invalide).';
+    if (_e.includes('access_denied')) return 'Connexion Microsoft refusée par l\'utilisateur ou l\'administrateur.';
+    if (_e.includes('Session OAuth expirée')) return 'Session OAuth expirée. Recliquez sur Connecter Outlook pour réessayer.';
+    return _e.length > 140 ? _e.slice(0, 140) + '…' : _e;
+  };
 
   // Detect ?google=success after OAuth redirect
   useEffect(() => {
@@ -317,14 +345,30 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   }, []);
 
   // V3.x.7 — Detect ?outlook=success/error after OAuth redirect
+  // V3.x.10 — handle Microsoft Entra deferred admin consent flow + detailed error message.
+  // V3.x.11 — sync UI state with persistent consent status from /status (refetched after redirect).
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get('outlook') === 'success') {
+    const _outlookParam = params.get('outlook');
+    if (_outlookParam === 'success') {
       setOutlookConnected(true);
+      setOutlookConsentStatus('connected');
+      setOutlookConsentError('');
       showNotif("Outlook Agenda connecté avec succès !");
       window.history.replaceState({}, '', window.location.pathname);
-    } else if (params.get('outlook') === 'error') {
-      showNotif("Erreur de connexion Outlook Agenda", "danger");
+    } else if (_outlookParam === 'admin-consent-granted') {
+      setOutlookConsentStatus('admin_consent_granted');
+      setOutlookConsentError('');
+      showNotif("L'autorisation administrateur Microsoft a été validée. Cliquez à nouveau sur Connecter Outlook pour finaliser la connexion de votre compte.", 'success');
+      window.history.replaceState({}, '', window.location.pathname);
+    } else if (_outlookParam === 'error') {
+      const _detail = params.get('detail') || '';
+      setOutlookConsentStatus('error');
+      setOutlookConsentError(_detail);
+      const _msg = _detail
+        ? "Connexion Outlook impossible : " + _humanizeOutlookError(_detail)
+        : "Erreur de connexion Outlook Agenda";
+      showNotif(_msg, 'danger');
       window.history.replaceState({}, '', window.location.pathname);
     }
   }, []);
@@ -2057,10 +2101,11 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
 
       const bkId = 'bk'+Date.now();
       const ct = (contacts||[]).find(c=>c.id===f.contactId);
-      const defaultCal = (calendars||[]).find(c=>{try{const collabs=Array.isArray(c.collaborators)?c.collaborators:JSON.parse(c.collaborators_json||'[]');return collabs.includes(collab.id);}catch{return false;}}) || (calendars||[])[0];
-      const calId = f.calendarId||defaultCal?.id||'';
+      // V3.x.13 — Default calendar must match active collaborator, not first company calendar
+      const calId = f.calendarId || getCollaboratorDefaultCalendarId(calendars, collab.id);
       // SECURITE: ne pas créer de booking sans calendarId — sinon invisible dans l'agenda
-      console.log('[BOOKING DEBUG] calId:', calId, 'calendars:', calendars?.length, 'collab.id:', collab.id, 'defaultCal:', defaultCal?.id);
+      // V3.x.13.1 — hotfix : suppression réf morte defaultCal (variable supprimée par V3.x.13)
+      console.log('[BOOKING DEBUG] calId:', calId, 'calendars:', calendars?.length, 'collab.id:', collab.id);
       if(!calId) { setBookErr('Aucun calendrier trouvé pour votre compte — contactez votre admin'); console.error('[BOOKING BLOCK] No calendarId found'); return false; }
       const prevStage = ct?.pipeline_stage||'nouveau';
       const bk = {id:bkId, companyId:company.id, collaboratorId:f.collaboratorId||collab.id, agendaOwnerId:f.collaboratorId||collab.id, bookedByCollaboratorId:collab.id, calendarId:calId, contactId:f.contactId, visitorName:ct?.name||f.contactName||'', visitorEmail:ct?.email||'', visitorPhone:f.number||ct?.phone||'', title:(f.title||'').trim(), date:f.date, time:f.time, duration:f.duration||30, status:'confirmed', source:'pipeline', notes:f.notes||'RDV depuis pipeline', rdv_category:f.rdv_category||'', rdv_subcategory:f.rdv_subcategory||''};
@@ -2486,7 +2531,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const syncGoogle = async () => {
     setGoogleLoading(true);
     try {
-      const r = await fetch(`${API_BASE}/api/google/sync`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ collaboratorId: collab.id }) });
+      // V3.x.12 — Bearer auth (mirror Outlook pattern). Fix régression : sans header, requireAuth backend renvoyait 401.
+      const tk = (() => { try { return JSON.parse(localStorage.getItem('calendar360-session')||'null')?.token||''; } catch { return ''; } })();
+      const r = await fetch(`${API_BASE}/api/google/sync`, { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+tk}, body:JSON.stringify({ collaboratorId: collab.id }) });
       const d = await r.json();
       if (d.success) {
         showNotif(`${d.synced} RDV synchronisé(s) sur Google Agenda`);
@@ -2505,8 +2552,10 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     const promises = [];
     if (googleConnected) {
       setGoogleLoading(true);
+      // V3.x.12 — Bearer auth (mirror Outlook pattern)
+      const tkG = (() => { try { return JSON.parse(localStorage.getItem('calendar360-session')||'null')?.token||''; } catch { return ''; } })();
       promises.push(
-        fetch(`${API_BASE}/api/google/sync`, { method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({ collaboratorId: collab.id }) })
+        fetch(`${API_BASE}/api/google/sync`, { method:'POST', headers:{'Content-Type':'application/json','Authorization':'Bearer '+tkG}, body:JSON.stringify({ collaboratorId: collab.id }) })
           .then(r => r.json()).then(d => ({ provider:'Google', ok:!!d?.success, count:d?.synced||0 }))
           .catch(() => ({ provider:'Google', ok:false }))
       );
@@ -2649,7 +2698,10 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   };
 
   // Google Calendar events (busy blocks)
-  const myGoogleEvents = (googleEventsProp || []).filter(ge => ge.collaboratorId === collab.id);
+  // V3.x.14 dédoublonnage Google : exclure les events Google qui sont le miroir d'un booking Planora
+  // (id présent dans bookings.googleEventId). Garde les vrais events Google externes visibles/bloquants.
+  const _planoraGoogleIds = new Set((bookings || []).filter(b => b && b.googleEventId).map(b => b.googleEventId));
+  const myGoogleEvents = (googleEventsProp || []).filter(ge => ge.collaboratorId === collab.id && !_planoraGoogleIds.has(ge.id));
   // V3.x.6 Phase 2C — Outlook events (mirror Google)
   // V3.x.9 dédoublonnage : exclure les events Outlook qui sont le miroir d'un booking Planora
   // (id présent dans bookings.outlookEventId). Garde les vrais events Outlook externes visibles/bloquants.
@@ -5766,10 +5818,15 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                       <Btn small primary onClick={syncGoogle} disabled={googleLoading}><I n="refresh-cw" s={12}/> Synchroniser</Btn>
                       <Btn small danger onClick={() => {
                         setGoogleLoading(true);
-                        fetch(`${API_BASE}/api/google/disconnect`, { method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({ collaboratorId: collab.id }) })
+                        // V3.x.12 — Bearer auth (mirror Outlook pattern) + explicit error handling
+                        const tk = (() => { try { return JSON.parse(localStorage.getItem('calendar360-session')||'null')?.token||''; } catch { return ''; } })();
+                        fetch(`${API_BASE}/api/google/disconnect`, { method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+tk}, body:JSON.stringify({ collaboratorId: collab.id }) })
                           .then(r => r.json())
-                          .then(() => { setGoogleConnected(false); setGoogleEmail(null); showNotif("Google Agenda déconnecté"); })
-                          .catch(() => showNotif("Erreur", "danger"))
+                          .then(d => {
+                            if (d?.error) throw new Error(d.error);
+                            setGoogleConnected(false); setGoogleEmail(null); showNotif("Google Agenda déconnecté");
+                          })
+                          .catch(e => showNotif("Erreur déconnexion Google" + (e?.message ? ' : '+e.message : ''), "danger"))
                           .finally(() => setGoogleLoading(false));
                       }} disabled={googleLoading}>
                         <I n="x" s={12}/> Déconnecter
@@ -5783,10 +5840,19 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                     </p>
                     <Btn primary onClick={() => {
                       setGoogleLoading(true);
-                      fetch(`${API_BASE}/api/google/auth-url?collaboratorId=${collab.id}`)
+                      // V3.x.12 — Bearer auth (mirror Outlook pattern) + explicit error handling
+                      // Fix régression : sans header, requireAuth backend renvoyait 401 silencieux → bouton no-op.
+                      const tk = (() => { try { return JSON.parse(localStorage.getItem('calendar360-session')||'null')?.token||''; } catch { return ''; } })();
+                      fetch(`${API_BASE}/api/google/auth-url?collaboratorId=${collab.id}`, {
+                        headers:{ "Authorization":"Bearer "+tk }
+                      })
                         .then(r => r.json())
-                        .then(d => { if (d.url) window.location.href = d.url; })
-                        .catch(() => showNotif("Erreur de connexion Google", "danger"))
+                        .then(d => {
+                          if (d?.error) throw new Error(d.error);
+                          if (!d?.url) throw new Error('URL OAuth absente');
+                          window.location.href = d.url;
+                        })
+                        .catch(e => showNotif("Erreur de connexion Google" + (e?.message ? ' : '+e.message : ''), "danger"))
                         .finally(() => setGoogleLoading(false));
                     }} disabled={googleLoading}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ marginRight:6 }}><path d="M17.64 12.2c0-.63-.06-1.25-.16-1.84H12v3.49h3.16c-.14.73-.55 1.35-1.17 1.76v1.46h1.89c1.1-1.02 1.74-2.52 1.74-4.3l.02-.57z" fill="#fff"/><path d="M12 18c1.58 0 2.91-.52 3.88-1.42l-1.89-1.46c-.52.35-1.19.56-1.99.56-1.53 0-2.83-1.04-3.29-2.43H6.77v1.51C7.73 16.78 9.72 18 12 18z" fill="#fff" opacity=".8"/><path d="M8.71 13.25a3.56 3.56 0 010-2.5V9.24H6.77a5.99 5.99 0 000 5.52l1.94-1.51z" fill="#fff" opacity=".6"/><path d="M12 8.32c.86 0 1.64.3 2.25.88l1.69-1.69C14.9 6.5 13.58 6 12 6 9.72 6 7.73 7.22 6.77 9.24l1.94 1.51c.46-1.39 1.76-2.43 3.29-2.43z" fill="#fff" opacity=".9"/></svg>
@@ -5837,30 +5903,82 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                       </Btn>
                     </div>
                   </div>
-                ) : (
-                  <div>
-                    <p style={{ fontSize:13, color:T.text2, marginBottom:14, lineHeight:1.5 }}>
-                      Connectez votre compte Outlook (Microsoft 365 ou compte personnel) pour préparer la synchronisation de vos événements.
-                    </p>
-                    <Btn primary onClick={() => {
-                      setOutlookLoading(true);
-                      const tk = (() => { try { return JSON.parse(localStorage.getItem('calendar360-session')||'null')?.token||''; } catch { return ''; } })();
-                      fetch(`${API_BASE}/api/outlook/auth-url?collaboratorId=${collab.id}`, {
-                        headers:{ "Authorization":"Bearer "+tk }
-                      })
-                        .then(r => r.json())
-                        .then(d => { if (d && d.url) window.location.href = d.url; else showNotif("Erreur de connexion Outlook", "danger"); })
-                        .catch(() => showNotif("Erreur de connexion Outlook", "danger"))
-                        .finally(() => setOutlookLoading(false));
-                    }} disabled={outlookLoading}>
+                ) : (() => {
+                  // V3.x.11 — 5 UI states based on persistent consent status
+                  const _launchOAuth = () => {
+                    setOutlookLoading(true);
+                    const tk = (() => { try { return JSON.parse(localStorage.getItem('calendar360-session')||'null')?.token||''; } catch { return ''; } })();
+                    fetch(`${API_BASE}/api/outlook/auth-url?collaboratorId=${collab.id}`, {
+                      headers:{ "Authorization":"Bearer "+tk }
+                    })
+                      .then(r => r.json())
+                      .then(d => { if (d && d.url) window.location.href = d.url; else showNotif("Erreur de connexion Outlook", "danger"); })
+                      .catch(() => showNotif("Erreur de connexion Outlook", "danger"))
+                      .finally(() => setOutlookLoading(false));
+                  };
+                  const _ConnectBtn = ({ label }) => (
+                    <Btn primary onClick={_launchOAuth} disabled={outlookLoading}>
                       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" style={{ marginRight:6 }}>
                         <rect x="3" y="5" width="13" height="14" rx="1.5" fill="#fff"/>
                         <rect x="16" y="8" width="5" height="8" fill="#fff" opacity="0.85"/>
                       </svg>
-                      Connecter Outlook
+                      {label}
                     </Btn>
-                  </div>
-                )}
+                  );
+                  // State: admin_consent_granted — admin a validé, user doit finaliser
+                  if (outlookConsentStatus === 'admin_consent_granted') {
+                    return (
+                      <div>
+                        <div style={{ padding:'12px 16px', borderRadius:12, background:'#22C55E08', border:'1px solid #22C55E40', fontSize:13, color:'#15803D', marginBottom:12, lineHeight:1.5 }}>
+                          <strong>✓ Autorisation administrateur Microsoft validée.</strong>
+                          <div style={{ marginTop:4, fontSize:12, color:T.text2 }}>Cliquez ci-dessous pour terminer la connexion de votre compte Outlook.</div>
+                        </div>
+                        <_ConnectBtn label="Finaliser la connexion Outlook" />
+                      </div>
+                    );
+                  }
+                  // State: pending_admin_consent — demande envoyée, attente
+                  if (outlookConsentStatus === 'pending_admin_consent') {
+                    return (
+                      <div>
+                        <div style={{ padding:'12px 16px', borderRadius:12, background:'#F59E0B08', border:'1px solid #F59E0B40', fontSize:13, color:'#B45309', marginBottom:12, lineHeight:1.5 }}>
+                          <strong>⏳ Demande envoyée à votre administrateur Microsoft.</strong>
+                          <div style={{ marginTop:4, fontSize:12, color:T.text2 }}>Vous pourrez finaliser la connexion une fois l'autorisation accordée par votre administrateur.</div>
+                        </div>
+                        <_ConnectBtn label="Réessayer / Finaliser la connexion" />
+                        <p style={{ fontSize:11, color:T.text3, marginTop:10, lineHeight:1.5 }}>
+                          Si vous n'avez pas reçu de validation, recliquez ici pour relancer le processus.
+                        </p>
+                      </div>
+                    );
+                  }
+                  // State: error — Microsoft a renvoyé une erreur explicite
+                  if (outlookConsentStatus === 'error') {
+                    return (
+                      <div>
+                        <div style={{ padding:'12px 16px', borderRadius:12, background:'#EF444408', border:'1px solid #EF4444', fontSize:13, color:'#B91C1C', marginBottom:12, lineHeight:1.5 }}>
+                          <strong>⚠ Connexion Outlook impossible</strong>
+                          <div style={{ marginTop:4, fontSize:12, color:T.text2 }}>{_humanizeOutlookError(outlookConsentError)}</div>
+                        </div>
+                        <_ConnectBtn label="Réessayer la connexion" />
+                      </div>
+                    );
+                  }
+                  // State: disconnected (default — never tried OR cleared)
+                  return (
+                    <div>
+                      <p style={{ fontSize:13, color:T.text2, marginBottom:14, lineHeight:1.5 }}>
+                        Connectez votre compte Outlook (Microsoft 365 ou compte personnel) pour préparer la synchronisation de vos événements.
+                      </p>
+                      <_ConnectBtn label="Connecter Outlook" />
+                      {/* V3.x.10 — UX hint Microsoft 365 entreprise (admin consent différé) */}
+                      <p style={{ fontSize:11, color:T.text3, marginTop:10, lineHeight:1.5, padding:'8px 12px', background:'#0078D408', border:'1px solid #0078D420', borderRadius:8 }}>
+                        <I n="info" s={11} style={{ marginRight:4, verticalAlign:'middle', color:'#0078D4' }}/>
+                        Si votre entreprise demande une validation administrateur Microsoft, vous devrez relancer la connexion après validation afin de finaliser la synchronisation.
+                      </p>
+                    </div>
+                  );
+                })()}
               </Card>
 
               {/* Résumé & Stats */}
@@ -7500,7 +7618,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       };
 
       // V1.9.1 — Factories d'actions. Règle UX MH : la bannière ne se ferme JAMAIS automatiquement (uniquement sur clic croix ou fin d'appel).
-      const makeRdvAction = () => ({ label:'Créer le RDV', icon:'calendar-plus', tip:'Ouvrir le formulaire RDV pré-rempli avec ce contact', kicker:'🔥 Opportunité RDV', action: () => { baseLog(); if(ctValid){ setPhoneScheduleForm({contactId:ct.id,contactName:ctName,number:ctPhone,date:new Date(Date.now()+86400000).toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true}); setPhoneShowScheduleModal(true); showNotif('Formulaire RDV ouvert','success'); } else { showNotif('Créez le contact avant de programmer un RDV','info'); } } });
+      const makeRdvAction = () => ({ label:'Créer le RDV', icon:'calendar-plus', tip:'Ouvrir le formulaire RDV pré-rempli avec ce contact', kicker:'🔥 Opportunité RDV', action: () => { baseLog(); if(ctValid){ setPhoneScheduleForm({contactId:ct.id,contactName:ctName,number:ctPhone,date:new Date(Date.now()+86400000).toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:getCollaboratorDefaultCalendarId(calendars,collab.id),_bookingMode:true}); setPhoneShowScheduleModal(true); showNotif('Formulaire RDV ouvert','success'); } else { showNotif('Créez le contact avant de programmer un RDV','info'); } } });
       const makeEmailAction = (mode) => ({ label: mode==='dicte'?'Envoyer email':'Envoyer la plaquette', icon: mode==='dicte'?'mail':'send', tip: mode==='dicte'?'Ouvrir le composeur email avec l\'adresse dictée':'Ouvrir le composeur email pour envoyer la plaquette/document', kicker: mode==='dicte'?'📧 Email dicté':'📎 Demande document', action: () => { baseLog(); const dictee = (slide?.text||'').match(/[\w.+-]+@[\w-]+\.[\w.-]+/)?.[0]; const email = (mode==='dicte'?(dictee||ct.email||''):(ct.email||'')); if(email){ const subj = mode==='dicte' ? 'Suite à notre échange' : 'Documentation suite à notre échange'; window.open('mailto:'+email+'?subject='+encodeURIComponent(subj)); showNotif('Email prêt à envoyer ('+email+')','success'); } else { showNotif("Pas d'email valide pour ce contact",'info'); } } });
       const makeSmsAction = () => ({ label:'Envoyer un SMS', icon:'message-square', tip:'Préparer un SMS au contact (panneau droit)', kicker:'📱 Canal SMS', action: () => { baseLog(); prefillKeypad(ctPhone||'', { skipNav: true }); setPhoneRightTab('sms'); if(typeof setPhoneRightCollapsed==='function')setPhoneRightCollapsed(false); showNotif('Composeur SMS ouvert (panneau droit)','success'); } });
       const makeValidateClientAction = () => ({ label:'Passer en client', icon:'check-circle', tip:'Passer le contact en Client Validé', kicker:'✅ Accord client', action: () => { baseLog(); if(ctValid && typeof handleCollabUpdateContact==='function'){ handleCollabUpdateContact(ct.id, { pipeline_stage:'client_valide' }); showNotif('Contact passé en Client Validé','success'); } else { showNotif('Contact requis pour cette action','info'); } } });
@@ -7653,7 +7771,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
               {/* CTA secondaires — outline soft (RDV / SMS / Email) avec jauges intelligentes */}
               <div style={{display:'flex',gap:6}}>
                 {/* RDV — couleur jaune/orange */}
-                <div className={'cockpitBtn'+(vib.rdv?' cockpitVibrate':'')+(lvl.rdv>=3?' cockpitGaugeReady':'')} onClick={()=>{ consumeIntent('rdv'); if(ct.id && ct.id!=='__dialer_unknown__'){ setPhoneScheduleForm({contactId:ct.id,contactName:ctName,number:ctPhone,date:new Date(Date.now()+86400000).toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true}); setPhoneShowScheduleModal(true); } else { showNotif('Créez le contact avant de programmer un RDV','info'); } }} style={{padding:'10px 13px',borderRadius:10,background:'rgba(245,158,11,0.08)',color:'#B45309',fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:5,border:'1px solid rgba(245,158,11,0.32)'}} title={lvl.rdv>=3?'Action prioritaire — RDV demandé plusieurs fois':'Planifier un RDV'}>
+                <div className={'cockpitBtn'+(vib.rdv?' cockpitVibrate':'')+(lvl.rdv>=3?' cockpitGaugeReady':'')} onClick={()=>{ consumeIntent('rdv'); if(ct.id && ct.id!=='__dialer_unknown__'){ setPhoneScheduleForm({contactId:ct.id,contactName:ctName,number:ctPhone,date:new Date(Date.now()+86400000).toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:getCollaboratorDefaultCalendarId(calendars,collab.id),_bookingMode:true}); setPhoneShowScheduleModal(true); } else { showNotif('Créez le contact avant de programmer un RDV','info'); } }} style={{padding:'10px 13px',borderRadius:10,background:'rgba(245,158,11,0.08)',color:'#B45309',fontSize:11,fontWeight:700,cursor:'pointer',display:'flex',alignItems:'center',gap:5,border:'1px solid rgba(245,158,11,0.32)'}} title={lvl.rdv>=3?'Action prioritaire — RDV demandé plusieurs fois':'Planifier un RDV'}>
                   {renderGauge(lvl.rdv, 'rgba(245,158,11,0.20)')}
                   <I n="calendar-plus" s={13} style={{position:'relative',zIndex:1}}/>
                   <span style={{position:'relative',zIndex:1}}>RDV</span>

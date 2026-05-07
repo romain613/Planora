@@ -48,7 +48,8 @@ export async function createFollowUpTask(collaboratorId, bookingData, calendarNa
     let taskListId = await getOrCreateTaskList(tasks);
 
     const task = {
-      title: `Suivi : ${bookingData.visitorName} — ${calendarName}`,
+      // V3.x.14 — titre compact `Suivi : {visitorName} — {HH:mm}` (plus de calendars.name/dupond legacy).
+      title: `Suivi : ${bookingData.visitorName} — ${bookingData.time}`,
       notes: [
         `RDV du ${bookingData.date} à ${bookingData.time}`,
         bookingData.visitorEmail ? `Email : ${bookingData.visitorEmail}` : '',

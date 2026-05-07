@@ -6,6 +6,8 @@ import { I, Btn, Card, Avatar, Badge, Modal, Spinner, Stat } from "../../../shar
 import { DAYS_FR, DAYS_SHORT, MONTHS_FR, getDow, fmtDate, formatDateTime, formatDate } from "../../../shared/utils/dates";
 import { PIPELINE_LABELS, STATUS_COLORS } from "../../../shared/utils/pipeline";
 import { sendNotification, buildNotifyPayload } from "../../../shared/utils/notifications";
+// V3.x.13 — Default calendar must match active collaborator, not first company calendar
+import { getCollaboratorDefaultCalendarId } from "../../../shared/utils/calendars";
 import { _T } from "../../../shared/state/tabState";
 import { api } from "../../../shared/services/api";
 import { useCollabContext } from "../context/CollabContext";
@@ -257,7 +259,7 @@ const AgendaTab = () => {
         <span style={{ fontSize:10, fontWeight:600, color:agendaWorkHours?T.accent:T.text3 }}>{agendaWorkHours?"7h–21h":"24h"}</span>
       </div>}
       <div style={{ width:1, height:24, background:T.border, margin:"0 4px" }}/>
-      <Btn small onClick={()=>{setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:new Date().toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true});setPhoneShowScheduleModal(true);}} style={{display:"flex",alignItems:"center",gap:4,background:"#F59E0B",color:"#fff",border:"none",fontWeight:700}}><I n="calendar-plus" s={14}/> Nouveau RDV</Btn>
+      <Btn small onClick={()=>{setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:new Date().toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:getCollaboratorDefaultCalendarId(calendars,collab.id),_bookingMode:true});setPhoneShowScheduleModal(true);}} style={{display:"flex",alignItems:"center",gap:4,background:"#F59E0B",color:"#fff",border:"none",fontWeight:700}}><I n="calendar-plus" s={14}/> Nouveau RDV</Btn>
       {/* V3.x.6 fix UX — Synchroniser calendriers externes (Google + Outlook) */}
       <Btn small primary onClick={syncAllExternal} disabled={(typeof googleLoading!=='undefined'&&googleLoading) || (typeof outlookLoading!=='undefined'&&outlookLoading)} title={(googleConnected || outlookConnected) ? `Synchroniser ${[googleConnected?'Google':null, outlookConnected?'Outlook':null].filter(Boolean).join(' + ')}` : "Aucun calendrier externe connecté"} style={{ display:"flex", alignItems:"center", gap:4 }}>
         <I n="refresh-cw" s={14}/> {((typeof googleLoading!=='undefined'&&googleLoading) || (typeof outlookLoading!=='undefined'&&outlookLoading)) ? "Sync..." : "Synchroniser"}
@@ -423,7 +425,7 @@ const AgendaTab = () => {
           <div style={{ fontSize:30, marginBottom:6 }}>🚀</div>
           <div style={{ fontSize:15, fontWeight:700, color:'#065F46', marginBottom:4 }}>Votre journée est libre</div>
           <div style={{ fontSize:12, color:'#047857', marginBottom:12 }}>Cliquez sur un créneau ci-dessous pour créer un RDV — ou utilisez le bouton ci-contre.</div>
-          <Btn small primary onClick={()=>{setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:dayDate,time:'10:00',duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true});setPhoneShowScheduleModal(true);}}><I n="calendar-plus" s={14}/> Nouveau RDV</Btn>
+          <Btn small primary onClick={()=>{setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:dayDate,time:'10:00',duration:30,notes:'',calendarId:getCollaboratorDefaultCalendarId(calendars,collab.id),_bookingMode:true});setPhoneShowScheduleModal(true);}}><I n="calendar-plus" s={14}/> Nouveau RDV</Btn>
         </div>
       )}
       <Card style={{ padding:0, overflow:"hidden", borderRadius:12 }}>
@@ -448,7 +450,7 @@ const AgendaTab = () => {
                 {isNow && <div style={{ position:"absolute", left:48, right:0, top:nowOffsetPx, height:2, background:'#EF4444', zIndex:10 }}><div style={{ position:'absolute', left:-5, top:-4, width:10, height:10, borderRadius:5, background:'#EF4444', animation:'agendaNowPulse 2s ease-in-out infinite' }}/></div>}
                 <div style={{ padding:"0 8px", fontSize:11, color:isFullHour?'#70757a':'transparent', textAlign:"right", fontFamily:"-apple-system,sans-serif", lineHeight:slotH+'px', borderRight:'1px solid #dadce0', fontWeight:400, userSelect:'none' }}>{isFullHour ? (parseInt(hour)<10?parseInt(hour):hour.slice(0,2))+':00' : ''}</div>
                 <div
-                  onClick={()=>{if(isFreeSlot){setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:dayDate,time:hour,duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true});setPhoneShowScheduleModal(true);}}}
+                  onClick={()=>{if(isFreeSlot){setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:dayDate,time:hour,duration:30,notes:'',calendarId:getCollaboratorDefaultCalendarId(calendars,collab.id),_bookingMode:true});setPhoneShowScheduleModal(true);}}}
                   title={isFreeSlot?"+ Créer un RDV à "+hour:undefined}
                   onMouseEnter={e=>{if(isFreeSlot)e.currentTarget.style.background='rgba(59,130,246,0.06)';}}
                   onMouseLeave={e=>{if(isFreeSlot)e.currentTarget.style.background=isAvail?'#fff':'#f8f9fa';}}
@@ -600,7 +602,7 @@ const AgendaTab = () => {
               return (
                 <div
                   key={ds+hour}
-                  onClick={()=>{if(isEmptyAvail){setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:ds,time:hour,duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true});setPhoneShowScheduleModal(true);}}}
+                  onClick={()=>{if(isEmptyAvail){setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:ds,time:hour,duration:30,notes:'',calendarId:getCollaboratorDefaultCalendarId(calendars,collab.id),_bookingMode:true});setPhoneShowScheduleModal(true);}}}
                   title={isEmptyAvail?'+ Créer un RDV à '+hour:undefined}
                   onMouseEnter={e=>{if(isEmptyAvail)e.currentTarget.style.background='rgba(59,130,246,0.06)';}}
                   onMouseLeave={e=>{e.currentTarget.style.background=isToday?'#E8F0FE40':isAvail?'#fff':'#f8f9fa';}}

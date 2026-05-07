@@ -408,6 +408,11 @@ try { db.exec('ALTER TABLE collaborators ADD COLUMN outlook_email TEXT'); } catc
 try { db.exec('ALTER TABLE collaborators ADD COLUMN outlook_last_sync TEXT'); } catch {}
 try { db.exec('ALTER TABLE collaborators ADD COLUMN outlook_events_private INTEGER DEFAULT 1'); } catch {}
 try { db.exec('ALTER TABLE collaborators ADD COLUMN outlook_account_id TEXT'); } catch {}
+// V3.x.11 — Outlook consent status tracking (Microsoft 365 enterprise admin consent flow)
+try { db.exec("ALTER TABLE collaborators ADD COLUMN outlook_consent_status TEXT DEFAULT ''"); } catch {}
+try { db.exec("ALTER TABLE collaborators ADD COLUMN outlook_consent_updated_at TEXT DEFAULT ''"); } catch {}
+try { db.exec("ALTER TABLE collaborators ADD COLUMN outlook_consent_error TEXT DEFAULT ''"); } catch {}
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_collab_outlook_consent ON collaborators(outlook_consent_status)"); } catch {}
 try { db.exec('ALTER TABLE bookings ADD COLUMN outlookEventId TEXT'); } catch {}
 // V3.x.9 — Titre custom RDV (subject Outlook + display grille). Fallback : "{visitorName} — {time}".
 try { db.exec("ALTER TABLE bookings ADD COLUMN title TEXT DEFAULT ''"); } catch {}

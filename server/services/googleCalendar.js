@@ -102,7 +102,8 @@ export async function createEvent(collaboratorId, bookingData, calendarData) {
   const isMeet = /google\s*meet|meet/i.test(location);
 
   const event = {
-    summary: `${calendarData.name} — ${bookingData.visitorName}`,
+    // V3.x.14 — titre compact `{visitorName} — {HH:mm}` (plus de calendars.name/dupond legacy).
+    summary: `${bookingData.visitorName} — ${bookingData.time}`,
     description: [
       `Visiteur : ${bookingData.visitorName}`,
       bookingData.visitorEmail ? `Email : ${bookingData.visitorEmail}` : '',
@@ -170,9 +171,10 @@ export async function updateEvent(collaboratorId, googleEventId, bookingData, ca
 
   const isCancelled = bookingData.status === 'cancelled';
   const event = {
+    // V3.x.14 — titre compact `{visitorName} — {HH:mm}` (plus de calendars.name/dupond legacy).
     summary: isCancelled
-      ? `ANNULÉ — ${calendarData.name} — ${bookingData.visitorName}`
-      : `${calendarData.name} — ${bookingData.visitorName}`,
+      ? `ANNULÉ — ${bookingData.visitorName} — ${bookingData.time}`
+      : `${bookingData.visitorName} — ${bookingData.time}`,
     description: [
       isCancelled ? '⚠️ CE RDV A ÉTÉ ANNULÉ' : '',
       `Visiteur : ${bookingData.visitorName}`,
@@ -286,6 +288,10 @@ export async function syncEventsFromGoogle(collaboratorId) {
       try {
         if (event.status === 'cancelled') continue;
         if (event.transparency === 'transparent') continue;
+        // V3.x.14.1 — skip Google Tasks remontées comme events (eventType='task').
+        // La Task reste créée côté Google API (createFollowUpTask intact) et visible dans Google Calendar UI ;
+        // simplement non ingérée dans google_events → plus de doublon Event+Task dans la grille Planora.
+        if (event.eventType === 'task') continue;
 
         const isAllDay = !!event.start?.date;
         let startTime, endTime;

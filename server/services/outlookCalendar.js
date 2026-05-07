@@ -22,6 +22,7 @@
  */
 
 import { ConfidentialClientApplication } from '@azure/msal-node';
+import crypto from 'node:crypto';
 import { db, getCollaboratorTimezone } from '../db/database.js';
 import { DateTime } from 'luxon';
 
@@ -33,6 +34,71 @@ const SCOPES = [
 ];
 
 const GRAPH_BASE = 'https://graph.microsoft.com/v1.0';
+
+// V3.x.11 — OAuth state HMAC signing (anti-CSRF + replay protection, TTL 30 min).
+// Backward-compat with V3.x.10 (raw collaboratorId) accepted until 2026-05-14.
+const STATE_TTL_MS = 30 * 60 * 1000;
+const LEGACY_STATE_DEADLINE = Date.parse('2026-05-14T00:00:00Z');
+
+function getStateSecret() {
+  return process.env.OUTLOOK_STATE_SECRET
+      || process.env.SESSION_SECRET
+      || process.env.JWT_SECRET
+      || 'fallback-state-secret-change-me-in-env';
+}
+
+export function signState(collaboratorId) {
+  const ts = Date.now();
+  const payload = `${collaboratorId}.${ts}`;
+  const sig = crypto.createHmac('sha256', getStateSecret()).update(payload).digest('hex').slice(0, 16);
+  return `${payload}.${sig}`;
+}
+
+export function verifyState(state) {
+  if (!state || typeof state !== 'string') return null;
+  const parts = state.split('.');
+  // Backward-compat V3.x.10: accept raw collaboratorId until LEGACY_STATE_DEADLINE
+  if (parts.length === 1) {
+    if (Date.now() > LEGACY_STATE_DEADLINE) return null;
+    return { collaboratorId: state, legacy: true };
+  }
+  if (parts.length !== 3) return null;
+  const [collaboratorId, tsStr, sig] = parts;
+  const ts = parseInt(tsStr, 10);
+  if (!ts || Date.now() - ts > STATE_TTL_MS) return null;
+  const expected = crypto.createHmac('sha256', getStateSecret()).update(`${collaboratorId}.${ts}`).digest('hex').slice(0, 16);
+  // Constant-time comparison to avoid timing attacks
+  let mismatch = sig.length !== expected.length;
+  for (let i = 0; i < Math.min(sig.length, expected.length); i++) {
+    if (sig.charCodeAt(i) !== expected.charCodeAt(i)) mismatch = true;
+  }
+  if (mismatch) return null;
+  return { collaboratorId, ts, legacy: false };
+}
+
+// V3.x.11 — Persistent consent status helpers
+export function setConsentStatus(collaboratorId, status, errorMsg = '') {
+  if (!collaboratorId) return;
+  const _err = String(errorMsg || '').slice(0, 200);
+  try {
+    db.prepare(
+      'UPDATE collaborators SET outlook_consent_status = ?, outlook_consent_updated_at = ?, outlook_consent_error = ? WHERE id = ?'
+    ).run(status, new Date().toISOString(), _err, collaboratorId);
+  } catch (e) { console.error('[OUTLOOK CONSENT] setStatus failed:', e.message); }
+}
+
+export function getConsentInfo(collaboratorId) {
+  try {
+    const row = db.prepare(
+      'SELECT outlook_consent_status, outlook_consent_updated_at, outlook_consent_error FROM collaborators WHERE id = ?'
+    ).get(collaboratorId);
+    return {
+      status: row?.outlook_consent_status || '',
+      updatedAt: row?.outlook_consent_updated_at || '',
+      error: row?.outlook_consent_error || '',
+    };
+  } catch { return { status: '', updatedAt: '', error: '' }; }
+}
 
 function getRequiredEnv() {
   const clientId = process.env.OUTLOOK_CLIENT_ID;
@@ -68,15 +134,21 @@ function createMsalClient(tokenCacheJson = null) {
 }
 
 /**
- * Generate Outlook OAuth authorization URL (consent flow)
+ * Generate Outlook OAuth authorization URL (consent flow).
+ * V3.x.11: state is now HMAC-signed (anti-CSRF + replay protection),
+ * and the consent status is set to 'pending_admin_consent' optimistically.
+ * If user completes flow normally, handleCallback overrides to 'connected'.
+ * If user gets stuck on Microsoft admin-approval screen, the status stays
+ * pending and the UI displays a clear message.
  */
 export async function getAuthUrl(collaboratorId) {
   const { redirectUri } = getRequiredEnv();
   const app = createMsalClient();
+  setConsentStatus(collaboratorId, 'pending_admin_consent', '');
   return app.getAuthCodeUrl({
     scopes: SCOPES,
     redirectUri,
-    state: collaboratorId,
+    state: signState(collaboratorId),
     prompt: 'consent',
   });
 }
@@ -100,6 +172,8 @@ export async function handleCallback(code, collaboratorId) {
   db.prepare(
     'UPDATE collaborators SET outlook_tokens_json = ?, outlook_email = ?, outlook_account_id = ? WHERE id = ?'
   ).run(cacheJson, email, accountId, collaboratorId);
+  // V3.x.11 — mark fully connected (clears any prior pending/error state)
+  setConsentStatus(collaboratorId, 'connected', '');
 
   return { email, accountId };
 }
@@ -182,7 +256,7 @@ export function isConnected(collaboratorId) {
  */
 export function disconnectOutlook(collaboratorId) {
   db.prepare(
-    'UPDATE collaborators SET outlook_tokens_json = NULL, outlook_email = NULL, outlook_last_sync = NULL, outlook_account_id = NULL WHERE id = ?'
+    "UPDATE collaborators SET outlook_tokens_json = NULL, outlook_email = NULL, outlook_last_sync = NULL, outlook_account_id = NULL, outlook_consent_status = '', outlook_consent_error = '' WHERE id = ?"
   ).run(collaboratorId);
   db.prepare('DELETE FROM outlook_events WHERE collaboratorId = ?').run(collaboratorId);
 }
