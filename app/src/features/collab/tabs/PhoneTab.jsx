@@ -5271,21 +5271,13 @@ return(
 <I n="phone-off" s={13}/> Raccrocher
       </div>
     </div>}
-    {/* Header */}
+    {/* Header — V3.x.17.1 logo gradient + titre "Pipeline" retirés (UX clean/minimaliste, gain vertical). KPI counters seuls à gauche. */}
     <div data-pipe-keep="1" style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 16px',borderBottom:`1px solid ${T.border}`,flexShrink:0}}>
-      <div style={{display:'flex',alignItems:'center',gap:10}}>
-<div style={{width:32,height:32,borderRadius:8,background:'linear-gradient(135deg,#7C3AED,#2563EB)',display:'flex',alignItems:'center',justifyContent:'center'}}><I n="trello" s={16} style={{color:'#fff'}}/></div>
-<div>
-<div style={{display:'flex',alignItems:'center',gap:8}}>
-  <span style={{fontSize:14,fontWeight:800}}>Pipeline</span>
-</div>
-<div style={{display:'flex',alignItems:'center',gap:14,fontSize:11,marginTop:4}}>
+      <div style={{display:'flex',alignItems:'center',gap:14,fontSize:11}}>
   <span style={{fontWeight:700,color:T.text}}>{allCtx.length} contact{allCtx.length===1?'':'s'}</span>
   <span style={{fontWeight:700,color:'#22C55E'}}>🟢 {won} gagné{won===1?'':'s'}</span>
   <span style={{fontWeight:700,color:'#EF4444'}}>🔴 {lost} perdu{lost===1?'':'s'}</span>
   <span style={{fontWeight:700,color:T.accent}}>⚡ {winRate}% conversion</span>
-</div>
-</div>
       </div>
       {/* Recherche rapide pipeline */}
       <div style={{display:'flex',alignItems:'center',gap:6,flex:'0 1 220px'}}>
