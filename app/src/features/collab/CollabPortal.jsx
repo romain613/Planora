@@ -4641,14 +4641,13 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       {/* Sidebar — retractable */}
       {(()=>{
         const navCollapsed = !!(typeof callFormAccordion!=='undefined'?callFormAccordion:{})._navCollapsed;
-        const toggleNav = () => { setCallFormAccordion(p => ({...p, _navCollapsed: !p._navCollapsed})); try { localStorage.setItem('c360-nav-collapsed-'+collab.id, !navCollapsed?'1':'0'); } catch {} };
-        return <aside style={{ width:navCollapsed?56:240, background:T.surface, borderRight:`1px solid ${T.border}`, padding:navCollapsed?"12px 0":"20px 0", display:"flex", flexDirection:"column", flexShrink:0, transition:'width .2s ease', overflow:'hidden' }}>
+        const toggleNav = () => { setCallFormAccordion(p => ({...p, _navCollapsed: !p._navCollapsed})); try { localStorage.setItem('c360-nav-collapsed-'+collab.id, !navCollapsed?'1':'0'); } catch {} ; setTimeout(() => { try { window.dispatchEvent(new Event('resize')); } catch {} }, 250); };
+        return <div style={{position:'relative',flexShrink:0}}><aside style={{ width:navCollapsed?56:240, background:T.surface, borderRight:`1px solid ${T.border}`, padding:navCollapsed?"12px 0":"20px 0", display:"flex", flexDirection:"column", transition:'width .2s ease', overflow:'hidden' }}>
         {!navCollapsed ? <>
         <div style={{ padding:"0 16px", marginBottom:24 }}>
           <div style={{ display:"flex", alignItems:"center", gap:10, marginBottom:14 }}>
             <Logo s={32} rounded={9} />
             <span style={{ fontSize:17, fontWeight:700, letterSpacing:-0.3, flex:1 }}>Calendar360</span>
-            <div onClick={toggleNav} style={{cursor:'pointer',padding:4,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center'}} title="Replier le menu"><I n="panel-left-close" s={16} style={{color:T.text3}}/></div>
           </div>
           <div style={{ padding:"10px 12px", borderRadius:10, background: collab.color+"0C", border:`1px solid ${collab.color}22` }}>
             <div style={{ display:"flex", alignItems:"center", gap:8, marginBottom:6 }}>
@@ -4741,7 +4740,6 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
         </> : <>
         {/* Mode collapsed — icones seulement */}
         <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2,padding:'0 4px'}}>
-          <div onClick={toggleNav} style={{cursor:'pointer',padding:8,borderRadius:8,marginBottom:8,display:'flex',alignItems:'center',justifyContent:'center'}} title="Ouvrir le menu"><I n="panel-left-open" s={18} style={{color:T.text3}}/></div>
           <div style={{width:32,height:32,borderRadius:10,background:collab.color+'15',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:4}}>
             <span style={{fontSize:13,fontWeight:800,color:collab.color}}>{(collab.name||'?')[0]}</span>
           </div>
@@ -4760,7 +4758,12 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
           ))}
         </div>
         </>}
-      </aside>;
+      </aside>
+      {/* V3.x.16.1 — bouton collapse flottant, depasse de moitie sur le main, premium */}
+      <div onClick={toggleNav} onMouseEnter={(e)=>{e.currentTarget.style.background=T.accentBg;e.currentTarget.style.borderColor=T.accent;e.currentTarget.style.transform='scale(1.05)';}} onMouseLeave={(e)=>{e.currentTarget.style.background='#fff';e.currentTarget.style.borderColor=T.border;e.currentTarget.style.transform='scale(1)';}} style={{position:'absolute',top:24,right:-17,width:34,height:34,borderRadius:17,background:'#fff',border:'1px solid '+T.border,boxShadow:'0 2px 6px rgba(0,0,0,0.10)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',zIndex:50,transition:'all .15s'}} title={navCollapsed?"Ouvrir le menu":"Replier le menu"} aria-label={navCollapsed?"Ouvrir le menu":"Replier le menu"}>
+        <I n={navCollapsed?"chevrons-right":"chevrons-left"} s={18} style={{color:T.text2}}/>
+      </div>
+      </div>;
       })()}
 
       {/* Main */}
