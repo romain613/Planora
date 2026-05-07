@@ -4,6 +4,8 @@ import { _T } from "../../shared/state/tabState";
 import { api } from "../../shared/services/api";
 import { MONTHS_FR } from "../../shared/utils/dates";
 import { Avatar, Btn, Card, I, Input, Logo } from "../../shared/ui";
+// V3.x.17 — Footer dynamique brand-aware (remplace "© 2026 Calendar360..." hardcodé)
+import AppFooter from "../../shared/ui/AppFooter.jsx";
 
 const Landing = ({ onLogin }) => {
   const [authMode, setAuthMode] = useState("login");
@@ -994,7 +996,8 @@ const Landing = ({ onLogin }) => {
         </div>
       </div>
       <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", paddingTop:20, borderTop:`1px solid ${T.border}` }}>
-        <div style={{ fontSize:11, color:T.text3 }}>© 2026 Calendar360. Tous droits réservés.</div>
+        {/* V3.x.17 — © {year} {brand.name} dynamique via AppFooter (était hardcodé "© 2026 Calendar360. Tous droits réservés."). */}
+        <AppFooter />
         <div style={{ display:"flex", gap:16 }}>
           <a href="/privacy" style={{ fontSize:11, color:T.text3, textDecoration:"none" }}>Confidentialité</a>
           <a href="/terms" style={{ fontSize:11, color:T.text3, textDecoration:"none" }}>CGU</a>
