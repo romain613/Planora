@@ -25,6 +25,8 @@ import { isContactInSuiviForCollab, getContactSuiviRole, getReceiverIdForSentTra
 import HardDeleteContactModal from "../modals/HardDeleteContactModal";
 // V3.x.17.2 — Cockpit commercial compact en haut onglet Info uniquement
 import CommercialCockpit from "./crm/fiche/CommercialCockpit.jsx";
+// V3.x.17.2-fix-reporting-trafficlight — feu de signalisation reporting RDV V1.10.3
+import { getReportingTrafficLight } from "../../../shared/utils/reportingStatus";
 
 const PhoneTab = () => {
   const ctx = useCollabContext();
@@ -1786,8 +1788,10 @@ if (n === ph) matched.set(c.id, c);
           </div>}
         </div>;
       })()}
-      {/* Bloc coordonnées */}
-      <div style={{padding:8,borderRadius:8,background:T.bg,border:`1px solid ${T.border}`,marginBottom:8}}>
+      {/* Bloc coordonnées — V3.x.17.2-fix accordéon ouvert par défaut */}
+      <details open style={{marginBottom:8}}>
+      <summary style={{cursor:'pointer',fontSize:10,fontWeight:700,color:T.text3,padding:'5px 8px',background:T.bg,borderRadius:6,border:`1px solid ${T.border}40`,userSelect:'none',marginBottom:6,listStyle:'revert'}}>📋 Coordonnées</summary>
+      <div style={{padding:8,borderRadius:8,background:T.bg,border:`1px solid ${T.border}`}}>
       {/* Civilité + Prénom + Nom — V1.8.22.2 split fallback depuis ct.name si firstname/lastname vides */}
       {(()=>{
         const _splitFirst = ((ct.name||'').trim().split(/\s+/)[0]) || '';
@@ -1860,6 +1864,7 @@ if (n === ph) matched.set(c.id, c);
         <I n="plus" s={9}/> Ajouter un champ
       </div>
     </div>
+    </details>
     </div>;
   })()}
   {/* Contract info when signed */}
@@ -2026,20 +2031,24 @@ if (n === ph) matched.set(c.id, c);
     </div>;
   })()}
 
-  {/* Documents du contact */}
-  {ct.id && <FicheDocsPanelScreen ct={ct} showNotif={showNotif} />}
+  {/* Documents du contact — V3.x.17.2-fix accordéon fermé par défaut */}
+  {ct.id && <details style={{marginTop:8}}>
+    <summary style={{cursor:'pointer',fontSize:10,fontWeight:700,color:T.text3,padding:'5px 8px',background:T.bg,borderRadius:6,border:`1px solid ${T.border}40`,userSelect:'none',marginBottom:6,listStyle:'revert'}}>📎 Documents</summary>
+    <FicheDocsPanelScreen ct={ct} showNotif={showNotif} />
+  </details>}
 
   {/* Change stage */}
   {ct.id && <div style={{marginTop:12}}>
-    {/* Historique RDV */}
+    {/* Historique RDV — V3.x.17.2-fix accordéon fermé par défaut */}
     {(()=>{
       const ctBookings = (bookings||[]).filter(b => (b.contactId === ct.id || (b.visitorPhone && ct.phone && b.visitorPhone.replace(/\s/g,'') === ct.phone.replace(/\s/g,''))) && b.status !== 'cancelled');
       if (ctBookings.length === 0) return null;
       const now = new Date();
       const upcoming = ctBookings.filter(b => new Date(b.date+'T'+(b.time||'00:00')) >= now).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time));
       const past = ctBookings.filter(b => new Date(b.date+'T'+(b.time||'00:00')) < now).sort((a,b)=>(b.date+b.time).localeCompare(a.date+a.time));
-      return <div style={{marginTop:10}}>
-        <div style={{fontSize:10,fontWeight:700,color:T.text3,marginBottom:4,display:'flex',alignItems:'center',gap:4}}><I n="calendar" s={11} style={{color:'#0EA5E9'}}/> RDV ({ctBookings.length})</div>
+      return <details style={{marginTop:10}}>
+        <summary style={{cursor:'pointer',fontSize:10,fontWeight:700,color:T.text3,padding:'5px 8px',background:T.bg,borderRadius:6,border:`1px solid ${T.border}40`,userSelect:'none',marginBottom:6,listStyle:'revert',display:'flex',alignItems:'center',gap:4}}><I n="calendar" s={11} style={{color:'#0EA5E9'}}/> RDV ({ctBookings.length})</summary>
+        <div style={{paddingTop:4}}>
         {upcoming.length > 0 && <div style={{marginBottom:4}}>
           <div style={{fontSize:9,fontWeight:700,color:'#22C55E',marginBottom:3}}>À venir</div>
           {upcoming.map(b=><div key={b.id} style={{padding:'5px 8px',borderRadius:7,background:'#22C55E08',border:'1px solid #22C55E20',marginBottom:3,display:'flex',justifyContent:'space-between',alignItems:'center'}}>
@@ -2059,16 +2068,19 @@ if (n === ph) matched.set(c.id, c);
           </div>)}
           {past.length > 3 && <div style={{fontSize:9,color:T.text3,textAlign:'center',padding:2}}>+{past.length-3} ancien{past.length-3>1?'s':''}</div>}
         </div>}
-      </div>;
+        </div>
+      </details>;
     })()}
 
-    {/* ── Type contact — liste déroulante + supprimer custom ── */}
+    {/* ── Type contact + Tags + Étoiles — V3.x.17.2-fix accordéon "Profil & tags" fermé par défaut ── */}
+    <details style={{marginTop:8}}>
+    <summary style={{cursor:'pointer',fontSize:10,fontWeight:700,color:T.text3,padding:'5px 8px',background:T.bg,borderRadius:6,border:`1px solid ${T.border}40`,userSelect:'none',marginBottom:6,listStyle:'revert'}}>🏷️ Profil & tags</summary>
     {(()=>{
       const customColors=JSON.parse(localStorage.getItem('pipeline_custom_colors')||'[]');
       const allColors=[...PIPELINE_CARD_COLORS_DEFAULT,...customColors];
       const current=allColors.find(c=>c.color===ct.card_color)||allColors[0];
       const isCustom=customColors.some(c=>c.color===ct.card_color);
-      return <div style={{marginTop:8}}>
+      return <div style={{marginTop:0}}>
         <div style={{display:'flex',alignItems:'center',gap:4}}>
           <div style={{fontSize:10,fontWeight:700,color:T.text3}}>Type</div>
           <select value={ct.card_color||''} onChange={e=>{const sel=allColors.find(c=>c.color===e.target.value);handleCollabUpdateContact(ct.id,{card_color:e.target.value,card_label:sel?.label||''});}} style={{flex:1,fontSize:10,fontWeight:600,padding:'4px 8px',borderRadius:6,border:`1px solid ${T.border}`,background:current?.color?(current.color+'12'):T.bg,color:current?.color||T.text,cursor:'pointer',fontFamily:'inherit'}}>
@@ -2085,7 +2097,7 @@ if (n === ph) matched.set(c.id, c);
       </div>;
     })()}
 
-    {/* ── Note étoiles + Tags — tout en bas ── */}
+    {/* ── Note étoiles + Tags — tout en bas (toujours dans accordéon Profil & tags) ── */}
     <div style={{display:'flex',alignItems:'center',gap:4,marginTop:10,paddingTop:6,borderTop:`1px solid ${T.border}30`,flexWrap:'wrap'}}>
       <div style={{display:'flex',alignItems:'center',gap:1}}>
         {[1,2,3,4,5].map(n=><span key={n} onClick={()=>{const v=(pipelineRightContact||ct).rating===n?0:n;(typeof setPipelineRightContact==='function'?setPipelineRightContact:function(){})(p=>p?{...p,rating:v}:p);setContacts(p=>p.map(c=>c.id===ct.id?{...c,rating:v}:c));api(`/api/data/contacts/${ct.id}`,{method:'PUT',body:{rating:v,companyId:company?.id}});}} style={{cursor:'pointer',fontSize:13,color:n<=((pipelineRightContact||ct).rating||0)?'#F59E0B':'#D1D5DB'}}>{n<=((pipelineRightContact||ct).rating||0)?'★':'☆'}</span>)}
@@ -2094,6 +2106,7 @@ if (n === ph) matched.set(c.id, c);
       {((pipelineRightContact||ct).tags||[]).map(t=><span key={t} style={{fontSize:8,padding:'1px 5px',borderRadius:5,background:'#7C3AED14',color:'#7C3AED',fontWeight:600,display:'inline-flex',alignItems:'center',gap:2}}>{t}<span onClick={()=>{const tags=((pipelineRightContact||ct).tags||[]).filter(x=>x!==t);(typeof setPipelineRightContact==='function'?setPipelineRightContact:function(){})(p=>p?{...p,tags}:p);setContacts(p=>p.map(c=>c.id===ct.id?{...c,tags}:c));api(`/api/data/contacts/${ct.id}`,{method:'PUT',body:{tags_json:JSON.stringify(tags),companyId:company?.id}});}} style={{cursor:'pointer',lineHeight:1}}>×</span></span>)}
       <span onClick={()=>{const t=prompt('Tag :');if(!t)return;const tags=[...((pipelineRightContact||ct).tags||[]),t.trim()];(typeof setPipelineRightContact==='function'?setPipelineRightContact:function(){})(p=>p?{...p,tags}:p);setContacts(p=>p.map(c=>c.id===ct.id?{...c,tags}:c));api(`/api/data/contacts/${ct.id}`,{method:'PUT',body:{tags_json:JSON.stringify(tags),companyId:company?.id}});}} style={{fontSize:8,padding:'1px 5px',borderRadius:5,border:`1px dashed ${T.border}`,color:T.accent,cursor:'pointer',fontWeight:600}}>+ Tag</span>
     </div>
+    </details>
 
   </div>}
 
@@ -5501,12 +5514,25 @@ return(
       const _ccShadow=_ccHas?`0 3px 12px ${ct.card_color}30`:isAutoDialing?'0 0 16px #7C3AED30':'none';
       const _isPipeSel = (typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).includes(ct.id);
       const _isSelected = (typeof pipelineRightContact!=='undefined'?pipelineRightContact:null)?.id === ct.id;
-      // Détection RDV passé — phone pipeline
+      // V3.x.17.2-fix-rdvpasse — Détection RDV passé corrigée :
+      // un contact en stage rdv_programme N'est passé QUE s'il n'a AUCUN RDV futur
+      // (date + heure >= maintenant). Avant : prenait le premier booking trié ASC
+      // → si plusieurs RDV (1 passé + 1 futur), le passé déclenchait la modale à tort.
       const _isRdvPasse2 = ct.pipeline_stage==='rdv_programme' && (()=>{
-        const nowMs2=Date.now();
-        const liveRdv2=(bookings||[]).filter(b=>b.contactId===ct.id&&b.status==='confirmed').sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))[0];
-        const rdvD2=liveRdv2?liveRdv2.date+(liveRdv2.time?'T'+liveRdv2.time:'T23:59'):ct.next_rdv_date;
-        return rdvD2&&new Date(rdvD2).getTime()<nowMs2;
+        const nowMs2 = Date.now();
+        const _list = (bookings||[]).filter(b => b.contactId === ct.id && b.status === 'confirmed');
+        if (_list.length === 0) {
+          // Pas de booking → fallback ct.next_rdv_date (fin de journée si pas d'heure)
+          if (!ct.next_rdv_date) return false;
+          const _ms = new Date(ct.next_rdv_date + 'T23:59').getTime();
+          return !isNaN(_ms) && _ms < nowMs2;
+        }
+        // Existe-t-il au moins un RDV futur ? (date + heure >= maintenant)
+        const _hasFuture = _list.some(b => {
+          const _ms = new Date(b.date + 'T' + (b.time || '23:59')).getTime();
+          return !isNaN(_ms) && _ms >= nowMs2;
+        });
+        return !_hasFuture; // RDV passé uniquement si aucun futur
       })();
       // V1.10.3 P2 — Détection "card transmise" (Jordan voit contact owned par Guillaume)
       // V1.10.4 P1 STRICT — visuel "transmis" uniquement si :
@@ -5559,10 +5585,13 @@ return(
             const _hasPendingReport = _shareTransfBk && (!_rs || _rs === '' || _rs === 'pending');
             const _statusLabels = { validated: '✓ Validé', signed: '✅ Signé', no_show: '❌ No-show', cancelled: '⛔ Annulé', follow_up: '🔄 À suivre', other: '🔘 Autre' };
             const _statusLabel = (_rs && _statusLabels[_rs]) || '';
-            return <div style={{marginBottom:2,maxWidth:'100%'}}>
+            // V3.x.17.2-fix-reporting-trafficlight — feu sorti du div tronqué (overflow:hidden)
+            const _trafficSender = getReportingTrafficLight(_shareTransfBk);
+            return <div style={{marginBottom:2,maxWidth:'100%',display:'flex',alignItems:'center',gap:3,flexWrap:'wrap'}}>
               <div title={'Transmis à ' + (_receiverName ? _capName(_receiverName) : 'autre collaborateur') + ' — lecture seule (suivi)'} style={{display:'inline-flex',alignItems:'center',gap:3,padding:'1px 5px',borderRadius:4,background:'#F9731614',border:'1px solid #F9731635',color:'#9A3412',fontSize:8,fontWeight:700,maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                 🤝 Transmis à {_capName(_receiverName)}
               </div>
+              {_trafficSender && <span title={_trafficSender.tooltip + (_trafficSender.note ? ' — ' + _trafficSender.note : '')} style={{fontSize:11,lineHeight:1,flexShrink:0,cursor:'help'}}>{_trafficSender.emoji}</span>}
               {_hasPendingReport && (
                 <div title="Reporting en attente du receveur" style={{display:'inline-flex',alignItems:'center',gap:2,marginLeft:4,padding:'0 4px',borderRadius:3,background:'#F59E0B14',color:'#92400E',fontSize:7,fontWeight:700,verticalAlign:'middle'}}>
                   ⏳ Reporting en attente
@@ -5580,10 +5609,13 @@ return(
             // V1.10.3 P2 — sous-texte "Reporting en attente" si RDV transmis sans reporting
             const _shareTransfBk = (bookings||[]).find(b => b.contactId === ct.id && b.bookingType === 'share_transfer' && b.status === 'confirmed');
             const _hasPendingReport = _shareTransfBk && (!_shareTransfBk.bookingReportingStatus || _shareTransfBk.bookingReportingStatus === '');
-            return <div style={{marginBottom:2,maxWidth:'100%'}}>
+            // V3.x.17.2-fix-reporting-trafficlight — feu sorti du div tronqué (overflow:hidden)
+            const _trafficShared = getReportingTrafficLight(_shareTransfBk);
+            return <div style={{marginBottom:2,maxWidth:'100%',display:'flex',alignItems:'center',gap:3,flexWrap:'wrap'}}>
               <div title={'Transmis à ' + (_ownerName ? _capName(_ownerName) : 'autre collaborateur') + ' — lecture seule'} style={{display:'inline-flex',alignItems:'center',gap:3,padding:'1px 5px',borderRadius:4,background:'#F9731614',border:'1px solid #F9731635',color:'#9A3412',fontSize:8,fontWeight:700,maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
                 🤝 Transmis à {_capName(_ownerName)}
               </div>
+              {_trafficShared && <span title={_trafficShared.tooltip + (_trafficShared.note ? ' — ' + _trafficShared.note : '')} style={{fontSize:11,lineHeight:1,flexShrink:0,cursor:'help'}}>{_trafficShared.emoji}</span>}
               {_hasPendingReport && (
                 <div title="Reporting en attente du receveur" style={{display:'inline-flex',alignItems:'center',gap:2,marginLeft:4,padding:'0 4px',borderRadius:3,background:'#F59E0B14',color:'#92400E',fontSize:7,fontWeight:700,verticalAlign:'middle'}}>
                   ⏳ Reporting en attente
@@ -5595,8 +5627,14 @@ return(
             const _firstSharerId = _shared.find(_id => _id && _id !== collab.id);
             const _sharerName = (collabs||[]).find(_c => _c.id === _firstSharerId)?.name || '';
             const _extra = _shared.filter(_id => _id && _id !== collab.id).length - 1;
-            return <div title={'Transmis par ' + (_sharerName ? _capName(_sharerName) : 'un collaborateur') + (_extra > 0 ? ' (+' + _extra + ')' : '')} style={{display:'inline-flex',alignItems:'center',gap:3,padding:'1px 5px',borderRadius:4,background:'#F9731614',border:'1px solid #F9731635',color:'#9A3412',fontSize:8,fontWeight:700,marginBottom:2,maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-              🤝 Transmis par {_capName(_sharerName)}{_extra > 0 ? ' +' + _extra : ''}
+            // V3.x.17.2-fix-reporting-trafficlight — feu reporting si RDV transmis lié à ce contact (côté receiver)
+            const _shareTransfBkOwner = (bookings||[]).find(b => b.contactId === ct.id && b.bookingType === 'share_transfer' && b.status === 'confirmed');
+            const _trafficOwner = getReportingTrafficLight(_shareTransfBkOwner);
+            return <div style={{marginBottom:2,maxWidth:'100%',display:'flex',alignItems:'center',gap:3,flexWrap:'wrap'}}>
+              <div title={'Transmis par ' + (_sharerName ? _capName(_sharerName) : 'un collaborateur') + (_extra > 0 ? ' (+' + _extra + ')' : '')} style={{display:'inline-flex',alignItems:'center',gap:3,padding:'1px 5px',borderRadius:4,background:'#F9731614',border:'1px solid #F9731635',color:'#9A3412',fontSize:8,fontWeight:700,maxWidth:'100%',overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+                🤝 Transmis par {_capName(_sharerName)}{_extra > 0 ? ' +' + _extra : ''}
+              </div>
+              {_trafficOwner && <span title={_trafficOwner.tooltip + (_trafficOwner.note ? ' — ' + _trafficOwner.note : '')} style={{fontSize:11,lineHeight:1,flexShrink:0,cursor:'help'}}>{_trafficOwner.emoji}</span>}
             </div>;
           }
           return null;
@@ -8911,16 +8949,26 @@ setPerduMotifModal(null);
     handleCollabUpdateContact(ct.id,{rdv_status:'rdv_passe',next_rdv_date:'',next_rdv_booking_id:'',lastVisit:new Date().toISOString()});
     showNotif('Contact → Intéressé','success');
   }
-  // Ouvrir la fiche après
-  setTimeout(()=>{setPipelineRightContact(ct);setPipelineRightTab('fiche');},300);
+  // V3.x.17.2-fix-rdvpasse — Ouvrir la fiche post-action avec contact frais + bon onglet
+  setTimeout(()=>{
+    const _fresh = (contacts||[]).find(c => c.id === ct.id) || ct;
+    setPipelineRightContact(_fresh);
+    setPhoneRightTab('fiche');
+  },300);
 }} style={{padding:'12px 14px',borderRadius:10,border:`1.5px solid ${opt.color}30`,background:`${opt.color}06`,cursor:'pointer',transition:'all .15s'}} onMouseEnter={e=>{e.currentTarget.style.background=opt.color+'15';e.currentTarget.style.borderColor=opt.color+'50';}} onMouseLeave={e=>{e.currentTarget.style.background=opt.color+'06';e.currentTarget.style.borderColor=opt.color+'30';}}>
   <div style={{fontSize:13,fontWeight:700,color:opt.color}}>{opt.label}</div>
   <div style={{fontSize:11,color:T.text3,marginTop:2}}>{opt.desc}</div>
 </div>
 ))}
       </div>
-      {/* Passer / Voir la fiche sans qualifier */}
-      <div onClick={()=>{setRdvPasseModal(null);setPipelineRightContact(ct);setPipelineRightTab('fiche');api('/api/data/pipeline-history?contactId='+ct.id).then(h=>setPipelinePopupHistory(h||[])).catch(()=>setPipelinePopupHistory([]));}} style={{marginTop:12,textAlign:'center',padding:'8px 0',fontSize:11,color:T.text3,cursor:'pointer',fontWeight:600}}>
+      {/* Passer / Voir la fiche sans qualifier — V3.x.17.2-fix-rdvpasse contact frais + onglet phoneRightTab */}
+      <div onClick={()=>{
+        setRdvPasseModal(null);
+        const _fresh = (contacts||[]).find(c => c.id === ct.id) || ct;
+        setPipelineRightContact(_fresh);
+        setPhoneRightTab('fiche');
+        api('/api/data/pipeline-history?contactId='+ct.id).then(h=>setPipelinePopupHistory(h||[])).catch(()=>setPipelinePopupHistory([]));
+      }} style={{marginTop:12,textAlign:'center',padding:'8px 0',fontSize:11,color:T.text3,cursor:'pointer',fontWeight:600}}>
 Voir la fiche sans qualifier →
       </div>
     </div>
