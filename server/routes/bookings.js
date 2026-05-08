@@ -51,14 +51,37 @@ router.get('/', requireAuth, enforceCompany, requirePermission('bookings.view'),
       }
     } else {
       // Toujours filtrer par company — jamais de SELECT * global
-      // SECURITE: non-admin voit ses RDV + ceux reçus en transfert (V1.10.3)
+      // V3.x.17.4 — fix BUG B Julie slots cross-collab : non-admin voit TOUS les bookings
+      // company avec foreign-mask (mirror init.js V1.8.4 L319-353). Avant : filtre strict
+      // (collaboratorId/agendaOwnerId/bookedByCollaboratorId = cid) excluait les bookings
+      // solo des autres collab → après _scheduleGlobalRefresh, modal RDV calculait les
+      // slots libres de Julie comme si elle n'avait aucun RDV. Après : tous bookings
+      // company, foreign masqués (slot footprint only, ZERO PII — visitorName/Email/
+      // Phone/notes/title NON exposés).
       if (isAdmin) {
         rows = db.prepare(`SELECT b.* FROM bookings b JOIN calendars c ON b.calendarId = c.id WHERE c.companyId = ?`).all(safeCompanyId);
       } else {
         const cid = req.auth.collaboratorId;
-        rows = db.prepare(
-          `SELECT b.* FROM bookings b JOIN calendars c ON b.calendarId = c.id WHERE c.companyId = ? AND (b.collaboratorId = ? OR b.agendaOwnerId = ? OR b.bookedByCollaboratorId = ?)`
-        ).all(safeCompanyId, cid, cid, cid);
+        const _calendars = db.prepare("SELECT id, collaborators_json FROM calendars WHERE companyId = ?").all(safeCompanyId);
+        const _myOwnedCalendarIds = new Set(_calendars.filter(cal => {
+          try { const ids = typeof cal.collaborators_json === 'string' ? JSON.parse(cal.collaborators_json) : []; return ids.includes(cid); } catch { return false; }
+        }).map(c => c.id));
+        const _allRows = db.prepare(`SELECT b.* FROM bookings b JOIN calendars c ON b.calendarId = c.id WHERE c.companyId = ?`).all(safeCompanyId);
+        rows = _allRows.map(b => {
+          const _isMine = b.collaboratorId === cid || b.agendaOwnerId === cid || b.bookedByCollaboratorId === cid || _myOwnedCalendarIds.has(b.calendarId);
+          if (_isMine) return b;
+          return {
+            id: b.id, calendarId: b.calendarId, collaboratorId: b.collaboratorId,
+            date: b.date, time: b.time, duration: b.duration, status: b.status,
+            noShow: b.noShow, checkedIn: b.checkedIn, reconfirmed: b.reconfirmed,
+            source: b.source, googleEventId: b.googleEventId, companyId: b.companyId,
+            bookedByCollaboratorId: b.bookedByCollaboratorId,
+            meetingCollaboratorId: b.meetingCollaboratorId,
+            agendaOwnerId: b.agendaOwnerId, bookingType: b.bookingType,
+            bookingOutcomeAt: b.bookingOutcomeAt, transferMode: b.transferMode,
+            _foreign: true, tags_json: '[]',
+          };
+        });
       }
     }
     const parsed = rows.map(b => {
@@ -253,8 +276,10 @@ router.post('/', requireAuth, enforceCompany, requirePermission('bookings.create
     }
 
     // Effets de bord booking créé (factorisés via helper unique)
+    // V3.x.17.5 fix BUG A : passer bookingId pour persist next_rdv_booking_id (cockpit
+    // _refRdv lookup par id robust contre foreign-mask cross-collab après refresh).
     if (b.contactId && b.status !== 'cancelled') {
-      applyBookingCreatedSideEffects(db, { contactId: b.contactId, bookingDate: b.date, source: 'bookings_post' });
+      applyBookingCreatedSideEffects(db, { contactId: b.contactId, bookingDate: b.date, bookingId: id, source: 'bookings_post' });
     }
 
     // V1.8.22 Phase A — log structuré post-création (observabilité flow RDV)

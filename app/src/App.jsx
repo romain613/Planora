@@ -343,7 +343,17 @@ export default function App() {
         const viewCollabId = isCollabView ? portalData.collab.id : null;
 
         if (data?.bookings) {
-          setBookings(isCollabView ? data.bookings.filter(b => b.collaboratorId === viewCollabId) : data.bookings);
+          // V3.x.17.6 — fix retour BUG A+B après 30s : NE PAS strip les bookings cross-collab.
+          // Le backend (init.js myBookings) applique déjà le foreign-mask correct (slot footprint
+          // sans PII). Le filtre frontend retirait les bookings Julie solo + cross-collab,
+          // annulant les fixes V3.x.17.4 (BUG B slots) et V3.x.17.5 (BUG A heure RDV).
+          // Garder : own + cross-collab (sender/receiver) + foreign-mask (slot calc).
+          setBookings(isCollabView ? data.bookings.filter(b =>
+            b.collaboratorId === viewCollabId
+            || b.agendaOwnerId === viewCollabId
+            || b.bookedByCollaboratorId === viewCollabId
+            || b._foreign === true
+          ) : data.bookings);
         }
         if (data?.callLogs && isCollabView) {
           setVoipCallLogs(data.callLogs.filter(cl => cl.collaboratorId === viewCollabId));

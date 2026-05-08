@@ -13,11 +13,14 @@ import { updateBehaviorScore } from '../../helpers/behaviorScore.js';
  * @param params {
  *   contactId: string (requis)
  *   bookingDate: string 'YYYY-MM-DD' (requis pour next_rdv_date)
+ *   bookingId: string (optionnel — V3.x.17.5 fix BUG A : persist next_rdv_booking_id pour
+ *     que le cockpit puisse retrouver le booking par id même quand contactId est masqué
+ *     par le foreign-mask cross-collab après refresh /api/data/contacts)
  *   source: string (traçabilité — ex: 'bookings_post' | 'contact_share_booking' | 'inter_meeting_transfer' | 'public_booking')
  * }
  * @returns { advanced, fromStage, toStage } — métadonnées pour audit éventuel
  */
-export function applyBookingCreatedSideEffects(db, { contactId, bookingDate, source }) {
+export function applyBookingCreatedSideEffects(db, { contactId, bookingDate, bookingId, source }) {
   const result = { advanced: false, fromStage: null, toStage: null, source: source || 'unknown' };
   if (!contactId) return result;
 
@@ -25,11 +28,19 @@ export function applyBookingCreatedSideEffects(db, { contactId, bookingDate, sou
     // 1. Incrémente totalBookings
     db.prepare('UPDATE contacts SET totalBookings = COALESCE(totalBookings, 0) + 1 WHERE id = ?').run(contactId);
 
-    // 2. Set rdv_status='programme' + next_rdv_date (uniquement si nouveau RDV est plus proche que celui existant)
+    // 2. Set rdv_status='programme' + next_rdv_date (+ next_rdv_booking_id si fourni)
+    //    uniquement si nouveau RDV est plus proche que celui existant.
+    //    V3.x.17.5 : next_rdv_booking_id additionnel — colonne déjà présente (db/database.js:1735).
     if (bookingDate) {
-      db.prepare(
-        "UPDATE contacts SET next_rdv_date = ?, rdv_status = 'programme' WHERE id = ? AND (next_rdv_date IS NULL OR next_rdv_date = '' OR next_rdv_date > ?)"
-      ).run(bookingDate, contactId, bookingDate);
+      if (bookingId) {
+        db.prepare(
+          "UPDATE contacts SET next_rdv_date = ?, next_rdv_booking_id = ?, rdv_status = 'programme' WHERE id = ? AND (next_rdv_date IS NULL OR next_rdv_date = '' OR next_rdv_date > ?)"
+        ).run(bookingDate, bookingId, contactId, bookingDate);
+      } else {
+        db.prepare(
+          "UPDATE contacts SET next_rdv_date = ?, rdv_status = 'programme' WHERE id = ? AND (next_rdv_date IS NULL OR next_rdv_date = '' OR next_rdv_date > ?)"
+        ).run(bookingDate, contactId, bookingDate);
+      }
     }
 
     // 3. Pipeline auto-advance + capture before/after pour audit
