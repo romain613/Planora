@@ -23,6 +23,8 @@ import { FicheDocsPanelScreen } from "../screens"; // hotfix 2026-04-23 — Phas
 import { isContactInSuiviForCollab, getContactSuiviRole, getReceiverIdForSentTransfer, getActiveSentTransferBooking } from "../../../shared/utils/suivi";
 // V1.14.1.x — modale hard delete pour contacts archivés trouvés via fallback Hub SMS
 import HardDeleteContactModal from "../modals/HardDeleteContactModal";
+// V3.x.17.2 — Cockpit commercial compact en haut onglet Info uniquement
+import CommercialCockpit from "./crm/fiche/CommercialCockpit.jsx";
 
 const PhoneTab = () => {
   const ctx = useCollabContext();
@@ -1720,6 +1722,8 @@ if (n === ph) matched.set(c.id, c);
 {/* ══ INFO tab — Contact details, notes, tags, change stage ══ */}
 {((typeof phoneRightTab!=='undefined'?phoneRightTab:null)==='fiche'||(typeof phoneRightTab!=='undefined'?phoneRightTab:null)==='appels'&&!callsForNumber.length) && (typeof phoneRightTab!=='undefined'?phoneRightTab:null)==='fiche' && (
 <div>
+  {/* V3.x.17.2 — Cockpit commercial compact (sticky top, onglet Info uniquement) */}
+  <CommercialCockpit />
   {/* ── Coordonnées complètes — version épurée V3 ── */}
   {(()=>{
     // V1.14.0 — Optimistic UI immediate sur pipelineRightContact (champ saisi),
