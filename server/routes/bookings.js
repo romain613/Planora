@@ -11,6 +11,7 @@ import { createFollowUpTask } from '../services/googleTasks.js';
 import { sendChatNotification, formatNewBooking, formatCancelledBooking, formatConfirmedBooking } from '../services/googleChat.js';
 import { checkBookingConflict } from '../services/bookings/checkBookingConflict.js';
 import { applyBookingCreatedSideEffects } from '../services/bookings/applyBookingCreatedSideEffects.js';
+import { validateBookingCalendarOwnership } from '../services/bookings/validateBookingCalendarOwnership.js'; // V3.x.15.A
 import { markNoShow } from '../services/bookings/markNoShow.js';
 import { requireAuth, enforceCompany } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
@@ -147,6 +148,19 @@ router.post('/', requireAuth, enforceCompany, requirePermission('bookings.create
     const id = b.id || 'b' + Date.now();
     const companyId = req.auth.companyId || b.companyId || '';
     const collabId = b.collaboratorId || '';
+
+    // V3.x.15.A — Guard calendarId/agendaOwnerId : empêche RDV avec calendrier non-membre.
+    // Resolve agendaOwnerId comme dans l'INSERT (b.agendaOwnerId || b.collaboratorId).
+    {
+      const _agendaOwnerId = b.agendaOwnerId || b.collaboratorId || null;
+      if (b.calendarId && _agendaOwnerId) {
+        const _check = validateBookingCalendarOwnership(db, { companyId, calendarId: b.calendarId, agendaOwnerId: _agendaOwnerId });
+        if (!_check.ok) {
+          console.warn(`[BOOKING GUARD] ${_check.code} calendar=${b.calendarId} owner=${_agendaOwnerId} company=${companyId} : ${_check.detail}`);
+          return res.status(_check.status).json({ error: _check.code, detail: _check.detail });
+        }
+      }
+    }
 
     // V5-BOOKING: Auto-creation/dedup contact si contactId absent
     if (!b.contactId && (b.visitorEmail || b.visitorPhone) && companyId) {
@@ -333,6 +347,18 @@ router.put('/:id', requireAuth, requirePermission('bookings.edit'), (req, res) =
       if (!collabActive) {
         console.warn(`[BOOKING REJECTED] PUT collaboratorId=${req.body.collaboratorId} archived — bookingId=${req.params.id}`);
         return res.status(409).json({ error: 'COLLABORATOR_ARCHIVED', collaboratorId: req.body.collaboratorId });
+      }
+    }
+
+    // V3.x.15.A — Guard calendarId/agendaOwnerId : déclenché uniquement si calendarId
+    // est explicitement modifié par le PUT (sinon comportement legacy intact).
+    if (req.body.calendarId && req.body.calendarId !== oldBooking.calendarId) {
+      const _agendaOwnerId = req.body.agendaOwnerId || oldBooking.agendaOwnerId || oldBooking.collaboratorId || null;
+      const _companyId = req.auth.companyId || oldBooking.companyId || '';
+      const _check = validateBookingCalendarOwnership(db, { companyId: _companyId, calendarId: req.body.calendarId, agendaOwnerId: _agendaOwnerId });
+      if (!_check.ok) {
+        console.warn(`[BOOKING GUARD PUT] ${_check.code} bookingId=${req.params.id} newCal=${req.body.calendarId} owner=${_agendaOwnerId} : ${_check.detail}`);
+        return res.status(_check.status).json({ error: _check.code, detail: _check.detail });
       }
     }
 

@@ -12,6 +12,7 @@
 
 import { checkBookingConflict } from '../bookings/checkBookingConflict.js';
 import { applyBookingCreatedSideEffects } from '../bookings/applyBookingCreatedSideEffects.js';
+import { validateBookingCalendarOwnership } from '../bookings/validateBookingCalendarOwnership.js'; // V3.x.15.A
 
 // Helper : génère un id court style "bk_<ts>_<rand>"
 function newId(prefix) {
@@ -87,6 +88,21 @@ export function sendContactToCollab(db, params) {
 
   const now = nowIso();
   let createdBookingId = null;
+
+  // V3.x.15.A — Guard calendarId/agendaOwnerId : empêche partage avec calendrier dont
+  // le collab cible n'est pas membre. agendaOwnerId = targetCollaboratorId (cohérent
+  // avec INSERT bookings ligne 130 où agendaOwnerId = targetCollaboratorId).
+  if (bookingDate && bookingTime && calendarId) {
+    const _check = validateBookingCalendarOwnership(db, { companyId, calendarId, agendaOwnerId: targetCollaboratorId });
+    if (!_check.ok) {
+      console.warn(`[CONTACT-SHARE GUARD] ${_check.code} cal=${calendarId} target=${targetCollaboratorId} : ${_check.detail}`);
+      const err = new Error(_check.code);
+      err.guardCode = _check.code;
+      err.guardStatus = _check.status;
+      err.guardDetail = _check.detail;
+      throw err;
+    }
+  }
 
   // R1 + R5 — check conflit AVANT d'ouvrir la transaction (rejet propre, pas de rollback silencieux)
   if (bookingDate && bookingTime && calendarId) {

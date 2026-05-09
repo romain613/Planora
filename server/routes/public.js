@@ -11,6 +11,7 @@ import { newBookingNotifyEmail, newBookingNotifySms } from '../templates/newBook
 import { createEvent, isConnected } from '../services/googleCalendar.js';
 import { isConnected as outlookIsConnected, createEventOutlook } from '../services/outlookCalendar.js'; // V4.a
 import { checkBookingConflict } from '../services/bookings/checkBookingConflict.js';
+import { validateBookingCalendarOwnership } from '../services/bookings/validateBookingCalendarOwnership.js'; // V3.x.15.A
 
 const router = Router();
 
@@ -295,6 +296,18 @@ router.post('/book', async (req, res) => {
       if (collabCheck.archivedAt && collabCheck.archivedAt !== '') {
         console.warn(`[SECURITY] POST /book rejected: collaboratorId ${collaboratorId} is archived`);
         return res.status(409).json({ error: 'COLLABORATOR_ARCHIVED' });
+      }
+    }
+
+    // V3.x.15.A — Guard calendarId/agendaOwnerId : pour public booking, agendaOwnerId
+    // = collaboratorId (le visiteur choisit le collab cible, qui devient agenda owner).
+    // La validation existante L282-298 vérifie déjà collaboratorId ∈ calendar.collaborators_json,
+    // donc le guard ici sert de garde-fou défensif (cohérence guard centralisé partout).
+    if (collaboratorId && cal && cal.id) {
+      const _check = validateBookingCalendarOwnership(db, { companyId: cal.companyId, calendarId: cal.id, agendaOwnerId: collaboratorId });
+      if (!_check.ok) {
+        console.warn(`[PUBLIC-BOOK GUARD] ${_check.code} cal=${cal.id} owner=${collaboratorId} : ${_check.detail}`);
+        return res.status(_check.status).json({ error: _check.code, detail: _check.detail });
       }
     }
 
