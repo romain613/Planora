@@ -460,6 +460,7 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
           const DETAIL_PAGE_SIZE = 50;
           const [detailFilter, setDetailFilter] = useState('');
           const [detailDateRange, setDetailDateRange] = useState('all');
+          const [detailCollabFilter, setDetailCollabFilter] = useState(''); // Filtre collab destinataire dans détail enveloppe
           const [detailCustomStart, setDetailCustomStart] = useState('');
           const [detailCustomEnd, setDetailCustomEnd] = useState('');
           // ─── WIZARD STATE ───
@@ -714,7 +715,7 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
                   <Btn onClick={()=>{const batchSize=env.dispatch_limit||pending;setShowDistribPopup(env.id);setDistribForm({mode:env.dispatch_limit?'choose':'all',count:Math.min(batchSize,pending),dispatchMode:env.dispatch_mode||'percentage'});}} disabled={(typeof dispatchLoading!=='undefined'?dispatchLoading:null)||pending===0} style={{flex:1,background:pending>0?'linear-gradient(135deg,#22C55E,#0EA5E9)':'#94A3B820',color:pending>0?'#fff':'#94A3B8',fontWeight:700,fontSize:14,border:'none',boxShadow:pending>0?'0 2px 10px #22C55E30':'none',cursor:pending>0?'pointer':'not-allowed'}}>
                     {(typeof dispatchLoading!=='undefined'?dispatchLoading:null)?<I n="loader" s={14} style={{animation:'spin 1s linear infinite'}}/>:<I n="rocket" s={14}/>} Distribuer ({pending})
                   </Btn>
-                  <Btn onClick={()=>{setDetailEnvId(env.id);setDetailPage(0);setDetailFilter('');setStatusFilter('');}} style={{fontSize:12}}><I n="list" s={13}/> Detail</Btn>
+                  <Btn onClick={()=>{setDetailEnvId(env.id);setDetailPage(0);setDetailFilter('');setStatusFilter('');setDetailCollabFilter('');}} style={{fontSize:12}}><I n="list" s={13}/> Detail</Btn>
                   <Btn onClick={()=>{
                     const existingRules = env.rules||[];
                     setEditEnvId(env.id);setWizardStep(0);
@@ -796,8 +797,9 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
               const daysInPeriod = dateStart ? Math.max(1, Math.ceil((new Date(dateEnd)-new Date(dateStart))/86400000)) : Math.max(1, dayEntries.length);
               const avgPerDay = pRecus>0?(pRecus/daysInPeriod).toFixed(1):'0';
 
-              // Status + date filter
-              const filteredLeads = (typeof detailFilter!=='undefined'?detailFilter:null) ? envLeads.filter(l=>l.status===(typeof detailFilter!=='undefined'?detailFilter:null)) : envLeads;
+              // Status + date filter + collab filter (assigned_to)
+              const _statusFilteredLeads = (typeof detailFilter!=='undefined'?detailFilter:null) ? envLeads.filter(l=>l.status===(typeof detailFilter!=='undefined'?detailFilter:null)) : envLeads;
+              const filteredLeads = detailCollabFilter ? _statusFilteredLeads.filter(l => l.assigned_to === detailCollabFilter) : _statusFilteredLeads;
               const pagedLeads = filteredLeads.slice((typeof detailPage!=='undefined'?detailPage:null)*DETAIL_PAGE_SIZE, ((typeof detailPage!=='undefined'?detailPage:null)+1)*DETAIL_PAGE_SIZE);
               const totalPages = Math.ceil(filteredLeads.length/DETAIL_PAGE_SIZE);
 
@@ -892,6 +894,31 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
                   })}
                 </div>}
 
+                {/* FILTRE COLLABORATEUR DESTINATAIRE — frontend pur (source = envLeads déjà chargés) */}
+                {(()=>{
+                  const _assignedIds = [...new Set(envLeads.filter(l=>l.assigned_to).map(l=>l.assigned_to))];
+                  if (_assignedIds.length < 2 && !detailCollabFilter) return null; // skip si 0 ou 1 collab → filtre inutile
+                  const _options = _assignedIds.map(id => {
+                    const c = (collabs||[]).find(x => x.id === id);
+                    if (!c) return null;
+                    const cnt = envLeads.filter(l => l.assigned_to === id).length;
+                    return { id, name: c.name || id, color: c.color || '#64748B', count: cnt };
+                  }).filter(Boolean).sort((a, b) => b.count - a.count);
+                  return <div style={{display:'flex',gap:8,marginBottom:14,alignItems:'center',flexWrap:'wrap'}}>
+                    <I n="users" s={14} style={{color:T.text2}}/>
+                    <span style={{fontSize:11,fontWeight:600,color:T.text2}}>Collaborateur :</span>
+                    <select
+                      value={detailCollabFilter}
+                      onChange={e=>{setDetailCollabFilter(e.target.value);setDetailPage(0);}}
+                      style={{padding:'5px 10px',borderRadius:8,border:`1px solid ${T.border}`,background:T.card,color:T.text,fontSize:12,fontFamily:'inherit',cursor:'pointer'}}
+                    >
+                      <option value="">Tous les collaborateurs ({envLeads.length})</option>
+                      {_options.map(o => <option key={o.id} value={o.id}>{o.name} ({o.count})</option>)}
+                    </select>
+                    {detailCollabFilter && <Btn onClick={()=>{setDetailCollabFilter('');setDetailPage(0);}} style={{fontSize:10,padding:'3px 8px'}}><I n="x" s={10}/> Reset</Btn>}
+                  </div>;
+                })()}
+
                 {/* FILTRES VISUELS (pills) — recalcules par période */}
                 <div style={{display:'flex',gap:6,marginBottom:14,flexWrap:'wrap'}}>
                   {filterPills.map(f=><div key={f.id} onClick={()=>{setDetailFilter(f.id);setDetailPage(0);}} style={{
@@ -979,7 +1006,7 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
                           </td>
                         </tr>;
                       })}
-                      {pagedLeads.length===0 && <tr><td colSpan={8} style={{textAlign:'center',padding:30,color:T.text2,fontSize:13}}>Aucun lead{(typeof detailFilter!=='undefined'?detailFilter:null)?' avec ce filtre':''}</td></tr>}
+                      {pagedLeads.length===0 && <tr><td colSpan={8} style={{textAlign:'center',padding:30,color:T.text2,fontSize:13}}>Aucun lead{(detailFilter || detailCollabFilter)?' avec ce filtre':''}</td></tr>}
                     </tbody>
                   </table>
                 </div>
