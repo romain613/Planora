@@ -363,6 +363,16 @@ router.get('/', (req, res) => {
         ? c.shared_with
         : (() => { try { return JSON.parse(c.shared_with_json || '[]'); } catch { return []; } })();
       if (shared.includes(collabId)) return true;          // shared with me
+      // V1.10.4.A visibility fix — visibilité étendue : si je gère un RDV transmis pour ce
+      // contact (agendaOwnerId=moi) OU je suis le sender (bookedByCollaboratorId=moi),
+      // alors le contact apparaît dans mon Pipeline Live. Source de vérité = booking.
+      // Préserve ownership contact (assignedTo) et shared_with (V7 / V1.10.4 P1) inchangés.
+      const _myTransferRdv = parsedBookings.find(b =>
+        b && b.contactId === c.id
+        && (b.agendaOwnerId === collabId || b.bookedByCollaboratorId === collabId)
+        && ['share_transfer','transfer','internal'].includes(b.bookingType)
+        && b.status !== 'cancelled');
+      if (_myTransferRdv) return true;
       return false;
     });
 

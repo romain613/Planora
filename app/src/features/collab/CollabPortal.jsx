@@ -56,6 +56,7 @@ import RdvReportingTab from "./tabs/RdvReportingTab";
 import DuplicateOnCreateModal from "./modals/DuplicateOnCreateModal";
 import HardDeleteContactModal from "./modals/HardDeleteContactModal";
 import PostCallResultModal from "./modals/PostCallResultModal"; // V3.x post-call smart pipeline
+import ReassignBookingModal from "./modals/ReassignBookingModal"; // V1.10.4.A étape 2
 import SmartFooterBar from "./components/SmartFooterBar"; // V1 Smart Footer Performance Bar
 
 const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCalendars, avails, setAvails, vacations, setVacations, contacts, setContacts, onBack, voipCredits, voipCallLogs, setVoipCallLogs, voipConfigured, appMyPhoneNumbers, appPhonePlans, appConversations, setAppConversations, pipelineStages, setPipelineStages, contactFieldDefs, setContactFieldDefs, collabs: collabsProp, googleEvents: googleEventsProp, setGoogleEvents, outlookEvents: outlookEventsProp, setOutlookEvents, isAdminView, smsCredits }) => {
@@ -787,6 +788,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const [v7TransferModal, setV7TransferModal] = useState(null);
   const [v7TransferTarget, setV7TransferTarget] = useState('');
   const [v7TransferLoading, setV7TransferLoading] = useState(false);
+  // ── V1.10.4.A étape 2 — Reassign booking modal state ──
+  const [reassignBookingModal, setReassignBookingModal] = useState(null);
   const [v7FollowersMap, setV7FollowersMap] = useState({});
   const v7FollowersLoadedRef = useRef(false);
 
@@ -4418,6 +4421,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       prefillKeypad,
       setV7TransferModal,
       setV7TransferTarget,
+      // V1.10.4.A étape 2 — reassign modal
+      reassignBookingModal,
+      setReassignBookingModal,
       togglePhoneLeftPanel,
       v7FollowersMap,
 
@@ -4440,6 +4446,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
 @keyframes slideInRight{from{opacity:0;transform:translateX(30px);}to{opacity:1;transform:translateX(0);}}
 @keyframes agendaNowPulse{0%,100%{box-shadow:0 0 0 0 rgba(239,68,68,0.55);}50%{box-shadow:0 0 0 6px rgba(239,68,68,0);}}
 @keyframes agendaFadeInUp{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}`}</style>
+
+            {/* V1.10.4.A étape 2 — Reassign booking modal (rendu par le composant lui-même conditionné sur reassignBookingModal) */}
+            <ReassignBookingModal />
 
             {/* V7 TRANSFER MODAL */}
             {v7TransferModal && (

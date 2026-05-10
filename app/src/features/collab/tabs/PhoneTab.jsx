@@ -36,6 +36,7 @@ const PhoneTab = () => {
     selectedCrmContact, setSelectedCrmContact,
     setCollabFicheTab, setRdvPasseModal,
     setShowNewContact, setBookings, setContacts, setContactFieldDefs,
+    setReassignBookingModal, // V1.10.4.A étape 2
     setVoipCallLogs, voipCallLogs,
     setPipelineRightContact, setPipelinePopupHistory,
     setPipelineRdvForm, setPipeBulkStage, setPipeBulkModal, setPipeSelectedIds,
@@ -1752,17 +1753,40 @@ if (n === ph) matched.set(c.id, c);
         {ct.source&&<span style={{padding:'3px 6px',fontWeight:600,borderRight:`1px solid ${T.border}30`}}>{ct.source==='manual'?'Manuel':ct.source==='csv'?'CSV':ct.source==='lead'?'Lead':(ct.source==='booking'||ct.source==='agenda')?'Booking':ct.source}</span>}
         {ct.createdAt&&<span style={{padding:'3px 6px'}}>{new Date(ct.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})}</span>}
       </div>
-      {/* V1.8.14 — Origine du lead (cross-collab) */}
+      {/* V1.8.14 — Origine du lead (cross-collab) — V1.10.4.A étape 2 : actions RDV transmis */}
       {(()=>{
         const _isOwner = ct.assignedTo === collab.id;
         const _shared = Array.isArray(ct.shared_with) ? ct.shared_with : [];
         const _sharedHere = _shared.includes(collab.id) && !_isOwner && ct.assignedTo;
         const _hasShare = ct.assignedTo && (_shared.length > 0 || _sharedHere);
-        if (!_hasShare) return null;
+
+        // V1.10.4.A — booking transmis lié au contact (utilise next_rdv_booking_id si dispo,
+        // sinon fallback filtre par contactId + bookingType transfer/share_transfer/internal).
+        const _transferTypes = new Set(['share_transfer', 'transfer', 'internal']);
+        let _refRdv = null;
+        if (ct.next_rdv_booking_id) {
+          _refRdv = (bookings || []).find(b => b && b.id === ct.next_rdv_booking_id) || null;
+        }
+        if (!_refRdv) {
+          const _list = (bookings || []).filter(b => b && (b.contactId === ct.id || b.contact_id === ct.id) && _transferTypes.has(b.bookingType) && b.status !== 'cancelled' && b.status !== 'rejected');
+          _list.sort((a, b) => ((a.date||'') + (a.time||'')).localeCompare((b.date||'') + (b.time||'')));
+          _refRdv = _list[0] || null;
+        }
+        const _isTransferRdv = _refRdv && _transferTypes.has(_refRdv.bookingType) && (_refRdv.bookedByCollaboratorId || _refRdv.agendaOwnerId);
+        const _amSender = _refRdv && _refRdv.bookedByCollaboratorId === collab.id && collab.id;
+        const _amReceiver = _refRdv && _refRdv.agendaOwnerId === collab.id && collab.id;
+        const _isAdmin = collab?.role === 'admin' || collab?.role === 'supra';
+        const _hasGoogleSync = !!(_refRdv && _refRdv.googleEventId);
+        const _hasOutlookSync = !!(_refRdv && _refRdv.outlookEventId);
+        const _hasExtSync = _hasGoogleSync || _hasOutlookSync;
+        const _reportingLocked = _refRdv && ['validated','signed','no_show','cancelled'].includes(_refRdv.bookingReportingStatus || '');
+
+        if (!_hasShare && !_isTransferRdv) return null;
         const _capName = (n) => { const s = String(n||'').trim(); return s ? s.charAt(0).toUpperCase() + s.slice(1) : '—'; };
         const _ownerName = (collabs||[]).find(_c => _c.id === ct.assignedTo)?.name || '';
         const _firstSharerId = _shared.find(_id => _id && _id !== ct.assignedTo);
         const _sharerName = _firstSharerId ? ((collabs||[]).find(_c => _c.id === _firstSharerId)?.name || '') : null;
+
         const _detach = () => {
           if (!confirm('Se retirer du suivi de ce contact ? Vous ne le verrez plus dans votre pipeline.')) return;
           // V1.8.15 — Timeline event AVANT la mutation (pour que le user soit encore en shared_with côté backend)
@@ -1773,18 +1797,117 @@ if (n === ph) matched.set(c.id, c);
             if (typeof showNotif === 'function') showNotif('Vous ne suivez plus ce contact', 'success');
           }
         };
+
+        // V1.10.4.A — handlers des 3 actions transmis
+        const _v1104ErrorLabel = (code) => ({
+          EXTERNAL_SYNC_PRESENT: "RDV synchronisé Google/Outlook — réassignation/annulation Phase 3 différée. Annulez puis recréez le RDV.",
+          REPORTING_LOCKED: "Reporting verrouillé (validé/signé/no-show/annulé) — action impossible.",
+          SLOT_CONFLICT: "Créneau occupé chez le destinataire.",
+          EXECUTOR_NO_CALENDAR: "Le collaborateur n'a aucun calendrier configuré.",
+          CALENDAR_OWNER_MISMATCH: "Calendrier non valide pour le collaborateur cible.",
+          COLLABORATOR_ARCHIVED: "Le collaborateur cible est archivé.",
+          FORBIDDEN: "Vous n'êtes pas autorisé à effectuer cette action.",
+          BOOKING_NOT_FOUND: "RDV introuvable.",
+          NOT_TRANSFER_BOOKING: "Ce RDV n'est pas un RDV transmis.",
+          ALREADY_AT_SENDER: "Le RDV est déjà chez l'apporteur.",
+          NO_SENDER_TO_RESTORE: "Aucun apporteur enregistré pour restaurer le RDV.",
+        }[code] || code);
+
+        const _doCancelTransmission = async () => {
+          if (!_refRdv) return;
+          if (!confirm("Annuler la transmission de ce RDV ?\n\nLe RDV reviendra dans votre agenda (en tant qu'apporteur). Cette action ne supprime pas le RDV.")) return;
+          try {
+            const r = await api(`/api/bookings/${_refRdv.id}/cancel-transmission`, { method: 'PUT' });
+            if (r?.success && r?.booking) {
+              if (typeof setBookings === 'function') setBookings(prev => (prev || []).map(b => b.id === r.booking.id ? { ...b, ...r.booking } : b));
+              showNotif && showNotif('Transmission annulée — RDV revenu dans votre agenda', 'success');
+            } else {
+              showNotif && showNotif('Erreur : ' + _v1104ErrorLabel(r?.error || 'UNKNOWN'), 'danger');
+            }
+          } catch (e) {
+            showNotif && showNotif('Erreur réseau : ' + (e?.message || ''), 'danger');
+          }
+        };
+
+        const _doResume = async () => {
+          if (!_refRdv) return;
+          if (!confirm("Rendre ce RDV à l'apporteur ?\n\nLe RDV quittera votre agenda et sera restauré chez l'apporteur initial.")) return;
+          try {
+            const r = await api(`/api/bookings/${_refRdv.id}/resume`, { method: 'PUT' });
+            if (r?.success && r?.booking) {
+              if (typeof setBookings === 'function') setBookings(prev => (prev || []).map(b => b.id === r.booking.id ? { ...b, ...r.booking } : b));
+              showNotif && showNotif("RDV rendu à l'apporteur", 'success');
+            } else {
+              showNotif && showNotif('Erreur : ' + _v1104ErrorLabel(r?.error || 'UNKNOWN'), 'danger');
+            }
+          } catch (e) {
+            showNotif && showNotif('Erreur réseau : ' + (e?.message || ''), 'danger');
+          }
+        };
+
+        const _doReassign = () => {
+          if (!_refRdv) return;
+          if (typeof setReassignBookingModal === 'function') setReassignBookingModal(_refRdv);
+        };
+
+        // Tooltip dynamique
+        const _disabledReason = _hasExtSync
+          ? 'RDV synchronisé Google/Outlook — fonction Phase 3. Pour modifier, annulez et recréez le RDV.'
+          : (_reportingLocked ? 'Reporting verrouillé — action impossible.' : '');
+
         return <div style={{padding:'8px 10px',borderRadius:8,background:'#F8FAFC',border:`1px solid ${T.border}`,marginBottom:8}}>
           <div style={{fontSize:9,fontWeight:800,color:T.text3,textTransform:'uppercase',letterSpacing:0.5,marginBottom:4}}>Origine du lead</div>
           {_sharerName && <div style={{fontSize:11,color:T.text2,marginBottom:2,display:'flex',alignItems:'center',gap:6}}>
             <span>🤝</span> Apporté par <b style={{color:T.text}}>{_capName(_sharerName)}</b>
           </div>}
-          <div style={{fontSize:11,color:T.text2,display:'flex',alignItems:'center',gap:6}}>
+          {_hasShare && <div style={{fontSize:11,color:T.text2,display:'flex',alignItems:'center',gap:6}}>
             <span>🎯</span> Géré par <b style={{color:T.text}}>{_capName(_ownerName)}</b>
             {_isOwner && <span style={{fontSize:9,color:'#16A34A',fontWeight:700,padding:'1px 5px',borderRadius:4,background:'#22C55E15'}}>Vous</span>}
-          </div>
+          </div>}
+          {/* V1.10.4.A visibility fix — afficher l'executor du RDV s'il diffère de l'owner contact */}
+          {_refRdv && _refRdv.agendaOwnerId && _refRdv.agendaOwnerId !== ct.assignedTo && (() => {
+            const _execName = (collabs || []).find(_c => _c.id === _refRdv.agendaOwnerId)?.name || '';
+            if (!_execName) return null;
+            const _isMe = _refRdv.agendaOwnerId === collab.id;
+            return <div style={{fontSize:11,color:T.text2,display:'flex',alignItems:'center',gap:6,marginTop:2}}>
+              <span>📅</span> RDV transmis à <b style={{color:T.text}}>{_capName(_execName)}</b>
+              {_isMe && <span style={{fontSize:9,color:'#0369A1',fontWeight:700,padding:'1px 5px',borderRadius:4,background:'#0EA5E915'}}>Vous</span>}
+            </div>;
+          })()}
           {_sharedHere && <div style={{marginTop:6,display:'flex',alignItems:'center',gap:6}}>
             <span style={{fontSize:9,color:'#1E40AF',fontWeight:700,padding:'1px 6px',borderRadius:4,background:'#3B82F615'}}>Lecture seule</span>
             <button type="button" onClick={_detach} title="Vous quittez le suivi — l'owner reste assigné au contact" style={{marginLeft:'auto',fontSize:10,padding:'3px 8px',borderRadius:6,border:'1px solid #EF444440',background:'#FEF2F2',color:'#B91C1C',cursor:'pointer',fontWeight:600,fontFamily:'inherit'}}>❌ Se retirer du suivi</button>
+          </div>}
+
+          {/* V1.10.4.A — Actions RDV transmis */}
+          {_isTransferRdv && (_amSender || _amReceiver || _isAdmin) && <div style={{marginTop:8,paddingTop:8,borderTop:`1px dashed ${T.border}`}}>
+            <div style={{fontSize:9,fontWeight:800,color:T.text3,textTransform:'uppercase',letterSpacing:0.5,marginBottom:5}}>Actions RDV transmis</div>
+            {_hasExtSync && <div style={{fontSize:10,color:'#9A3412',fontStyle:'italic',marginBottom:6,padding:'3px 6px',borderRadius:5,background:'#FFF7ED',border:'1px solid #FED7AA',display:'inline-block'}}>
+              🔗 Synchronisé {_hasGoogleSync ? 'Google' : ''}{(_hasGoogleSync && _hasOutlookSync) ? ' + ' : ''}{_hasOutlookSync ? 'Outlook' : ''} — actions désactivées (Phase 3)
+            </div>}
+            <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
+              {(_amReceiver || _isAdmin) && <button
+                type="button"
+                onClick={_doResume}
+                disabled={_hasExtSync || _reportingLocked}
+                title={_disabledReason || "Rendre le RDV à l'apporteur (vous quittez l'agenda du RDV)"}
+                style={{fontSize:10,padding:'4px 9px',borderRadius:6,border:'1px solid '+(_hasExtSync||_reportingLocked?'#94A3B8':'#0EA5E9')+'40',background:_hasExtSync||_reportingLocked?'#F1F5F9':'#E0F2FE',color:_hasExtSync||_reportingLocked?'#94A3B8':'#0369A1',cursor:_hasExtSync||_reportingLocked?'not-allowed':'pointer',fontWeight:600,fontFamily:'inherit',opacity:_hasExtSync||_reportingLocked?0.6:1}}
+              >🔄 Reprendre le RDV</button>}
+              {(_amSender || _isAdmin) && <button
+                type="button"
+                onClick={_doReassign}
+                disabled={_hasExtSync || _reportingLocked}
+                title={_disabledReason || "Réattribuer ce RDV à un autre collaborateur"}
+                style={{fontSize:10,padding:'4px 9px',borderRadius:6,border:'1px solid '+(_hasExtSync||_reportingLocked?'#94A3B8':'#7C3AED')+'40',background:_hasExtSync||_reportingLocked?'#F1F5F9':'#F5F3FF',color:_hasExtSync||_reportingLocked?'#94A3B8':'#6D28D9',cursor:_hasExtSync||_reportingLocked?'not-allowed':'pointer',fontWeight:600,fontFamily:'inherit',opacity:_hasExtSync||_reportingLocked?0.6:1}}
+              >↩️ Réattribuer</button>}
+              {(_amSender || _isAdmin) && <button
+                type="button"
+                onClick={_doCancelTransmission}
+                disabled={_hasExtSync || _reportingLocked}
+                title={_disabledReason || "Annuler la transmission — le RDV revient dans votre agenda"}
+                style={{fontSize:10,padding:'4px 9px',borderRadius:6,border:'1px solid '+(_hasExtSync||_reportingLocked?'#94A3B8':'#EF4444')+'40',background:_hasExtSync||_reportingLocked?'#F1F5F9':'#FEF2F2',color:_hasExtSync||_reportingLocked?'#94A3B8':'#B91C1C',cursor:_hasExtSync||_reportingLocked?'not-allowed':'pointer',fontWeight:600,fontFamily:'inherit',opacity:_hasExtSync||_reportingLocked?0.6:1}}
+              >❌ Annuler transmission</button>}
+            </div>
           </div>}
         </div>;
       })()}

@@ -373,7 +373,15 @@ export default function App() {
               const shared = Array.isArray(c.shared_with)
                 ? c.shared_with
                 : (() => { try { return JSON.parse(c.shared_with_json || '[]'); } catch { return []; } })();
-              return shared.includes(cid);
+              if (shared.includes(cid)) return true;
+              // V1.10.4.A visibility fix — RDV transmis dont je gère l'agenda OU dont je suis sender.
+              // Empêche le contact de disparaître du Pipeline Live de Melissa après reassign Ilane→Melissa.
+              const _myTransferRdv = (data.bookings || []).find(b =>
+                b && b.contactId === c.id
+                && (b.agendaOwnerId === cid || b.bookedByCollaboratorId === cid)
+                && ['share_transfer','transfer','internal'].includes(b.bookingType)
+                && b.status !== 'cancelled');
+              return !!_myTransferRdv;
             });
             setContacts((filtered||[]).filter(Boolean)); // hotfix 2026-04-23 — null-safe API boundary
           } else {
