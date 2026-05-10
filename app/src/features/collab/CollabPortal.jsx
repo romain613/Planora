@@ -57,6 +57,7 @@ import DuplicateOnCreateModal from "./modals/DuplicateOnCreateModal";
 import HardDeleteContactModal from "./modals/HardDeleteContactModal";
 import PostCallResultModal from "./modals/PostCallResultModal"; // V3.x post-call smart pipeline
 import ReassignBookingModal from "./modals/ReassignBookingModal"; // V1.10.4.A étape 2
+import SenderConflictModal from "./modals/SenderConflictModal"; // V1.10.4.D étape 2 — conflit créneau recover sender
 import SmartFooterBar from "./components/SmartFooterBar"; // V1 Smart Footer Performance Bar
 
 const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCalendars, avails, setAvails, vacations, setVacations, contacts, setContacts, onBack, voipCredits, voipCallLogs, setVoipCallLogs, voipConfigured, appMyPhoneNumbers, appPhonePlans, appConversations, setAppConversations, pipelineStages, setPipelineStages, contactFieldDefs, setContactFieldDefs, collabs: collabsProp, googleEvents: googleEventsProp, setGoogleEvents, outlookEvents: outlookEventsProp, setOutlookEvents, isAdminView, smsCredits }) => {
@@ -790,6 +791,10 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const [v7TransferLoading, setV7TransferLoading] = useState(false);
   // ── V1.10.4.A étape 2 — Reassign booking modal state ──
   const [reassignBookingModal, setReassignBookingModal] = useState(null);
+  // ── V1.10.4.D étape 2 — Sender conflict modal state ──
+  // Payload : { booking, conflictBookingId?, detail? } — set par _doRecoverTransmission
+  // dans PhoneTab quand backend renvoie 409 SENDER_SLOT_CONFLICT.
+  const [senderConflictModal, setSenderConflictModal] = useState(null);
   const [v7FollowersMap, setV7FollowersMap] = useState({});
   const v7FollowersLoadedRef = useRef(false);
 
@@ -4424,6 +4429,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       // V1.10.4.A étape 2 — reassign modal
       reassignBookingModal,
       setReassignBookingModal,
+      // V1.10.4.D étape 2 — sender conflict modal (recover-full conflit créneau)
+      senderConflictModal,
+      setSenderConflictModal,
       togglePhoneLeftPanel,
       v7FollowersMap,
 
@@ -4449,6 +4457,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
 
             {/* V1.10.4.A étape 2 — Reassign booking modal (rendu par le composant lui-même conditionné sur reassignBookingModal) */}
             <ReassignBookingModal />
+            {/* V1.10.4.D étape 2 — Sender conflict modal (rendu conditionné sur senderConflictModal) */}
+            <SenderConflictModal />
 
             {/* V7 TRANSFER MODAL */}
             {v7TransferModal && (

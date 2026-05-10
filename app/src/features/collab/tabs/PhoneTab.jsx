@@ -37,6 +37,7 @@ const PhoneTab = () => {
     setCollabFicheTab, setRdvPasseModal,
     setShowNewContact, setBookings, setContacts, setContactFieldDefs,
     setReassignBookingModal, // V1.10.4.A étape 2
+    setSenderConflictModal, // V1.10.4.D étape 2 — conflit créneau recover sender
     setVoipCallLogs, voipCallLogs,
     setPipelineRightContact, setPipelinePopupHistory,
     setPipelineRdvForm, setPipeBulkStage, setPipeBulkModal, setPipeSelectedIds,
@@ -1874,6 +1875,10 @@ if (n === ph) matched.set(c.id, c);
             if (r?.success && r?.booking) {
               if (typeof setBookings === 'function') setBookings(prev => (prev || []).map(b => b.id === r.booking.id ? { ...b, ...r.booking } : b));
               showNotif && showNotif(_useResume ? "RDV rendu à l'apporteur" : 'Transmission annulée — RDV revenu chez l\'apporteur', 'success');
+            } else if (r?.error === 'SENDER_SLOT_CONFLICT' && typeof setSenderConflictModal === 'function') {
+              // V1.10.4.D étape 2 — créneau sender occupé : ouvre modale 3 choix (cancel/move/reassign).
+              // NE PAS faire de récupération auto (cf. spec V1.10.4.D §ÉTAPE 3).
+              setSenderConflictModal({ booking: _refRdv, conflictBookingId: r?.conflictBookingId || null, detail: r?.detail || '' });
             } else {
               showNotif && showNotif('Erreur : ' + _v1104ErrorLabel(r?.error || 'UNKNOWN'), 'danger');
             }

@@ -404,9 +404,10 @@ function _cancelOrResume(db, { bookingId, actorCollabId, actorRole, actorName, c
   if (conflictResult && conflictResult.conflict) {
     return {
       ok: false,
-      code: 'SLOT_CONFLICT',
+      code: 'SENDER_SLOT_CONFLICT',
       status: 409,
-      detail: 'Le créneau est déjà occupé chez le sender.',
+      detail: 'Le créneau est déjà occupé dans votre agenda.',
+      actions: ['cancel', 'move', 'reassign'],
       conflictBookingId: conflictResult.existingBooking?.id || null,
     };
   }
@@ -434,6 +435,7 @@ function _cancelOrResume(db, { bookingId, actorCollabId, actorRole, actorName, c
          collaboratorId        = ?,
          meetingCollaboratorId = ?,
          calendarId            = ?,
+         bookingType            = 'external',
          bookingReportingStatus = '',
          bookingReportingNote   = '',
          bookingReportedAt      = '',
