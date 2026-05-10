@@ -12,6 +12,7 @@ import { sendChatNotification, formatNewBooking, formatCancelledBooking, formatC
 import { checkBookingConflict } from '../services/bookings/checkBookingConflict.js';
 import { applyBookingCreatedSideEffects } from '../services/bookings/applyBookingCreatedSideEffects.js';
 import { validateBookingCalendarOwnership } from '../services/bookings/validateBookingCalendarOwnership.js'; // V3.x.15.A
+import { reassignBooking, cancelBookingTransmission, resumeBookingByReceiver } from '../services/bookings/reassignBooking.js'; // V1.10.4.A
 import { markNoShow } from '../services/bookings/markNoShow.js';
 import { requireAuth, enforceCompany } from '../middleware/auth.js';
 import { requirePermission } from '../middleware/permissions.js';
@@ -782,6 +783,95 @@ router.put('/:id/report', requireAuth, enforceCompany, (req, res) => {
   } catch (err) {
     console.error('[REPORTING PUT ERR]', err.message);
     res.status(500).json({ error: err.message });
+  }
+});
+
+// ─── V1.10.4.A — Actions sur RDV transmis (cross-collab) ─────────────────────
+// 3 routes branchées sur le helper centralisé services/bookings/reassignBooking.js.
+// Garde absolue Niveau 1 : si googleEventId OU outlookEventId → 409 EXTERNAL_SYNC_PRESENT.
+// Sync externe complète (delete+recreate atomique) différée Phase 3 / V1.10.4.B.
+//
+// Toutes les routes :
+//   - Auth requise (requireAuth + enforceCompany)
+//   - Permission edit
+//   - bookedByCollaboratorId IMMUABLE (jamais modifié)
+//   - audit_logs + notifications obligatoires (gérés par le helper)
+//   - réutilise V3.x.15.A guard + checkBookingConflict + EXECUTOR_NO_CALENDAR refus
+
+// PUT /api/bookings/:id/reassign
+// Body : { newAgendaOwnerId, newCalendarId? }
+// Auth : admin/supra OU sender (bookedByCollaboratorId)
+// Effet : agendaOwnerId / collaboratorId / meetingCollaboratorId / calendarId → newAgendaOwnerId
+//         reset reporting (status/note/at/by)
+router.put('/:id/reassign', requireAuth, enforceCompany, requirePermission('bookings.edit'), (req, res) => {
+  try {
+    const result = reassignBooking(db, {
+      bookingId: req.params.id,
+      newAgendaOwnerId: req.body?.newAgendaOwnerId || '',
+      newCalendarId: req.body?.newCalendarId || null,
+      actorCollabId: req.auth?.collaboratorId || '',
+      actorRole: req.auth?.isSupra ? 'supra' : (req.auth?.role || 'member'),
+      actorName: req.auth?.userName || req.auth?.email || '',
+      companyId: req.auth?.companyId || '',
+    });
+    if (!result.ok) {
+      const { ok, status, ...payload } = result;
+      return res.status(status || 500).json({ error: payload.code, ...payload });
+    }
+    return res.json({ success: true, booking: result.booking, oldAgendaOwnerId: result.oldAgendaOwnerId, oldCalendarId: result.oldCalendarId });
+  } catch (err) {
+    console.error('[REASSIGN PUT ERR]', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/bookings/:id/cancel-transmission
+// Body : {}
+// Auth : admin/supra OU sender (bookedByCollaboratorId)
+// Effet : booking revient chez sender (bookedByCollaboratorId reste lui-même, agendaOwnerId/collaboratorId = sender)
+router.put('/:id/cancel-transmission', requireAuth, enforceCompany, requirePermission('bookings.edit'), (req, res) => {
+  try {
+    const result = cancelBookingTransmission(db, {
+      bookingId: req.params.id,
+      actorCollabId: req.auth?.collaboratorId || '',
+      actorRole: req.auth?.isSupra ? 'supra' : (req.auth?.role || 'member'),
+      actorName: req.auth?.userName || req.auth?.email || '',
+      companyId: req.auth?.companyId || '',
+    });
+    if (!result.ok) {
+      const { ok, status, ...payload } = result;
+      return res.status(status || 500).json({ error: payload.code, ...payload });
+    }
+    return res.json({ success: true, booking: result.booking, oldAgendaOwnerId: result.oldAgendaOwnerId, restoredToSenderId: result.restoredToSenderId });
+  } catch (err) {
+    console.error('[CANCEL-TRANSMISSION PUT ERR]', err.message);
+    return res.status(500).json({ error: err.message });
+  }
+});
+
+// PUT /api/bookings/:id/resume
+// Body : {}
+// Auth : admin/supra OU receiver (agendaOwnerId)
+// Effet : alias sémantique de cancel-transmission, mais initié par le receiver.
+//         Le RDV revient chez bookedByCollaboratorId (sender).
+//         Audit action distinct = 'booking_transmission_resumed_by_receiver'.
+router.put('/:id/resume', requireAuth, enforceCompany, requirePermission('bookings.edit'), (req, res) => {
+  try {
+    const result = resumeBookingByReceiver(db, {
+      bookingId: req.params.id,
+      actorCollabId: req.auth?.collaboratorId || '',
+      actorRole: req.auth?.isSupra ? 'supra' : (req.auth?.role || 'member'),
+      actorName: req.auth?.userName || req.auth?.email || '',
+      companyId: req.auth?.companyId || '',
+    });
+    if (!result.ok) {
+      const { ok, status, ...payload } = result;
+      return res.status(status || 500).json({ error: payload.code, ...payload });
+    }
+    return res.json({ success: true, booking: result.booking, oldAgendaOwnerId: result.oldAgendaOwnerId, restoredToSenderId: result.restoredToSenderId });
+  } catch (err) {
+    console.error('[RESUME PUT ERR]', err.message);
+    return res.status(500).json({ error: err.message });
   }
 });
 
