@@ -198,12 +198,15 @@ export function reassignBooking(db, { bookingId, newAgendaOwnerId, newCalendarId
   const guard = validateBookingCalendarOwnership(db, { companyId: safeCompanyId, calendarId: finalCalendarId, agendaOwnerId: newAgendaOwnerId });
   if (!guard.ok) return guard;
 
-  // 10. Conflit créneau sur nouveau collab même date/time/duration
+  // 10. Conflit créneau sur nouveau collab même date/time/duration.
+  // V1.10.4.A.fix no-op : excludeBookingId pour ne pas matcher le booking lui-même
+  // (cas reassign Ilane→Ilane no-op et bug latent si booking déjà chez nouvelle cible).
   const conflictResult = checkBookingConflict(db, {
     collaboratorId: newAgendaOwnerId,
     date: booking.date,
     startTime: booking.time,
     duration: booking.duration || 30,
+    excludeBookingId: bookingId,
   });
   if (conflictResult && conflictResult.conflict) {
     return {
@@ -387,12 +390,16 @@ function _cancelOrResume(db, { bookingId, actorCollabId, actorRole, actorName, c
   const guard = validateBookingCalendarOwnership(db, { companyId: safeCompanyId, calendarId: senderCalId, agendaOwnerId: senderId });
   if (!guard.ok) return guard;
 
-  // 11. Conflit créneau chez sender
+  // 11. Conflit créneau chez sender.
+  // V1.10.4.A.fix no-op : excludeBookingId pour ne pas matcher le booking lui-même
+  // (cas cancel/resume où agendaOwnerId === collaboratorId === senderId déjà → 409 SLOT_CONFLICT
+  // erroné car le booking lui-même apparaît dans le scan SQL).
   const conflictResult = checkBookingConflict(db, {
     collaboratorId: senderId,
     date: booking.date,
     startTime: booking.time,
     duration: booking.duration || 30,
+    excludeBookingId: bookingId,
   });
   if (conflictResult && conflictResult.conflict) {
     return {

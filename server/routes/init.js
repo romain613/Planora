@@ -367,10 +367,13 @@ router.get('/', (req, res) => {
       // contact (agendaOwnerId=moi) OU je suis le sender (bookedByCollaboratorId=moi),
       // alors le contact apparaît dans mon Pipeline Live. Source de vérité = booking.
       // Préserve ownership contact (assignedTo) et shared_with (V7 / V1.10.4 P1) inchangés.
+      // V1.10.4.A.fix no-op : exclure les bookings revenus chez le sender (self-back après
+      // cancel/resume) — ils ne sont pas un vrai RDV transmis et causent visibilité redondante.
       const _myTransferRdv = parsedBookings.find(b =>
         b && b.contactId === c.id
         && (b.agendaOwnerId === collabId || b.bookedByCollaboratorId === collabId)
         && ['share_transfer','transfer','internal'].includes(b.bookingType)
+        && b.agendaOwnerId !== b.bookedByCollaboratorId
         && b.status !== 'cancelled');
       if (_myTransferRdv) return true;
       return false;

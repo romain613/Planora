@@ -1773,6 +1773,17 @@ if (n === ph) matched.set(c.id, c);
           _refRdv = _list[0] || null;
         }
         const _isTransferRdv = _refRdv && _transferTypes.has(_refRdv.bookingType) && (_refRdv.bookedByCollaboratorId || _refRdv.agendaOwnerId);
+        // V1.10.4.A active-transfer fix — un RDV transmis ACTIF a obligatoirement
+        // agendaOwnerId !== bookedByCollaboratorId. Si self-back (revenu chez sender),
+        // les actions reprendre/réattribuer/annuler n'ont plus de sens.
+        const _isActiveTransferredBooking = !!(
+          _refRdv
+          && _transferTypes.has(_refRdv.bookingType)
+          && _refRdv.status !== 'cancelled'
+          && _refRdv.agendaOwnerId
+          && _refRdv.bookedByCollaboratorId
+          && _refRdv.agendaOwnerId !== _refRdv.bookedByCollaboratorId
+        );
         const _amSender = _refRdv && _refRdv.bookedByCollaboratorId === collab.id && collab.id;
         const _amReceiver = _refRdv && _refRdv.agendaOwnerId === collab.id && collab.id;
         const _isAdmin = collab?.role === 'admin' || collab?.role === 'supra';
@@ -1845,6 +1856,32 @@ if (n === ph) matched.set(c.id, c);
           }
         };
 
+        // V1.10.4.A merge buttons — handler unifié "🔄 Reprendre / annuler transmission".
+        // Effet métier identique : RDV revient chez l'apporteur (bookedByCollaboratorId).
+        // Routage selon rôle pour conformité backend (cancel exige sender, resume exige receiver) :
+        //   - sender / admin → PUT /cancel-transmission
+        //   - receiver       → PUT /resume
+        const _doRecoverTransmission = async () => {
+          if (!_refRdv) return;
+          const _useResume = _amReceiver && !_isAdmin && !_amSender;
+          const _confirmMsg = _useResume
+            ? "Rendre ce RDV à l'apporteur ?\n\nLe RDV quittera votre agenda et sera restauré chez l'apporteur initial."
+            : "Reprendre / annuler la transmission de ce RDV ?\n\nLe RDV reviendra dans votre agenda (en tant qu'apporteur). Cette action ne supprime pas le RDV.";
+          if (!confirm(_confirmMsg)) return;
+          const _endpoint = _useResume ? 'resume' : 'cancel-transmission';
+          try {
+            const r = await api(`/api/bookings/${_refRdv.id}/${_endpoint}`, { method: 'PUT' });
+            if (r?.success && r?.booking) {
+              if (typeof setBookings === 'function') setBookings(prev => (prev || []).map(b => b.id === r.booking.id ? { ...b, ...r.booking } : b));
+              showNotif && showNotif(_useResume ? "RDV rendu à l'apporteur" : 'Transmission annulée — RDV revenu chez l\'apporteur', 'success');
+            } else {
+              showNotif && showNotif('Erreur : ' + _v1104ErrorLabel(r?.error || 'UNKNOWN'), 'danger');
+            }
+          } catch (e) {
+            showNotif && showNotif('Erreur réseau : ' + (e?.message || ''), 'danger');
+          }
+        };
+
         const _doReassign = () => {
           if (!_refRdv) return;
           if (typeof setReassignBookingModal === 'function') setReassignBookingModal(_refRdv);
@@ -1864,8 +1901,10 @@ if (n === ph) matched.set(c.id, c);
             <span>🎯</span> Géré par <b style={{color:T.text}}>{_capName(_ownerName)}</b>
             {_isOwner && <span style={{fontSize:9,color:'#16A34A',fontWeight:700,padding:'1px 5px',borderRadius:4,background:'#22C55E15'}}>Vous</span>}
           </div>}
-          {/* V1.10.4.A visibility fix — afficher l'executor du RDV s'il diffère de l'owner contact */}
-          {_refRdv && _refRdv.agendaOwnerId && _refRdv.agendaOwnerId !== ct.assignedTo && (() => {
+          {/* V1.10.4.A visibility fix — afficher l'executor du RDV s'il diffère de l'owner contact.
+              V1.10.4.A.fix no-op : masquer si booking revenu chez sender (agendaOwnerId === bookedBy)
+              car ce n'est plus un vrai RDV transmis. */}
+          {_refRdv && _refRdv.agendaOwnerId && _refRdv.agendaOwnerId !== ct.assignedTo && _refRdv.agendaOwnerId !== _refRdv.bookedByCollaboratorId && (() => {
             const _execName = (collabs || []).find(_c => _c.id === _refRdv.agendaOwnerId)?.name || '';
             if (!_execName) return null;
             const _isMe = _refRdv.agendaOwnerId === collab.id;
@@ -1879,20 +1918,27 @@ if (n === ph) matched.set(c.id, c);
             <button type="button" onClick={_detach} title="Vous quittez le suivi — l'owner reste assigné au contact" style={{marginLeft:'auto',fontSize:10,padding:'3px 8px',borderRadius:6,border:'1px solid #EF444440',background:'#FEF2F2',color:'#B91C1C',cursor:'pointer',fontWeight:600,fontFamily:'inherit'}}>❌ Se retirer du suivi</button>
           </div>}
 
-          {/* V1.10.4.A — Actions RDV transmis */}
-          {_isTransferRdv && (_amSender || _amReceiver || _isAdmin) && <div style={{marginTop:8,paddingTop:8,borderTop:`1px dashed ${T.border}`}}>
+          {/* V1.10.4.A — Actions RDV transmis. Condition relâchée (pas de check self-back) :
+              le bloc est visible dès qu'un booking de type transfer/share_transfer/internal
+              non-cancelled existe pour ce contact. Permet à Ilane de gérer la transmission
+              même si le booking est revenu chez lui (le backend rejettera ALREADY_AT_SENDER
+              proprement avec message UX). */}
+          {_refRdv && _transferTypes.has(_refRdv.bookingType) && _refRdv.status !== 'cancelled' && (_amSender || _amReceiver || _isAdmin) && <div style={{marginTop:8,paddingTop:8,borderTop:`1px dashed ${T.border}`}}>
             <div style={{fontSize:9,fontWeight:800,color:T.text3,textTransform:'uppercase',letterSpacing:0.5,marginBottom:5}}>Actions RDV transmis</div>
             {_hasExtSync && <div style={{fontSize:10,color:'#9A3412',fontStyle:'italic',marginBottom:6,padding:'3px 6px',borderRadius:5,background:'#FFF7ED',border:'1px solid #FED7AA',display:'inline-block'}}>
               🔗 Synchronisé {_hasGoogleSync ? 'Google' : ''}{(_hasGoogleSync && _hasOutlookSync) ? ' + ' : ''}{_hasOutlookSync ? 'Outlook' : ''} — actions désactivées (Phase 3)
             </div>}
             <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
-              {(_amReceiver || _isAdmin) && <button
+              {/* V1.10.4.A merge — bouton unifié "🔄 Reprendre / annuler transmission" :
+                  effet métier identique (RDV revient chez l'apporteur), routage backend selon rôle :
+                  sender/admin → cancel-transmission, receiver → resume. */}
+              {(_amSender || _amReceiver || _isAdmin) && <button
                 type="button"
-                onClick={_doResume}
+                onClick={_doRecoverTransmission}
                 disabled={_hasExtSync || _reportingLocked}
-                title={_disabledReason || "Rendre le RDV à l'apporteur (vous quittez l'agenda du RDV)"}
+                title={_disabledReason || "Reprendre / annuler la transmission — le RDV revient chez l'apporteur"}
                 style={{fontSize:10,padding:'4px 9px',borderRadius:6,border:'1px solid '+(_hasExtSync||_reportingLocked?'#94A3B8':'#0EA5E9')+'40',background:_hasExtSync||_reportingLocked?'#F1F5F9':'#E0F2FE',color:_hasExtSync||_reportingLocked?'#94A3B8':'#0369A1',cursor:_hasExtSync||_reportingLocked?'not-allowed':'pointer',fontWeight:600,fontFamily:'inherit',opacity:_hasExtSync||_reportingLocked?0.6:1}}
-              >🔄 Reprendre le RDV</button>}
+              >🔄 Reprendre / annuler transmission</button>}
               {(_amSender || _isAdmin) && <button
                 type="button"
                 onClick={_doReassign}
@@ -1900,13 +1946,6 @@ if (n === ph) matched.set(c.id, c);
                 title={_disabledReason || "Réattribuer ce RDV à un autre collaborateur"}
                 style={{fontSize:10,padding:'4px 9px',borderRadius:6,border:'1px solid '+(_hasExtSync||_reportingLocked?'#94A3B8':'#7C3AED')+'40',background:_hasExtSync||_reportingLocked?'#F1F5F9':'#F5F3FF',color:_hasExtSync||_reportingLocked?'#94A3B8':'#6D28D9',cursor:_hasExtSync||_reportingLocked?'not-allowed':'pointer',fontWeight:600,fontFamily:'inherit',opacity:_hasExtSync||_reportingLocked?0.6:1}}
               >↩️ Réattribuer</button>}
-              {(_amSender || _isAdmin) && <button
-                type="button"
-                onClick={_doCancelTransmission}
-                disabled={_hasExtSync || _reportingLocked}
-                title={_disabledReason || "Annuler la transmission — le RDV revient dans votre agenda"}
-                style={{fontSize:10,padding:'4px 9px',borderRadius:6,border:'1px solid '+(_hasExtSync||_reportingLocked?'#94A3B8':'#EF4444')+'40',background:_hasExtSync||_reportingLocked?'#F1F5F9':'#FEF2F2',color:_hasExtSync||_reportingLocked?'#94A3B8':'#B91C1C',cursor:_hasExtSync||_reportingLocked?'not-allowed':'pointer',fontWeight:600,fontFamily:'inherit',opacity:_hasExtSync||_reportingLocked?0.6:1}}
-              >❌ Annuler transmission</button>}
             </div>
           </div>}
         </div>;

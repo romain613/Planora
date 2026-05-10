@@ -376,10 +376,12 @@ export default function App() {
               if (shared.includes(cid)) return true;
               // V1.10.4.A visibility fix — RDV transmis dont je gère l'agenda OU dont je suis sender.
               // Empêche le contact de disparaître du Pipeline Live de Melissa après reassign Ilane→Melissa.
+              // V1.10.4.A.fix no-op : exclure les bookings revenus chez sender (self-back).
               const _myTransferRdv = (data.bookings || []).find(b =>
                 b && b.contactId === c.id
                 && (b.agendaOwnerId === cid || b.bookedByCollaboratorId === cid)
                 && ['share_transfer','transfer','internal'].includes(b.bookingType)
+                && b.agendaOwnerId !== b.bookedByCollaboratorId
                 && b.status !== 'cancelled');
               return !!_myTransferRdv;
             });
