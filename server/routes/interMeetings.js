@@ -5,6 +5,7 @@ import { DateTime } from 'luxon';
 import { createNotification } from './notifications.js';
 import { checkBookingConflict } from '../services/bookings/checkBookingConflict.js';
 import { applyBookingCreatedSideEffects } from '../services/bookings/applyBookingCreatedSideEffects.js';
+import { validateBookingCalendarOwnership } from '../services/bookings/validateBookingCalendarOwnership.js'; // V3.x.15.B
 
 const router = Router();
 
@@ -256,17 +257,34 @@ router.post('/book', requireAuth, enforceCompany, (req, res) => {
       return res.status(409).json({ error: 'Créneau déjà occupé sur l\'agenda de l\'executor', conflictId: conflict.id });
     }
 
-    // Trouver ou utiliser le calendarId
+    // V3.x.15.B Phase 2.A — résolution calendarId stricte (sans fallback calendars[0]).
+    // Avant : si executor n'avait aucun calendar, prenait le 1er calendar arbitraire de
+    // la company (violation CLAUDE.md §0bis + V3.x.15 — calendarId dans agenda d'un
+    // autre collab, incohérence Planora UI vs Google sync, blocage PUT V3.x.15.A).
+    // Après : retourne 400 EXECUTOR_NO_CALENDAR explicite, jamais de fallback dangereux.
     let finalCalendarId = calendarId;
     if (!finalCalendarId) {
-      // Chercher le calendrier par défaut de l'executor
       const execCal = db.prepare('SELECT id FROM calendars WHERE companyId = ? AND collaborators_json LIKE ?').get(companyId, `%${executorCollaboratorId}%`);
-      if (execCal) finalCalendarId = execCal.id;
-      else {
-        // Fallback: premier calendrier de la company
-        const anyCal = db.prepare('SELECT id FROM calendars WHERE companyId = ? LIMIT 1').get(companyId);
-        if (anyCal) finalCalendarId = anyCal.id;
-        else return res.status(400).json({ error: 'Aucun calendrier disponible' });
+      if (!execCal) {
+        console.warn(`[INTER-MEETING GUARD] EXECUTOR_NO_CALENDAR executor=${executorCollaboratorId} (${executor.name}) company=${companyId}`);
+        return res.status(400).json({
+          error: 'EXECUTOR_NO_CALENDAR',
+          detail: `Le collaborateur ${executor.name} n'a aucun calendrier configuré. Impossible de créer le RDV inter-collab — créez un calendrier pour ce collaborateur ou fournissez calendarId explicite.`,
+          executorCollaboratorId,
+        });
+      }
+      finalCalendarId = execCal.id;
+    }
+
+    // V3.x.15.B Phase 2.A.bis — guard ownership cohérence avec V3.x.15.A. Couvre aussi
+    // le cas où calendarId est fourni explicitement (un caller pourrait envoyer un
+    // calendarId arbitraire qui n'appartient pas à executor). agendaOwnerId = executor
+    // (cohérent avec INSERT ligne ~301 où agendaOwnerId = executorCollaboratorId).
+    {
+      const _check = validateBookingCalendarOwnership(db, { companyId, calendarId: finalCalendarId, agendaOwnerId: executorCollaboratorId });
+      if (!_check.ok) {
+        console.warn(`[INTER-MEETING GUARD] ${_check.code} cal=${finalCalendarId} executor=${executorCollaboratorId} : ${_check.detail}`);
+        return res.status(_check.status).json({ error: _check.code, detail: _check.detail });
       }
     }
 
