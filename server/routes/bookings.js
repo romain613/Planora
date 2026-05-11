@@ -102,7 +102,9 @@ router.get('/', requireAuth, enforceCompany, requirePermission('bookings.view'),
 });
 
 // POST /api/bookings
-router.post('/', requireAuth, enforceCompany, requirePermission('bookings.create'), (req, res) => {
+// V1.10.4.F.2 — route async pour await ciblé createEvent quand createGoogleMeet=true
+// (cf. bloc Sync to Google Calendar ci-dessous). RDV classiques restent fire-and-forget.
+router.post('/', requireAuth, enforceCompany, requirePermission('bookings.create'), async (req, res) => {
   try {
     const b = req.body;
     // Wave D — refuser de créer un booking pour un collab archivé
@@ -242,16 +244,29 @@ router.post('/', requireAuth, enforceCompany, requirePermission('bookings.create
     });
 
     // Sync to Google Calendar + Meet link
-    // Phase 1 Google Meet (2026-05-11) — accepte b.createGoogleMeet pour forcer génération
-    // d'un lien Meet sur ce booking spécifique (backwards-compat avec trigger legacy location).
+    // V1.10.4.F.2 (2026-05-11) — await createEvent UNIQUEMENT si createGoogleMeet=true
+    // pour que la réponse API porte meetLink (UI fiche RDV + email visiteur frontend).
+    // RDV classiques restent fire-and-forget : aucune régression latence POST.
+    // Try/catch obligatoire pour ne pas bloquer la création si Google API échoue.
     if (b.collaboratorId && isConnected(b.collaboratorId)) {
       const cal = db.prepare('SELECT name, location FROM calendars WHERE id = ?').get(b.calendarId);
-      createEvent(b.collaboratorId, { date: b.date, time: b.time, duration: b.duration || 30, visitorName: b.visitorName, visitorEmail: b.visitorEmail, visitorPhone: b.visitorPhone }, cal || { name: '', location: '' }, { createMeet: !!b.createGoogleMeet })
-        .then(result => {
+      const _evtPayload = { date: b.date, time: b.time, duration: b.duration || 30, visitorName: b.visitorName, visitorEmail: b.visitorEmail, visitorPhone: b.visitorPhone };
+      const _calPayload = cal || { name: '', location: '' };
+      if (b.createGoogleMeet) {
+        try {
+          const result = await createEvent(b.collaboratorId, _evtPayload, _calPayload, { createMeet: true });
           if (result?.googleEventId) db.prepare('UPDATE bookings SET googleEventId = ? WHERE id = ?').run(result.googleEventId, id);
           if (result?.meetLink) db.prepare('UPDATE bookings SET meetLink = ? WHERE id = ?').run(result.meetLink, id);
-        })
-        .catch(err => console.error('[GOOGLE SYNC ERROR]', err.message));
+        } catch (err) {
+          console.error('[GOOGLE SYNC ERROR]', err.message);
+        }
+      } else {
+        createEvent(b.collaboratorId, _evtPayload, _calPayload, { createMeet: false })
+          .then(result => {
+            if (result?.googleEventId) db.prepare('UPDATE bookings SET googleEventId = ? WHERE id = ?').run(result.googleEventId, id);
+          })
+          .catch(err => console.error('[GOOGLE SYNC ERROR]', err.message));
+      }
     }
 
     // V4.a — Push to Outlook Calendar (fire-and-forget, mirror Google pattern)

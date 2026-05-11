@@ -2151,8 +2151,10 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
         if (r?.booking?.id) setBookings(p => p.map(b => b.id === r.booking.id ? { ...b, ...r.booking } : b));
         if (r?.contact?.id) setContacts(p => p.map(c => c.id === r.contact.id ? r.contact : c));
         // V1.8.1 — envoi confirmation email au visiteur si case cochée et email présent
+        // V1.10.4.F.2 — merge r.booking (backend post-await Meet) → propage meetLink dans
+        // _notifBk pour que buildNotifyPayload le passe au template Brevo (bloc Meet visible).
         if ((f._sendConfirmation !== false) && (ct?.email || f._newEmail)) {
-          const _notifBk = { ...bk, visitorEmail: ct?.email || f._newEmail || '' };
+          const _notifBk = { ...bk, ...(r?.booking || {}), visitorEmail: ct?.email || f._newEmail || '' };
           sendNotification('booking-confirmed', buildNotifyPayload(_notifBk, calendars, collabs, company))
             .then(_nr => {
               if (_nr?.email?.success) showNotif('📧 Email de confirmation envoyé', 'success');

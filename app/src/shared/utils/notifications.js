@@ -27,4 +27,9 @@ export const buildNotifyPayload = (booking, calendars, collabs, company) => ({
   collaboratorName: collabs?.find(c => c.id === booking.collaboratorId)?.name || '',
   companyName: company?.name || '',
   location: calendars?.find(c => c.id === booking.calendarId)?.location || '',
+  // V1.10.4.F.2 — propage meetLink/manageToken/visitorTimezone au template Brevo
+  // (bookingConfirmedEmail/Sms/Whatsapp les utilisent en blocs conditionnels).
+  meetLink: booking.meetLink || '',
+  manageToken: booking.manageToken || '',
+  visitorTimezone: booking.visitorTimezone || '',
 });
