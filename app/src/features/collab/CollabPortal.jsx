@@ -860,7 +860,16 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
         console.log('[COLLAB VOIP] Got real token, creating Device...');
         const device = new TwilioDevice(data.token, { codecPreferences:['opus','pcmu'], edge:'dublin' });
         device.on('registered', () => console.log('[COLLAB VOIP] Device registered ✓'));
-        device.on('error', (err) => { console.error('[COLLAB VOIP ERR]', err); showNotif('Erreur VoIP: '+err.message,'danger'); });
+        device.on('error', (err) => {
+          // Debug détaillé Twilio (V1.10.4.E.2) — code/causes/solutions exposés pour diagnostic 31005 etc.
+          const _twErr = err?.twilioError || {};
+          const _code = err?.code || _twErr?.code || '';
+          const _causes = Array.isArray(_twErr?.causes) ? _twErr.causes.join('; ') : '';
+          const _solutions = Array.isArray(_twErr?.solutions) ? _twErr.solutions.join('; ') : '';
+          console.error('[COLLAB VOIP DEVICE ERR]', { code: _code, message: err?.message, causes: _causes, solutions: _solutions, raw: err });
+          const _hint = _code === '31005' ? ' — vérifier TwiML App / webhook Twilio' : (_causes ? ` — ${_causes}` : '');
+          showNotif(`Erreur VoIP${_code ? ' ('+_code+')' : ''}${_hint}`, 'danger');
+        });
         device.on('incoming', (call) => {
           setVoipState('incoming');
           voipCallRef.current = call;
@@ -1411,7 +1420,15 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
         setPhoneCallTimer(0);
       });
       call.on('error', (err) => {
-        showNotif('Erreur appel: '+err.message,'danger');
+        // Debug détaillé Twilio (V1.10.4.E.2) — code/causes/solutions + CallSid pour diagnostic.
+        const _twErr = err?.twilioError || {};
+        const _code = err?.code || _twErr?.code || '';
+        const _causes = Array.isArray(_twErr?.causes) ? _twErr.causes.join('; ') : '';
+        const _solutions = Array.isArray(_twErr?.solutions) ? _twErr.solutions.join('; ') : '';
+        const _callSid = call?.parameters?.CallSid || call?.parameters?.callSid || voipCallRef.current?.parameters?.CallSid || null;
+        console.error('[COLLAB VOIP CALL ERR]', { code: _code, message: err?.message, causes: _causes, solutions: _solutions, callSid: _callSid, raw: err });
+        const _hint = _code === '31005' ? ' — vérifier TwiML App / webhook Twilio' : (_causes ? ` — ${_causes}` : '');
+        showNotif(`Appel raccroché${_code ? ' ('+_code+')' : ''}${_hint}`, 'danger');
         setVoipState('idle');
         voipCallRef.current = null;
         setPhoneActiveCall(null);
