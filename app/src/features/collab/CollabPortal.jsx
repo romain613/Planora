@@ -6106,8 +6106,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
               <div style={{ display:"flex", gap:0, marginBottom:16, borderBottom:`2px solid ${T.border}` }}>
                 {[
                   {id:'rdv', label:'RDV', icon:'calendar'},
-                  {id:'contact', label:'Contact', icon:'user', disabled:!_bContact},
-                  {id:'notes', label:'Notes', icon:'edit-3', disabled:!_bContact},
+                  {id:'contact', label:'Contact', icon:'user'}, // V1.10.4.E.fix — toujours cliquable, empty state "Contact non lié" géré dans le body
+                  {id:'notes', label:'Notes', icon:'edit-3'}, // V1.10.4.E.fix — idem
                 ].map(t => (
                   <div key={t.id} onClick={() => !t.disabled && (typeof setBookingDetailTab==='function'?setBookingDetailTab:function(){})(t.id)} style={{ padding:"8px 16px", fontSize:13, fontWeight:bookingDetailTab===t.id?700:500, color:t.disabled?T.text3+'60':bookingDetailTab===t.id?T.accent:T.text2, borderBottom:bookingDetailTab===t.id?`2px solid ${T.accent}`:'2px solid transparent', marginBottom:-2, cursor:t.disabled?'default':'pointer', display:'flex', alignItems:'center', gap:5, opacity:t.disabled?0.4:1, transition:'all .15s' }}>
                     <I n={t.icon} s={14}/> {t.label}
