@@ -143,7 +143,8 @@ router.get('/', (req, res) => {
       const collabIds = collaborators.map(c => c.id);
       if (collabIds.length > 0) {
         const ph = collabIds.map(() => '?').join(',');
-        googleEvents = db.prepare(`SELECT id, collaboratorId, summary, startTime, endTime, allDay FROM google_events WHERE collaboratorId IN (${ph}) ORDER BY startTime ASC`).all(...collabIds);
+        // V1.10.4.G — expose transparency + status pour filtre frontend (mirror Outlook showAs).
+        googleEvents = db.prepare(`SELECT id, collaboratorId, summary, startTime, endTime, allDay, transparency, status FROM google_events WHERE collaboratorId IN (${ph}) ORDER BY startTime ASC`).all(...collabIds);
       }
     } catch (e) {}
 

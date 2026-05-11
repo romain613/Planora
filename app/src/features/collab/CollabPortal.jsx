@@ -2729,7 +2729,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   // V3.x.14 dédoublonnage Google : exclure les events Google qui sont le miroir d'un booking Planora
   // (id présent dans bookings.googleEventId). Garde les vrais events Google externes visibles/bloquants.
   const _planoraGoogleIds = new Set((bookings || []).filter(b => b && b.googleEventId).map(b => b.googleEventId));
-  const myGoogleEvents = (googleEventsProp || []).filter(ge => ge.collaboratorId === collab.id && !_planoraGoogleIds.has(ge.id));
+  // V1.10.4.G — exclure events Google annulés (transparency=transparent ou status=cancelled)
+  // pour éviter "slot fantôme" après cancel Planora (mirror Outlook showAs!=='free').
+  const myGoogleEvents = (googleEventsProp || []).filter(ge => ge.collaboratorId === collab.id && !_planoraGoogleIds.has(ge.id) && ge.transparency !== 'transparent' && ge.status !== 'cancelled');
   // V3.x.6 Phase 2C — Outlook events (mirror Google)
   // V3.x.9 dédoublonnage : exclure les events Outlook qui sont le miroir d'un booking Planora
   // (id présent dans bookings.outlookEventId). Garde les vrais events Outlook externes visibles/bloquants.
@@ -6883,7 +6885,10 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                 // V1.8.2 — collab cible explicite (vient du sélecteur "Pour quel collaborateur ?")
                 const selCollabId = _scheduleTargetCollabId;
                 const dayBookings = (bookings||[]).filter(b=>(b.calendarId===selCalId || b.collaboratorId===selCollabId) && (b.date||'').startsWith(selDate) && b.status!=='cancelled');
-                const dayGCal = (googleEventsProp||[]).filter(ge=>(ge.collaboratorId===selCollabId) && (ge.start||ge.startDate||'').startsWith(selDate));
+                // V1.10.4.G — fix latent : init.js retourne `startTime` (pas `start`/`startDate`).
+                // Avant ce fix, le pre-check conflit Google dans le slot picker était inopérant.
+                // Filtre transparency/status cohérent avec myGoogleEvents (anti slot fantôme).
+                const dayGCal = (googleEventsProp||[]).filter(ge=>(ge.collaboratorId===selCollabId) && (ge.startTime||'').startsWith(selDate) && ge.transparency !== 'transparent' && ge.status !== 'cancelled');
                 // V3.x.6 Phase 2C — Outlook busy slots (mirror Google block)
                 const dayOCal = (outlookEventsProp||[]).filter(oe=>(oe.collaboratorId===selCollabId) && oe.showAs!=='free' && (oe.startTime||'').startsWith(selDate));
                 const buf = (typeof availBuffer!=='undefined'?availBuffer:null)||0;

@@ -193,7 +193,9 @@ const ScheduleRdvModal = () => {
             const selCalId = phoneScheduleForm.calendarId || '';
             const selCollabId = selCalId ? ((calendars||[]).find(c=>c.id===selCalId)?.collaboratorId || collab.id) : collab.id;
             const dayBookings = (bookings||[]).filter(b=>(b.calendarId===selCalId || b.collaboratorId===selCollabId) && (b.date||'').startsWith(selDate) && b.status!=='cancelled');
-            const dayGCal = (googleEventsProp||[]).filter(ge=>(ge.collaboratorId===selCollabId) && (ge.start||ge.startDate||'').startsWith(selDate));
+            // V1.10.4.G — fix latent : init.js retourne `startTime` (pas `start`/`startDate`).
+            // Filtre transparency/status cohérent avec CollabPortal.jsx (anti slot fantôme).
+            const dayGCal = (googleEventsProp||[]).filter(ge=>(ge.collaboratorId===selCollabId) && (ge.startTime||'').startsWith(selDate) && ge.transparency !== 'transparent' && ge.status !== 'cancelled');
             // V3.x.6 Phase 2C — Outlook busy slots (mirror Google)
             const dayOCal = (outlookEventsProp||[]).filter(oe=>(oe.collaboratorId===selCollabId) && oe.showAs!=='free' && (oe.startTime||'').startsWith(selDate));
             const buf = availBuffer||0;

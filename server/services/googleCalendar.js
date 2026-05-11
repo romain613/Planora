@@ -204,6 +204,10 @@ export async function updateEvent(collaboratorId, googleEventId, bookingData, ca
     start: { dateTime: startDateTime, timeZone: tz },
     end: { dateTime: endDateTime, timeZone: tz },
     location: calendarData.location || '',
+    // V1.10.4.G — transparency 'transparent' libère le slot côté Google (équivalent Outlook
+    // showAs:'free'). Garde la trace "ANNULÉ — …" visible pour audit, mais le créneau
+    // n'est plus bloquant. Reconfirm (isCancelled=false) restaure 'opaque'.
+    transparency: isCancelled ? 'transparent' : 'opaque',
     ...(isCancelled ? { colorId: '11' } : {}),
   };
 
