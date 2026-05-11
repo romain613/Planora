@@ -114,6 +114,13 @@ const SmartFooterBar = ({ navCollapsed = false }) => {
   const popoverRef = useRef(null);
   const addBtnRef = useRef(null);
 
+  // V1.10.4.G.1 — tick 30s pour recalculer le countdown du prochain RDV (mins restant).
+  const [rdvTick, setRdvTick] = useState(0);
+  useEffect(() => {
+    const i = setInterval(() => setRdvTick(t => t + 1), 30000);
+    return () => clearInterval(i);
+  }, []);
+
   // Recharge la liste si change de collab
   useEffect(() => {
     setKpiList(loadKpiList(collab?.id));
@@ -150,6 +157,22 @@ const SmartFooterBar = ({ navCollapsed = false }) => {
 
   // Today ISO pour filtre bookings
   const todayISO = useMemo(() => new Date().toISOString().slice(0, 10), []);
+
+  // V1.10.4.G.1 — Prochain RDV (mirror logique CollabPortal upcomingRdvs : confirmed + collab connecté + fenêtre [-30min, +2h]).
+  const nextRdv = useMemo(() => {
+    if (!collab?.id) return null;
+    const now = Date.now();
+    const list = (bookings || [])
+      .filter(b => b && b.status === 'confirmed' && b.collaboratorId === collab.id && b.date && b.time)
+      .map(b => {
+        const ts = new Date(b.date + 'T' + b.time + ':00').getTime();
+        return { id: b.id, time: b.time, visitorName: b.visitorName || '', _ts: ts, _diffMin: Math.round((ts - now) / 60000) };
+      })
+      .filter(b => b._diffMin > -30 && b._diffMin <= 120)
+      .sort((a, b) => a._ts - b._ts);
+    return list[0] || null;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookings, collab?.id, rdvTick]);
 
   // Génère les KPI affichables : intersection kpiList × définitions valides (R2 filter orphelin)
   const kpis = useMemo(() => {
@@ -298,6 +321,38 @@ const SmartFooterBar = ({ navCollapsed = false }) => {
           </div>
         );
       })}
+
+      {/* V1.10.4.G.1 — Badge "Prochain RDV" intégré (remplace l'ex-barre fixed bottom:56 CollabPortal).
+          Compact, même hauteur que les KPI chips, color-coded par urgence. */}
+      {nextRdv && (() => {
+        const m = nextRdv._diffMin;
+        const isPast = m < 0;
+        const isUrgent = m >= 0 && m <= 5;
+        const color = isPast ? '#EF4444' : isUrgent ? '#F59E0B' : '#0EA5E9';
+        const tail = isPast ? `Passé ${Math.abs(m)}min` : (m === 0 ? 'MAINTENANT' : `${m}min`);
+        return (
+          <div
+            title={`Prochain RDV : ${nextRdv.time} — ${nextRdv.visitorName}`}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '5px 11px',
+              borderRadius: 10,
+              background: color + '12',
+              border: '1px solid ' + color + '25',
+              cursor: 'default',
+              minWidth: 0,
+              maxWidth: 260,
+            }}
+          >
+            <I n="bell" s={13} style={{ color, flexShrink: 0 }} />
+            <span style={{ fontSize: 13, fontWeight: 800, color, lineHeight: 1, flexShrink: 0 }}>{nextRdv.time}</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: T.text2, lineHeight: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{nextRdv.visitorName || '—'}</span>
+            <span style={{ fontSize: 10, fontWeight: 800, color, lineHeight: 1, flexShrink: 0 }}>{tail}</span>
+          </div>
+        );
+      })()}
 
       {/* Bouton ➕ activé V2 (popover anchor) */}
       <div style={{ position: 'relative' }}>

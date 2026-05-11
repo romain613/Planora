@@ -7713,38 +7713,10 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
         </div>;
       })()}
 
-      {upcomingRdvs.length>0 && (
-        <div style={{position:'fixed',bottom:56,left:0,right:0,zIndex:9990,background:T.card,borderTop:'2px solid #0EA5E9',boxShadow:'0 -4px 20px rgba(0,0,0,0.1)',padding:'8px 20px',display:'flex',gap:12,alignItems:'center',overflowX:'auto'}}>
-          <I n="bell" s={16} style={{color:'#0EA5E9',flexShrink:0}}/>
-          <span style={{fontSize:10,fontWeight:700,color:T.text3,flexShrink:0}}>RDV</span>
-          {upcomingRdvs.filter(b=>!(typeof rdvCountdownDismissed!=='undefined'?rdvCountdownDismissed:{}).has(b.id)).slice(0,4).map(b=>{
-            const mins=b._diffMin;const isPast=mins<0;const isUrgent=mins<=5&&mins>=0;const isSoon=mins<=15&&mins>5;
-            return(
-              <div key={b.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 12px',borderRadius:10,background:isPast?'#EF444410':isUrgent?'#F59E0B10':isSoon?'#F59E0B08':'#0EA5E910',border:`1px solid ${isPast?'#EF444430':isUrgent?'#F59E0B30':isSoon?'#F59E0B20':'#0EA5E930'}`,flexShrink:0}}>
-                <span style={{fontSize:12,fontWeight:700,color:isPast?'#EF4444':isUrgent?'#F59E0B':'#0EA5E9'}}>{b.time}</span>
-                <span style={{fontSize:12,fontWeight:600,color:T.text,maxWidth:120,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{b.visitorName}</span>
-                <span style={{fontSize:11,fontWeight:800,color:isPast?'#EF4444':isUrgent?'#F59E0B':'#0EA5E9'}}>
-                  {isPast?`Passé ${Math.abs(mins)}min`:mins===0?'MAINTENANT':`${mins}min`}
-                </span>
-                {isPast && (
-                  <div style={{display:'flex',gap:3}}>
-                    {[['Terminé','#22C55E'],['Reporté','#F59E0B'],['Annulé','#EF4444']].map(([label,clr])=>(
-                      <div key={label} onClick={()=>{
-                        if(label==='Annulé'){cancelBookingAndCascade(b.id);}
-                        else if(label==='Terminé'){updateBooking(b.id,{status:'completed'});if(b.contactId){handleCollabUpdateContact(b.contactId,{rdv_status:'rdv_passe'});handlePipelineStageChange(b.contactId,'client_valide','RDV terminé');}}
-                        else if(label==='Reporté'&&b.contactId){handleCollabUpdateContact(b.contactId,{rdv_status:'rdv_en_attente'});setPhoneScheduleForm({contactId:b.contactId,contactName:(contacts||[]).find(c=>c.id===b.contactId)?.name||b.visitorName,number:b.visitorPhone||'',date:'',time:'',duration:b.duration||30,notes:'',calendarId:b.calendarId||'',_bookingMode:true});setPhoneShowScheduleModal(true);}
-                        setRdvCountdownDismissed(prev=>new Set([...prev,b.id]));showNotif('RDV: '+label);
-                      }} style={{padding:'2px 6px',borderRadius:5,fontSize:9,fontWeight:700,cursor:'pointer',background:clr,color:'#fff'}}>{label}</div>
-                    ))}
-                  </div>
-                )}
-
-    
-              </div>
-            );
-          })}
-        </div>
-      )}
+      {/* V1.10.4.G.1 — Bloc rappel RDV séparé (fixed bottom:56) supprimé.
+          Le prochain rappel est intégré dans la barre KPI SmartFooterBar (bas écran).
+          upcomingRdvs memo + rdvCountdownDismissed state + rdvCountdownTick interval
+          sont conservés (data/calc intacts) — consommés via context si besoin futur. */}
 
 {/* ═══ COCKPIT — Bouton flottant ouvre BANNIÈRE FLOTTANTE BASSE (fullscreen désactivé) ═══ */}
 {/* V1.9 UX FIX bug 2 — Bouton Cockpit RÉACTIVÉ, pointe désormais sur bannière flottante basse (overlay non-bloquant). Fullscreen conservé en code mais rendu désactivé (false &&). Ne jamais rouvrir le fullscreen. */}
