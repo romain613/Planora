@@ -58,6 +58,7 @@ import HardDeleteContactModal from "./modals/HardDeleteContactModal";
 import PostCallResultModal from "./modals/PostCallResultModal"; // V3.x post-call smart pipeline
 import ReassignBookingModal from "./modals/ReassignBookingModal"; // V1.10.4.A étape 2
 import SenderConflictModal from "./modals/SenderConflictModal"; // V1.10.4.D étape 2 — conflit créneau recover sender
+import FicheIntelligentBlock from "./tabs/crm/fiche/FicheIntelligentBlock"; // BookingDetailModal Phase 1 — prochain RDV + action prioritaire si ct._linked
 import SmartFooterBar from "./components/SmartFooterBar"; // V1 Smart Footer Performance Bar
 
 const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCalendars, avails, setAvails, vacations, setVacations, contacts, setContacts, onBack, voipCredits, voipCallLogs, setVoipCallLogs, voipConfigured, appMyPhoneNumbers, appPhonePlans, appConversations, setAppConversations, pipelineStages, setPipelineStages, contactFieldDefs, setContactFieldDefs, collabs: collabsProp, googleEvents: googleEventsProp, setGoogleEvents, outlookEvents: outlookEventsProp, setOutlookEvents, isAdminView, smsCredits }) => {
@@ -6184,57 +6185,136 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                 </div>
               )}
 
-              {/* ══════ ONGLET CONTACT ══════ */}
-              {bookingDetailTab === 'contact' && _bContact && (
-                <div>
-                  {/* Contact info */}
-                  <div style={{ display:"grid", gridTemplateColumns:"1fr 1fr", gap:10, marginBottom:16 }}>
-                    {[
-                      { icon:"mail", label:"Email", value:_bContact.email||'—' },
-                      { icon:"phone", label:"Téléphone", value:_bContact.phone ? displayPhone(_bContact.phone) : '—' },
-                    ].map((f,i) => (
-                      <div key={i} style={{ padding:"10px 14px", borderRadius:8, background:T.bg, display:"flex", alignItems:"center", gap:10 }}>
-                        <span style={{ color:T.text3 }}><I n={f.icon} s={15}/></span>
-                        <div>
-                          <div style={{ fontSize:10, color:T.text3 }}>{f.label}</div>
-                          <div style={{ fontSize:13, fontWeight:600 }}>{f.value}</div>
+              {/* ══════ ONGLET CONTACT — V2 enrichi Phase 1 ══════ */}
+              {/* Read-only enrichi + bouton "Modifier dans la fiche" pour drill-down complet.
+                  Source de vérité unique : _bContact = contacts.find(...). Aucune mutation locale. */}
+              {bookingDetailTab === 'contact' && !_bContact && (
+                <div style={{padding:24,textAlign:'center',color:T.text3}}>
+                  <I n="user-x" s={32} style={{opacity:0.5,marginBottom:8}}/>
+                  <div style={{fontSize:14,fontWeight:600,color:T.text2,marginBottom:4}}>Contact non lié</div>
+                  <div style={{fontSize:12,marginBottom:14}}>Ce RDV n'est pas associé à une fiche contact existante.</div>
+                  {b.visitorEmail && <Btn small onClick={()=>{
+                    const _match = (contacts||[]).find(c => c.email && c.email.toLowerCase() === b.visitorEmail.toLowerCase());
+                    if (_match) { setSelectedBooking(null); setBookingDetailTab('rdv'); setSelectedCrmContact(_match); setCollabFicheTab('notes'); }
+                    else { showNotif("Aucun contact trouvé pour cet email","warning"); }
+                  }}><I n="search" s={13}/> Chercher dans CRM</Btn>}
+                </div>
+              )}
+              {bookingDetailTab === 'contact' && _bContact && (() => {
+                const _isArchived = !!(_bContact.archivedAt && _bContact.archivedAt !== '');
+                const _identity = [_bContact.civility, _bContact.firstname || _bContact.firstName, _bContact.lastname || _bContact.lastName].filter(Boolean).join(' ') || _bContact.name || '—';
+                const _scoreVal = _bContact._score ?? _bContact.sympathy_score;
+                const _assignedName = (collabs||[]).find(c => c.id === _bContact.assignedTo)?.name || '—';
+                const _sharedList = Array.isArray(_bContact.shared_with) ? _bContact.shared_with : [];
+                const _sharedNames = _sharedList.filter(id => id && id !== _bContact.assignedTo).map(id => (collabs||[]).find(c => c.id === id)?.name).filter(Boolean);
+                let _cf = [];
+                try { _cf = typeof _bContact.custom_fields_json === 'string' ? JSON.parse(_bContact.custom_fields_json || '[]') : (Array.isArray(_bContact.custom_fields_json) ? _bContact.custom_fields_json : []); } catch {}
+                _cf = (Array.isArray(_cf) ? _cf : []).filter(f => f && f.value !== '' && f.value != null);
+                const _coordFields = [
+                  { icon:"user", label:"Identité", value:_identity },
+                  { icon:"mail", label:"Email", value:_bContact.email||'—' },
+                  { icon:"phone", label:"Téléphone", value:_bContact.phone ? displayPhone(_bContact.phone) : '—' },
+                  { icon:"smartphone", label:"Mobile", value:_bContact.mobile ? displayPhone(_bContact.mobile) : '', hideIfEmpty:!_bContact.mobile },
+                  { icon:"map-pin", label:"Adresse", value:_bContact.address||'', hideIfEmpty:!_bContact.address },
+                  { icon:"briefcase", label:"Société", value:_bContact.company||'', hideIfEmpty:!_bContact.company },
+                  { icon:"globe", label:"Site web", value:_bContact.website||'', hideIfEmpty:!_bContact.website },
+                  { icon:"hash", label:"SIRET", value:_bContact.siret||'', hideIfEmpty:!_bContact.siret },
+                ].filter(f => !f.hideIfEmpty);
+                return <div>
+                  {/* Banner archived */}
+                  {_isArchived && (
+                    <div style={{padding:'8px 12px',borderRadius:8,background:'#F1F5F9',border:`1px solid ${T.border}`,color:T.text2,fontSize:12,marginBottom:12,display:'flex',alignItems:'center',gap:8}}>
+                      <I n="archive" s={14}/>
+                      <span><b>Contact archivé</b> — lecture seule. Restaurer depuis la fiche pour modifier.</span>
+                    </div>
+                  )}
+
+                  {/* Coordonnées enrichies — read-only */}
+                  <div style={{fontSize:10,fontWeight:700,color:T.text3,marginBottom:6,textTransform:'uppercase',letterSpacing:0.4}}>Coordonnées</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+                    {_coordFields.map((f,i) => (
+                      <div key={i} style={{padding:"8px 12px",borderRadius:8,background:T.bg,display:"flex",alignItems:"center",gap:10}}>
+                        <span style={{color:T.text3,flexShrink:0}}><I n={f.icon} s={14}/></span>
+                        <div style={{minWidth:0,flex:1}}>
+                          <div style={{fontSize:10,color:T.text3}}>{f.label}</div>
+                          <div style={{fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.value||'—'}</div>
                         </div>
                       </div>
                     ))}
                   </div>
 
-                  {/* Pipeline stage — modifiable */}
-                  <div style={{ marginBottom:16 }}>
-                    <div style={{ fontSize:11, fontWeight:600, color:T.text3, marginBottom:6 }}>Étape pipeline</div>
-                    <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
-                      {_bStages.map(s => (
-                        <div key={s.id} onClick={() => { handleCollabUpdateContact(_bContact.id, { pipeline_stage: s.id }); showNotif(`Étape → ${PIPELINE_LABELS[s.id]||s.label}`); }} style={{ padding:'4px 10px', borderRadius:8, fontSize:11, fontWeight:_bContact.pipeline_stage===s.id?700:500, background:_bContact.pipeline_stage===s.id?s.color+'18':'transparent', color:_bContact.pipeline_stage===s.id?s.color:T.text3, border:`1px solid ${_bContact.pipeline_stage===s.id?s.color+'40':T.border}`, cursor:'pointer', transition:'all .15s' }}>
-                          <span style={{display:'inline-block',width:6,height:6,borderRadius:3,background:STATUS_COLORS[s.id]||s.color,marginRight:4}}></span>{PIPELINE_LABELS[s.id]||s.label}
-                        </div>
-                      ))}
+                  {/* Pipeline + scoring + rating */}
+                  <div style={{fontSize:10,fontWeight:700,color:T.text3,marginBottom:6,textTransform:'uppercase',letterSpacing:0.4}}>Pipeline & scoring</div>
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr 1fr",gap:8,marginBottom:14}}>
+                    <div style={{padding:"8px 12px",borderRadius:8,background:T.bg}}>
+                      <div style={{fontSize:10,color:T.text3}}>Étape</div>
+                      <div style={{fontSize:12,fontWeight:700,color:_bCurrentStage?.color||T.text}}>
+                        <span style={{display:'inline-block',width:8,height:8,borderRadius:4,background:_bCurrentStage?.color||T.text3,marginRight:5,verticalAlign:'middle'}}></span>
+                        {PIPELINE_LABELS[_bContact.pipeline_stage] || _bCurrentStage?.label || _bContact.pipeline_stage || '—'}
+                      </div>
+                    </div>
+                    <div style={{padding:"8px 12px",borderRadius:8,background:T.bg}}>
+                      <div style={{fontSize:10,color:T.text3}}>Score</div>
+                      <div style={{fontSize:12,fontWeight:700,color:_scoreVal!=null?cScoreColor(_scoreVal):T.text3}}>
+                        {_scoreVal!=null ? `${_scoreVal} · ${cScoreLabel(_scoreVal)}` : '—'}
+                      </div>
+                    </div>
+                    <div style={{padding:"8px 12px",borderRadius:8,background:T.bg}}>
+                      <div style={{fontSize:10,color:T.text3}}>Note</div>
+                      <div style={{fontSize:13,color:"#F59E0B"}}>{(_bContact.rating>0)?("★".repeat(_bContact.rating)+"☆".repeat(5-_bContact.rating)):'—'}</div>
                     </div>
                   </div>
 
+                  {/* Assigné + partagé */}
+                  <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8,marginBottom:14}}>
+                    <div style={{padding:"8px 12px",borderRadius:8,background:T.bg}}>
+                      <div style={{fontSize:10,color:T.text3}}>Assigné à</div>
+                      <div style={{fontSize:12,fontWeight:600}}>{_assignedName}</div>
+                    </div>
+                    <div style={{padding:"8px 12px",borderRadius:8,background:T.bg}}>
+                      <div style={{fontSize:10,color:T.text3}}>Partagé avec</div>
+                      <div style={{fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{_sharedNames.length > 0 ? _sharedNames.join(', ') : '—'}</div>
+                    </div>
+                  </div>
+
+                  {/* Bloc intelligent — prochain RDV + action prioritaire (uniquement si _linked) */}
+                  {_bContact._linked && <div style={{marginBottom:14}}><FicheIntelligentBlock ct={_bContact} /></div>}
+
                   {/* Tags */}
                   {(_bContact.tags||[]).length > 0 && (
-                    <div style={{ marginBottom:16 }}>
-                      <div style={{ fontSize:11, fontWeight:600, color:T.text3, marginBottom:6 }}>Tags</div>
-                      <div style={{ display:'flex', gap:4, flexWrap:'wrap' }}>
+                    <div style={{marginBottom:14}}>
+                      <div style={{fontSize:10,fontWeight:700,color:T.text3,marginBottom:6,textTransform:'uppercase',letterSpacing:0.4}}>Tags</div>
+                      <div style={{display:'flex',gap:4,flexWrap:'wrap'}}>
                         {(_bContact.tags||[]).map(t => <Badge key={String(t)} color="#7C3AED">{String(t)}</Badge>)}
                       </div>
                     </div>
                   )}
 
+                  {/* Custom fields read-only display (édition = "Modifier dans la fiche") */}
+                  {_cf.length > 0 && (
+                    <div style={{marginBottom:14}}>
+                      <div style={{fontSize:10,fontWeight:700,color:T.text3,marginBottom:6,textTransform:'uppercase',letterSpacing:0.4}}>Champs personnalisés</div>
+                      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:8}}>
+                        {_cf.map((f,i) => (
+                          <div key={i} style={{padding:"8px 12px",borderRadius:8,background:T.bg}}>
+                            <div style={{fontSize:10,color:T.text3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.label||f.key||'—'}</div>
+                            <div style={{fontSize:12,fontWeight:600,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{String(f.value)}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {/* Historique RDV */}
-                  <div style={{ marginBottom:16 }}>
-                    <div style={{ fontSize:11, fontWeight:600, color:T.text3, marginBottom:6 }}>Historique RDV ({_bContactBookings.length})</div>
-                    <div style={{ maxHeight:200, overflowY:'auto' }}>
-                      {_bContactBookings.length === 0 && <div style={{ fontSize:12, color:T.text3, padding:8 }}>Aucun RDV</div>}
+                  <div style={{marginBottom:14}}>
+                    <div style={{fontSize:10,fontWeight:700,color:T.text3,marginBottom:6,textTransform:'uppercase',letterSpacing:0.4}}>Historique RDV ({_bContactBookings.length})</div>
+                    <div style={{maxHeight:160,overflowY:'auto'}}>
+                      {_bContactBookings.length === 0 && <div style={{fontSize:12,color:T.text3,padding:8}}>Aucun RDV</div>}
                       {_bContactBookings.map(bk => (
-                        <div key={bk.id} style={{ display:'flex', alignItems:'center', gap:8, padding:'6px 10px', borderRadius:8, background:bk.id===b.id?T.accentBg:T.bg, marginBottom:4, border:bk.id===b.id?`1px solid ${T.accent}30`:'1px solid transparent' }}>
+                        <div key={bk.id} style={{display:'flex',alignItems:'center',gap:8,padding:'6px 10px',borderRadius:8,background:bk.id===b.id?T.accentBg:T.bg,marginBottom:4,border:bk.id===b.id?`1px solid ${T.accent}30`:'1px solid transparent'}}>
                           <I n="calendar" s={12} style={{color:T.text3}}/>
-                          <span style={{ fontSize:12, fontWeight:bk.id===b.id?700:500 }}>{fmtDate(bk.date)} {bk.time}</span>
-                          <span style={{ fontSize:11, color:T.text3 }}>{bk.duration}min</span>
+                          <span style={{fontSize:12,fontWeight:bk.id===b.id?700:500}}>{fmtDate(bk.date)} {bk.time}</span>
+                          <span style={{fontSize:11,color:T.text3}}>{bk.duration}min</span>
                           <Badge color={bk.status==='confirmed'?T.success:bk.status==='pending'?T.warning:T.danger} style={{fontSize:9,marginLeft:'auto'}}>{bk.status==='confirmed'?'Confirmé':bk.status==='pending'?'En attente':'Annulé'}</Badge>
                         </div>
                       ))}
@@ -6242,34 +6322,77 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                   </div>
 
                   {/* Quick actions */}
-                  <div style={{ display:"flex", flexWrap:"wrap", gap:8, paddingTop:16, borderTop:`1px solid ${T.border}` }}>
+                  <div style={{display:"flex",flexWrap:"wrap",gap:8,paddingTop:14,borderTop:`1px solid ${T.border}`}}>
                     {_bContact.email && <Btn onClick={() => window.open('mailto:'+_bContact.email)}><I n="mail" s={14}/> Email</Btn>}
                     {_bContact.phone && <Btn onClick={() => { if(typeof startVoipCall==='function') startVoipCall(_bContact.phone,_bContact); else window.open('tel:'+_bContact.phone); }}><I n="phone" s={14}/> Appeler</Btn>}
-                    <Btn onClick={() => { setSelectedBooking(null); setBookingDetailTab('rdv'); setSelectedCrmContact(_bContact); setCollabFicheTab('notes'); }}><I n="external-link" s={14}/> Fiche complète</Btn>
+                    <Btn primary onClick={() => { setSelectedBooking(null); setBookingDetailTab('rdv'); setSelectedCrmContact(_bContact); setCollabFicheTab('notes'); }}><I n="external-link" s={14}/> Modifier dans la fiche</Btn>
                   </div>
+                </div>;
+              })()}
+
+              {/* ══════ ONGLET NOTES — V2 Phase 1 ══════ */}
+              {/* Séparation stricte : Notes RDV (booking.notes, read-only display) vs Notes contact
+                  (contacts.notes, éditable). NE PAS fusionner — source unique distincte par entité.
+                  Logique éditable inline : mirror de FicheNotes.jsx mais SANS setSelectedCrmContact
+                  pour éviter ouverture FicheContactModal en cascade quand BookingDetailModal est ouverte.
+                  Sync préservée : setContacts + _T.crmSync + PUT /api/data/contacts/:id (debounce 800ms). */}
+              {bookingDetailTab === 'notes' && !_bContact && (
+                <div style={{padding:20,textAlign:'center',color:T.text3,fontSize:12}}>
+                  Notes contact indisponibles — contact non lié.
                 </div>
               )}
-
-              {/* ══════ ONGLET NOTES ══════ */}
-              {bookingDetailTab === 'notes' && _bContact && (
-                <div>
-                  <textarea value={_bContact.notes||''} onChange={e => { const v = e.target.value; handleCollabUpdateContact(_bContact.id, { notes: v }); }} placeholder="Ajoutez des notes sur ce contact..." style={{ width:'100%', minHeight:140, padding:12, borderRadius:10, border:`1px solid ${T.border}`, background:T.bg, color:T.text, fontSize:13, resize:'vertical', fontFamily:'inherit', outline:'none' }}/>
-                  <div style={{ fontSize:10, color:T.text3, marginTop:4 }}>Sauvegarde automatique</div>
-
-                  {/* Dernier contact info */}
-                  {_bContact.lastVisit && (
-                    <div style={{ marginTop:16, padding:"10px 14px", borderRadius:8, background:T.bg, fontSize:12 }}>
-                      <span style={{ color:T.text3 }}>Dernier contact :</span> <span style={{ fontWeight:600 }}>{fmtDate(_bContact.lastVisit)}</span>
-                      {(() => { const d=Math.floor((Date.now()-new Date(_bContact.lastVisit).getTime())/86400000); return d>=14?<span style={{marginLeft:8,color:d>=30?'#EF4444':'#F59E0B',fontWeight:700,fontSize:11}}>{d}j sans contact</span>:null; })()}
+              {bookingDetailTab === 'notes' && _bContact && (() => {
+                const _isArchived = !!(_bContact.archivedAt && _bContact.archivedAt !== '');
+                return <div>
+                  {/* Banner archived */}
+                  {_isArchived && (
+                    <div style={{padding:'8px 12px',borderRadius:8,background:'#F1F5F9',border:`1px solid ${T.border}`,color:T.text2,fontSize:12,marginBottom:12,display:'flex',alignItems:'center',gap:8}}>
+                      <I n="archive" s={14}/>
+                      <span><b>Contact archivé</b> — lecture seule. Restaurer depuis la fiche pour modifier.</span>
                     </div>
                   )}
 
-                  {/* Scoring */}
-                  {_bContact.rating > 0 && (
-                    <div style={{ marginTop:12, fontSize:13, color:"#F59E0B" }}>{"★".repeat(_bContact.rating)}{"☆".repeat(5-_bContact.rating)}</div>
+                  {/* Bloc Notes RDV (booking.notes, read-only) */}
+                  <div style={{fontSize:10,fontWeight:700,color:T.text3,marginBottom:6,textTransform:'uppercase',letterSpacing:0.4}}>Notes du RDV</div>
+                  <div style={{padding:"10px 14px",borderRadius:8,background:b.notes?T.warningBg:T.bg,border:b.notes?`1px solid ${T.warning}22`:`1px dashed ${T.border}`,fontSize:13,color:T.text,marginBottom:16,minHeight:36,whiteSpace:'pre-wrap'}}>
+                    {b.notes || <span style={{color:T.text3,fontStyle:'italic'}}>Aucune note pour ce RDV</span>}
+                  </div>
+
+                  {/* Bloc Notes contact (contacts.notes, éditable, mirror FicheNotes flow) */}
+                  <div style={{fontSize:10,fontWeight:700,color:T.text3,marginBottom:6,textTransform:'uppercase',letterSpacing:0.4,display:'flex',alignItems:'center',gap:6}}>
+                    <span>Notes du contact</span>
+                    <span style={{fontSize:9,fontWeight:500,color:T.text3,textTransform:'none',letterSpacing:0}}>(mirror fiche CRM / Pipeline Live)</span>
+                  </div>
+                  <textarea
+                    value={_bContact.notes || ''}
+                    readOnly={_isArchived}
+                    disabled={_isArchived}
+                    onChange={e => {
+                      if (_isArchived) return;
+                      const v = e.target.value;
+                      setContacts(prev => (prev||[]).map(c => c.id === _bContact.id ? {...c, notes: v} : c));
+                      if (_T && typeof _T.crmSync === 'function') _T.crmSync({ notes: v });
+                      if (collabNotesTimerRef && 'current' in collabNotesTimerRef) {
+                        clearTimeout(collabNotesTimerRef.current);
+                        collabNotesTimerRef.current = setTimeout(() => {
+                          api(`/api/data/contacts/${_bContact.id}`, { method:'PUT', body:{ notes:v, companyId:company?.id } });
+                        }, 800);
+                      }
+                    }}
+                    placeholder={_isArchived ? '' : 'Notes, infos commerciales, suivi...'}
+                    style={{ width:'100%', minHeight:120, padding:12, borderRadius:10, border:`1px solid ${T.border}`, background:_isArchived?T.bg:T.surface, color:T.text, fontSize:13, resize:'vertical', fontFamily:'inherit', outline:'none', opacity:_isArchived?0.7:1 }}
+                  />
+                  {!_isArchived && <div style={{fontSize:10,color:T.text3,marginTop:4}}>Sauvegarde automatique · synchronisée avec la fiche contact</div>}
+
+                  {/* Dernier contact info */}
+                  {_bContact.lastVisit && (
+                    <div style={{marginTop:16,padding:"10px 14px",borderRadius:8,background:T.bg,fontSize:12}}>
+                      <span style={{color:T.text3}}>Dernier contact :</span> <span style={{fontWeight:600}}>{fmtDate(_bContact.lastVisit)}</span>
+                      {(()=>{const d=Math.floor((Date.now()-new Date(_bContact.lastVisit).getTime())/86400000); return d>=14?<span style={{marginLeft:8,color:d>=30?'#EF4444':'#F59E0B',fontWeight:700,fontSize:11}}>{d}j sans contact</span>:null;})()}
+                    </div>
                   )}
-                </div>
-              )}
+                </div>;
+              })()}
             </div>
           );
         })()}
