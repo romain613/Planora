@@ -420,6 +420,8 @@ try { db.exec("ALTER TABLE bookings ADD COLUMN title TEXT DEFAULT ''"); } catch 
 // Backfill rows historiques via script ops/backfill-bookings-createdAt.mjs (parsing id timestamp).
 try { db.exec("ALTER TABLE bookings ADD COLUMN createdAt TEXT DEFAULT ''"); } catch {}
 try { db.exec("CREATE INDEX IF NOT EXISTS idx_bookings_createdAt ON bookings(createdAt)"); } catch {}
+// V1.10.4.J — Index composite pour endpoint /api/bookings/transmitted (filtre par company + type + plage date).
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_bookings_company_type_date ON bookings(companyId, bookingType, date)"); } catch {}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS outlook_events (

@@ -695,6 +695,129 @@ router.get('/reporting', requireAuth, enforceCompany, (req, res) => {
   }
 });
 
+// ════════════════════════════════════════════════════════════════════
+// V1.10.4.J — GET /api/bookings/transmitted
+// Console de supervision des RDV transmis (bookingType='share_transfer').
+// Filtres multi-collab (senders/receivers), status, reporting, pipeline, période.
+// Permissions :
+//   - collab member : forcé sur ses propres flows (bookedBy=cid OR agendaOwner=cid)
+//   - admin/supra   : tous les transferts de la company active
+// Lecture seule, aucune écriture.
+// ════════════════════════════════════════════════════════════════════
+router.get('/transmitted', requireAuth, enforceCompany, (req, res) => {
+  try {
+    const companyId = req.auth?.companyId || req.companyId;
+    const cid = req.auth?.collaboratorId || '';
+    const isAdmin = req.auth?.role === 'admin' || req.auth?.isSupra;
+
+    const mode = String(req.query.mode || 'all').toLowerCase();
+    if (!['sent', 'received', 'all'].includes(mode)) {
+      return res.status(400).json({ error: 'mode invalide (sent|received|all)' });
+    }
+    const status = String(req.query.status || 'confirmed').toLowerCase(); // confirmed|cancelled|all
+    if (!['confirmed', 'cancelled', 'all'].includes(status)) {
+      return res.status(400).json({ error: 'status invalide (confirmed|cancelled|all)' });
+    }
+    const limit = Math.min(Math.max(Number(req.query.limit) || 500, 1), 2000);
+
+    const parseCsv = (v) => String(v || '').split(',').map(s => s.trim()).filter(Boolean);
+    const sendersParam = parseCsv(req.query.senders);
+    const receiversParam = parseCsv(req.query.receivers);
+    const reportingStatuses = parseCsv(req.query.reportingStatus);
+    const pipelineStages = parseCsv(req.query.pipelineStage);
+
+    // Date range : défaut = today-30j → today+90j
+    const todayIso = new Date().toISOString().slice(0, 10);
+    const defaultFrom = new Date(Date.now() - 30 * 86400 * 1000).toISOString().slice(0, 10);
+    const defaultTo = new Date(Date.now() + 90 * 86400 * 1000).toISOString().slice(0, 10);
+    const from = (req.query.from && /^\d{4}-\d{2}-\d{2}$/.test(req.query.from)) ? req.query.from : defaultFrom;
+    const to = (req.query.to && /^\d{4}-\d{2}-\d{2}$/.test(req.query.to)) ? req.query.to : defaultTo;
+
+    // Construit la requête dynamique
+    const where = [
+      'c.companyId = ?',
+      "b.bookingType = 'share_transfer'",
+      'b.date BETWEEN ? AND ?',
+    ];
+    const params = [companyId, from, to];
+
+    // Permissions : collab non-admin force sur ses propres flows
+    if (!isAdmin) {
+      where.push('(b.bookedByCollaboratorId = ? OR b.agendaOwnerId = ?)');
+      params.push(cid, cid);
+    }
+
+    // Mode filter
+    if (mode === 'sent') {
+      const ids = isAdmin && sendersParam.length ? sendersParam : (isAdmin ? null : [cid]);
+      if (ids && ids.length) {
+        where.push(`b.bookedByCollaboratorId IN (${ids.map(() => '?').join(',')})`);
+        params.push(...ids);
+      }
+    } else if (mode === 'received') {
+      const ids = isAdmin && receiversParam.length ? receiversParam : (isAdmin ? null : [cid]);
+      if (ids && ids.length) {
+        where.push(`b.agendaOwnerId IN (${ids.map(() => '?').join(',')})`);
+        params.push(...ids);
+      }
+    } else { // mode === 'all'
+      if (isAdmin && sendersParam.length) {
+        where.push(`b.bookedByCollaboratorId IN (${sendersParam.map(() => '?').join(',')})`);
+        params.push(...sendersParam);
+      }
+      if (isAdmin && receiversParam.length) {
+        where.push(`b.agendaOwnerId IN (${receiversParam.map(() => '?').join(',')})`);
+        params.push(...receiversParam);
+      }
+    }
+
+    // Status RDV
+    if (status !== 'all') {
+      where.push('b.status = ?');
+      params.push(status);
+    }
+
+    // Reporting status
+    if (reportingStatuses.length) {
+      where.push(`b.bookingReportingStatus IN (${reportingStatuses.map(() => '?').join(',')})`);
+      params.push(...reportingStatuses);
+    }
+
+    // Pipeline stage (sur ct.pipeline_stage)
+    if (pipelineStages.length) {
+      where.push(`ct.pipeline_stage IN (${pipelineStages.map(() => '?').join(',')})`);
+      params.push(...pipelineStages);
+    }
+
+    const sql = `
+      SELECT b.id, b.calendarId, b.collaboratorId, b.date, b.time, b.duration,
+             b.visitorName, b.visitorEmail, b.visitorPhone, b.status, b.title,
+             b.bookedByCollaboratorId, b.agendaOwnerId, b.bookingType, b.transferMode,
+             b.bookingReportingStatus, b.bookingReportingNote,
+             b.bookingReportedBy, b.bookingReportedAt,
+             b.googleEventId, b.outlookEventId, b.contactId, b.createdAt,
+             ct.pipeline_stage  AS receiverPipelineStage,
+             ct.name            AS contactName,
+             ct.email           AS contactEmail,
+             ct.phone           AS contactPhone,
+             ct.archivedAt      AS contactArchivedAt
+      FROM bookings b
+      JOIN calendars c ON b.calendarId = c.id
+      LEFT JOIN contacts ct ON b.contactId = ct.id
+      WHERE ${where.join(' AND ')}
+      ORDER BY b.date ASC, b.time ASC
+      LIMIT ?
+    `;
+    params.push(limit);
+
+    const rows = db.prepare(sql).all(...params);
+    res.json({ count: rows.length, mode, status, from, to, bookings: rows });
+  } catch (err) {
+    console.error('[TRANSMITTED ERR]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // ─── PUT /api/bookings/:id/report ────────────────────────────────────
 // Body : { status, note }
 // Auth : agendaOwnerId (receiver) OU admin OU supra
