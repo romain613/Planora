@@ -53,7 +53,8 @@ import AgendaTab from "./tabs/AgendaTab";
 import CrmTab from "./tabs/CrmTab";
 import PhoneTab from "./tabs/PhoneTab";
 import RdvReportingTab from "./tabs/RdvReportingTab";
-import SharedAgendaTab from "./tabs/SharedAgendaTab"; // V1.10.4.J Phase 2 V1a — Agenda partagé
+// V1.10.4.J merge — SharedAgendaTab désormais importé directement dans RdvReportingTab.jsx
+// (Agenda partagé est un parent-tab interne du Reporting RDV, plus un onglet sidebar séparé).
 import DuplicateOnCreateModal from "./modals/DuplicateOnCreateModal";
 import HardDeleteContactModal from "./modals/HardDeleteContactModal";
 import PostCallResultModal from "./modals/PostCallResultModal"; // V3.x post-call smart pipeline
@@ -66,7 +67,16 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   // collabs = list of all collaborators in the company (for chat DM, etc.)
   const collabs = collabsProp || [];
   const _MIGRATED_TABS = ['messages','availability','tables','ai-profile','objectifs','signalements','bookings','analytics'];
-  const [portalTab, _setPortalTab] = useState(() => { try { const saved = localStorage.getItem("c360-portalTab") || "home"; return _MIGRATED_TABS.includes(saved) ? "home" : saved; } catch { return "home"; } });
+  const [portalTab, _setPortalTab] = useState(() => {
+    // V1.10.4.J merge — migration : "shared-agenda" (ancien onglet sidebar) → "rdv-reporting"
+    // (Agenda partagé est désormais un parent-tab interne dans Reporting RDV).
+    try {
+      let saved = localStorage.getItem("c360-portalTab") || "home";
+      if (_MIGRATED_TABS.includes(saved)) saved = "home";
+      if (saved === "shared-agenda") saved = "rdv-reporting";
+      return saved;
+    } catch { return "home"; }
+  });
   const [portalTabKey, setPortalTabKey] = useState(0);
   const [collabAlertCount, setCollabAlertCount] = useState(0);
   const [notifUnread, setNotifUnread] = useState(0);
@@ -75,7 +85,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const [settingsSubTab, setSettingsSubTab] = useState("profil");
   const [showIaWidget, setShowIaWidget] = useState(false);
   const [csvImportModal, setCsvImportModal] = useState(null); // V2 unified CSV import modal — global scope
-  const PORTAL_TAB_TITLES = { home:"Aujourd'hui", agenda:"Agenda", "shared-agenda":"Agenda partagé", crm:"CRM", phone:"Pipeline Live", settings:"Paramètres" };
+  const PORTAL_TAB_TITLES = { home:"Aujourd'hui", agenda:"Agenda", crm:"CRM", phone:"Pipeline Live", settings:"Paramètres" };
   const setPortalTab = (v) => { const val = typeof v === "function" ? v(portalTab) : v; _setPortalTab(val); localStorage.setItem("c360-portalTab", val); setPortalTabKey(k=>k+1); document.title = "Calendar360 — " + (PORTAL_TAB_TITLES[val]||val); };
   useEffect(() => { document.title = "Calendar360 — " + (PORTAL_TAB_TITLES[portalTab]||portalTab); }, []);
   // Guard: polling endpoints (messaging, heartbeat, secure-ia count) require a real collaborator session.
@@ -4112,8 +4122,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     { id:"home", icon:"layout-dashboard", label:"Aujourd'hui" },
     ...(((typeof voipConfigured!=='undefined'?voipConfigured:null) || collab.sms_enabled) ? [{ id:"phone", icon:"zap", label:"Pipeline Live" }] : []),
     { id:"agenda", icon:"calendar", label:"Agenda" },
-    // V1.10.4.J — Agenda partagé : supervision RDV transmis inter-collaborateurs (standalone, ne touche pas AgendaTab principal)
-    { id:"shared-agenda", icon:"users", label:"Agenda partagé" },
+    // V1.10.4.J merge — Agenda partagé retiré de la sidebar : devient parent-tab dans Reporting RDV
     { id:"crm", icon:"user", label:"Mon CRM" },
     // V1.10.3 — Reporting collab RDV
     { id:"rdv-reporting", icon:"bar-chart-3", label:"Reporting RDV" },
@@ -4855,10 +4864,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
 
         {/* ── AGENDA GRID ── */}
         {portalTab === "agenda" && <AgendaTab/>}
-        {/* V1.10.4.J Phase 2 V1a — Agenda partagé (standalone, ne touche pas AgendaTab) */}
-        {portalTab === "shared-agenda" && <SharedAgendaTab/>}
 
-        {/* ── V1.10.3 — Reporting collab RDV ── */}
+        {/* ── V1.10.3 — Reporting collab RDV (V1.10.4.J merge : Agenda partagé y est désormais parent-tab) ── */}
         {portalTab === "rdv-reporting" && <RdvReportingTab/>}
 
         {/* ── MON CRM ── */}

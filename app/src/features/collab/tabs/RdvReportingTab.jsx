@@ -1,5 +1,6 @@
 // V1.10.3 Phase 3 — Reporting Collab RDV (frontend)
 // V1.10.4.I — Accordion détaillé + Créé le + Statut pipeline actuel + Timeline 50 events.
+// V1.10.4.J merge — Agenda partagé devient parent-tab interne (Reporting | Agenda partagé).
 // Onglet collab : 2 sous-vues "Reçus" / "Transmis" + modal "Faire le reporting"
 // Dépendances : api (HTTP), T theme, I/Btn/Card/Spinner (UI), useCollabContext (collab+showNotif)
 
@@ -8,6 +9,7 @@ import { T } from "../../../theme";
 import { I, Btn, Card, Spinner } from "../../../shared/ui";
 import { api } from "../../../shared/services/api";
 import { useCollabContext } from "../context/CollabContext";
+import SharedAgendaTab from "./SharedAgendaTab"; // V1.10.4.J merge — Agenda partagé en parent-tab
 
 // ── Enum + libellés FR + badges (source : brief MH 2026-04-27) ─────────────
 const REPORTING_STATUSES = ['pending', 'validated', 'signed', 'no_show', 'cancelled', 'follow_up', 'other'];
@@ -131,6 +133,13 @@ const RdvReportingTab = () => {
   const ctx = useCollabContext();
   const { collab, contacts, collabs, PIPELINE_STAGES, showNotif } = ctx;
   const allCollabs = (collabs && collabs.length) ? collabs : [];
+
+  // V1.10.4.J merge — Parent-tab : Reporting | Agenda partagé. Défaut : reporting.
+  const _mainTabStorageKey = `c360-rdv-reporting-main-tab-${collab?.id || 'default'}`;
+  const [mainTab, setMainTab] = useState(() => {
+    try { const v = localStorage.getItem(_mainTabStorageKey); return v === 'shared' ? 'shared' : 'reporting'; } catch { return 'reporting'; }
+  });
+  useEffect(() => { try { localStorage.setItem(_mainTabStorageKey, mainTab); } catch {} }, [mainTab, _mainTabStorageKey]);
 
   const [subTab, setSubTab] = useState('received'); // 'received' | 'sent'
   const [loadingReceived, setLoadingReceived] = useState(false);
@@ -292,6 +301,37 @@ const RdvReportingTab = () => {
 
   return (
     <div>
+      {/* ── V1.10.4.J merge — Parent-tabs : Reporting | Agenda partagé ───── */}
+      <div style={{ display:'flex', gap:6, marginBottom:18, padding:4, background:T.bg, borderRadius:12, border:'1px solid '+T.border, width:'fit-content' }}>
+        {[
+          { id:'reporting', label:'Reporting',      icon:'bar-chart-3', hint:'Mes RDV transmis et reçus à rapporter' },
+          { id:'shared',    label:'Agenda partagé', icon:'users',       hint:'Console de supervision des RDV transmis inter-collaborateurs' },
+        ].map(t => {
+          const isActive = mainTab === t.id;
+          return (
+            <div key={t.id} onClick={() => setMainTab(t.id)} title={t.hint} style={{
+              padding:'7px 16px', borderRadius:8, cursor:'pointer',
+              background: isActive ? T.surface : 'transparent',
+              color: isActive ? T.accent : T.text2,
+              fontSize:13, fontWeight: isActive ? 700 : 500,
+              display:'inline-flex', alignItems:'center', gap:7,
+              transition:'all .15s cubic-bezier(0.4,0,0.2,1)',
+              boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.08), 0 0 0 1px '+T.accent+'30' : 'none',
+            }}
+            onMouseEnter={e=>{ if (!isActive) e.currentTarget.style.color = T.text; }}
+            onMouseLeave={e=>{ if (!isActive) e.currentTarget.style.color = T.text2; }}
+            >
+              <I n={t.icon} s={14}/> {t.label}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* ── V1.10.4.J merge — Mode "Agenda partagé" : render SharedAgendaTab tel quel ── */}
+      {mainTab === 'shared' && <SharedAgendaTab/>}
+
+      {/* ── V1.10.4.J merge — Mode "Reporting" : contenu Phase 1 inchangé ── */}
+      {mainTab === 'reporting' && (<>
       {/* ── Header ────────────────────────────────────────────────────── */}
       <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:20, flexWrap:'wrap', gap:12 }}>
         <div style={{ display:'flex', alignItems:'center', gap:14 }}>
@@ -583,6 +623,7 @@ const RdvReportingTab = () => {
           </div>
         </div>
       )}
+      </>)}{/* V1.10.4.J merge — fin du wrap mainTab === 'reporting' */}
     </div>
   );
 };
