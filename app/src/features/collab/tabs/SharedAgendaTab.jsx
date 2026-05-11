@@ -502,6 +502,187 @@ const MonthGrid = ({ bookings, refDateIso, onClickBooking, onOverflowClick, onFo
   );
 };
 
+// ── V1.10.4.J V1d — Kanban : groupBookings + KanbanCard + KanbanColumn + KanbanView ──
+// Lecture seule, aucun drag&drop, aucune mutation DB. 4 axes : receiver/reporting/stage/sender.
+
+const KANBAN_AXIS_META = {
+  receiver:  { label: 'Receveur',  icon: 'user-check',  hint: 'Charge par collaborateur destinataire' },
+  reporting: { label: 'Reporting', icon: 'bar-chart-2', hint: 'Backlog par statut de reporting' },
+  stage:     { label: 'Pipeline',  icon: 'layers',      hint: 'Distribution par stage pipeline du contact' },
+  sender:    { label: 'Émetteur',  icon: 'send',        hint: 'Distribution par collaborateur émetteur' },
+};
+
+// Groupe les bookings selon l'axe choisi. Retourne Array<{key, label, color, items}> trié par taille DESC.
+const groupBookingsByAxis = (bookings, axis, resolvers) => {
+  const { collabName, collabColor, resolveStageMeta } = resolvers;
+  const groups = new Map();
+  for (const b of (bookings || [])) {
+    let key, label, color;
+    if (axis === 'receiver') {
+      key = b.agendaOwnerId || '_unknown';
+      label = collabName(b.agendaOwnerId) || 'Sans receveur';
+      color = collabColor(b.agendaOwnerId) || '#64748B';
+    } else if (axis === 'reporting') {
+      key = b.bookingReportingStatus || 'pending';
+      const meta = REPORTING_STATUS_META[key] || REPORTING_STATUS_META.pending;
+      label = meta.short;
+      color = meta.color;
+    } else if (axis === 'stage') {
+      key = b.receiverPipelineStage || '_unknown';
+      const meta = resolveStageMeta(b.receiverPipelineStage);
+      label = meta ? meta.label : (b.receiverPipelineStage || '—');
+      color = meta ? meta.color : '#64748B';
+    } else if (axis === 'sender') {
+      key = b.bookedByCollaboratorId || '_unknown';
+      label = collabName(b.bookedByCollaboratorId) || 'Sans émetteur';
+      color = collabColor(b.bookedByCollaboratorId) || '#64748B';
+    }
+    if (!groups.has(key)) groups.set(key, { key, label, color, items: [] });
+    groups.get(key).items.push(b);
+  }
+  // Sort intra-col : RDV à venir d'abord (date+time croissant)
+  for (const g of groups.values()) {
+    g.items.sort((a, b) => (a.date + ' ' + (a.time || '')).localeCompare(b.date + ' ' + (b.time || '')));
+  }
+  // Tri colonnes : taille DESC pour mettre les colonnes pleines en premier
+  return Array.from(groups.values()).sort((a, b) => b.items.length - a.items.length);
+};
+
+const KanbanCard = ({ b, onClick, resolveStageMeta, collabName, collabColor }) => {
+  const isCancelled = b.status === 'cancelled';
+  const stageMeta = resolveStageMeta(b.receiverPipelineStage);
+  const reportingMeta = REPORTING_STATUS_META[b.bookingReportingStatus || 'pending'] || REPORTING_STATUS_META.pending;
+  const receiverColor = collabColor(b.agendaOwnerId);
+  const senderColor = collabColor(b.bookedByCollaboratorId);
+  const ctName = b.contactName || b.visitorName || 'Sans nom';
+  return (
+    <div
+      onClick={() => onClick && onClick(b)}
+      title={`${ctName}\n${fmtDateTime(b.date, b.time)}\n${collabName(b.bookedByCollaboratorId)} → ${collabName(b.agendaOwnerId)}${stageMeta ? '\n' + stageMeta.label : ''}${isCancelled ? '\n⚠ ANNULÉ' : ''}`}
+      style={{
+        padding: '8px 10px',
+        borderRadius: 8,
+        background: T.surface,
+        borderLeft: `4px solid ${receiverColor}`,
+        border: '1px solid '+T.border,
+        cursor: 'pointer',
+        opacity: isCancelled ? 0.6 : 1,
+        transition: 'all .15s cubic-bezier(0.4,0,0.2,1)',
+        boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+      }}
+      onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+      onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.04)'; e.currentTarget.style.transform = 'translateY(0)'; }}
+    >
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 4, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', textDecoration: isCancelled ? 'line-through' : 'none' }}>
+        {ctName}
+      </div>
+      <div style={{ fontSize: 10, color: T.text2, marginBottom: 5, display:'flex', alignItems:'center', gap:4 }}>
+        <I n="clock" s={10} style={{ color: T.text3 }}/>
+        <span>{fmtDayLabel(b.date)}</span>
+        <span style={{ color:T.text3 }}>·</span>
+        <span style={{ fontWeight:600, color:receiverColor }}>{b.time}</span>
+      </div>
+      <div style={{ fontSize: 10, color: T.text3, marginBottom: 6, display:'flex', alignItems:'center', gap:3 }}>
+        <span style={{ display:'inline-block', width:8, height:8, borderRadius:4, background:senderColor }}/>
+        <span style={{ fontWeight:600, color:T.text2 }}>{collabName(b.bookedByCollaboratorId)}</span>
+        <span style={{ color:T.text3 }}>→</span>
+        <span style={{ display:'inline-block', width:8, height:8, borderRadius:4, background:receiverColor }}/>
+        <span style={{ fontWeight:600, color:T.text2 }}>{collabName(b.agendaOwnerId)}</span>
+      </div>
+      <div style={{ display:'flex', gap:4, flexWrap:'wrap', alignItems:'center' }}>
+        {stageMeta && (
+          <span style={{ fontSize:9, fontWeight:700, padding:'2px 6px', borderRadius:5, background:stageMeta.color+'15', border:'1px solid '+stageMeta.color+'30', color:stageMeta.color, display:'inline-flex', alignItems:'center', gap:3 }}>
+            <span style={{ fontSize:9, lineHeight:1 }}>{stageMeta.emoji}</span> {stageMeta.label}
+          </span>
+        )}
+        <span style={{ fontSize:9, fontWeight:700, padding:'2px 6px', borderRadius:5, background:reportingMeta.color+'15', border:'1px solid '+reportingMeta.color+'30', color:reportingMeta.color, display:'inline-flex', alignItems:'center', gap:3 }}>
+          <span style={{ fontSize:9, lineHeight:1 }}>{reportingMeta.icon}</span> {reportingMeta.short}
+        </span>
+        {isCancelled && (
+          <span style={{ fontSize:9, fontWeight:800, padding:'2px 6px', borderRadius:5, background:'#EF444415', color:'#EF4444', border:'1px solid #EF444430' }}>🚫 ANNULÉ</span>
+        )}
+      </div>
+    </div>
+  );
+};
+
+const KanbanColumn = ({ group, onClickBooking, resolveStageMeta, collabName, collabColor }) => {
+  return (
+    <div style={{ flex: '0 0 280px', width: 280, display:'flex', flexDirection:'column', maxHeight: '70vh' }}>
+      {/* Header colonne */}
+      <div style={{ padding:'10px 12px', background:group.color+'10', borderTop:`3px solid ${group.color}`, borderRadius:'8px 8px 0 0', display:'flex', alignItems:'center', gap:8, position:'sticky', top:0, zIndex:1 }}>
+        <span style={{ fontSize:13, fontWeight:700, color:T.text, flex:1, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{group.label}</span>
+        <span style={{ fontSize:11, fontWeight:800, padding:'2px 8px', borderRadius:10, background:group.color+'25', color:group.color }}>{group.items.length}</span>
+      </div>
+      {/* Cards stack */}
+      <div style={{ display:'flex', flexDirection:'column', gap:6, padding:'8px 6px', overflowY:'auto', flex:1, background:T.bg+'40', borderRadius:'0 0 8px 8px', border:'1px solid '+T.border, borderTop:'none' }}>
+        {group.items.length === 0 ? (
+          <div style={{ padding:'20px 8px', textAlign:'center', fontSize:11, color:T.text3, fontStyle:'italic' }}>Aucun RDV</div>
+        ) : (
+          group.items.map(b => (
+            <KanbanCard key={b.id} b={b} onClick={onClickBooking} resolveStageMeta={resolveStageMeta} collabName={collabName} collabColor={collabColor}/>
+          ))
+        )}
+      </div>
+    </div>
+  );
+};
+
+const KanbanView = ({ bookings, axis, setAxis, onClickBooking, resolveStageMeta, collabName, collabColor }) => {
+  const groups = useMemo(
+    () => groupBookingsByAxis(bookings, axis, { collabName, collabColor, resolveStageMeta }),
+    [bookings, axis, collabName, collabColor, resolveStageMeta]
+  );
+  return (
+    <div style={{ marginBottom:14 }}>
+      {/* Toolbar axes Kanban */}
+      <Card style={{ padding:'10px 14px', marginBottom:10 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:12, flexWrap:'wrap' }}>
+          <div style={{ fontSize:11, color:T.text3, fontWeight:700, textTransform:'uppercase', letterSpacing:0.5 }}>Grouper par</div>
+          <div style={{ display:'flex', gap:3, padding:3, background:T.bg, borderRadius:10, border:'1px solid '+T.border, flexWrap:'wrap' }}>
+            {Object.entries(KANBAN_AXIS_META).map(([id, m]) => {
+              const isActive = axis === id;
+              return (
+                <div key={id} onClick={() => setAxis(id)} title={m.hint} style={{
+                  padding:'5px 13px', borderRadius:7, cursor:'pointer',
+                  background: isActive ? T.surface : 'transparent',
+                  color: isActive ? T.accent : T.text2,
+                  fontSize:12, fontWeight: isActive ? 700 : 500,
+                  display:'inline-flex', alignItems:'center', gap:5,
+                  transition:'all .15s cubic-bezier(0.4,0,0.2,1)',
+                  boxShadow: isActive ? '0 1px 3px rgba(0,0,0,0.08), 0 0 0 1px '+T.accent+'30' : 'none',
+                }}
+                onMouseEnter={e=>{ if (!isActive) e.currentTarget.style.color = T.text; }}
+                onMouseLeave={e=>{ if (!isActive) e.currentTarget.style.color = T.text2; }}
+                >
+                  <I n={m.icon} s={12}/> {m.label}
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ marginLeft:'auto', fontSize:11, color:T.text3 }}>
+            {groups.length} colonne{groups.length>1?'s':''} · {bookings.length} RDV
+          </div>
+        </div>
+      </Card>
+
+      {/* Container colonnes scroll horizontal */}
+      {groups.length === 0 ? (
+        <Card style={{ padding:30, textAlign:'center' }}>
+          <I n="trello" s={32} style={{ color:T.text3, marginBottom:10 }}/>
+          <div style={{ fontSize:13, fontWeight:600, color:T.text2 }}>Aucun RDV à afficher</div>
+        </Card>
+      ) : (
+        <div style={{ display:'flex', gap:10, overflowX:'auto', padding:'4px 2px 8px', minHeight:'200px' }}>
+          {groups.map(g => (
+            <KanbanColumn key={g.key} group={g} onClickBooking={onClickBooking} resolveStageMeta={resolveStageMeta} collabName={collabName} collabColor={collabColor}/>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 // Multi-select dropdown (compact)
 const MultiSelect = ({ label, options, selectedIds, onChange, disabled = false }) => {
   const [open, setOpen] = useState(false);
@@ -584,21 +765,27 @@ const SharedAgendaTab = () => {
   const [timelineByContact, setTimelineByContact] = useState({});
   const [timelineLoading, setTimelineLoading] = useState({});
 
-  // ── V1.10.4.J V1b — Grille view state ─────────────────────────────────────
+  // ── V1.10.4.J V1b/V1c/V1d — Grille + Kanban view state ────────────────────
   const _viewStorageKey = `c360-shared-agenda-view-${collab?.id || 'default'}`;
   const [viewType, setViewType] = useState(() => {
-    try { const raw = localStorage.getItem(_viewStorageKey); const p = raw ? JSON.parse(raw) : null; return p?.viewType === 'grid' ? 'grid' : 'list'; } catch { return 'list'; }
+    // V1.10.4.J V1d — accepte list / grid / kanban
+    try { const raw = localStorage.getItem(_viewStorageKey); const p = raw ? JSON.parse(raw) : null; const v = p?.viewType; return ['list','grid','kanban'].includes(v) ? v : 'list'; } catch { return 'list'; }
   });
   const [gridView, setGridView] = useState(() => {
     // V1.10.4.J V1c — accepte day/week/month/custom (sécurité fallback day)
     try { const raw = localStorage.getItem(_viewStorageKey); const p = raw ? JSON.parse(raw) : null; const v = p?.gridView; return ['day','week','month','custom'].includes(v) ? v : 'day'; } catch { return 'day'; }
   });
+  // V1.10.4.J V1d — Kanban axis : receiver | reporting | stage | sender. Défaut : reporting si admin/supra, receiver sinon.
+  const [kanbanAxis, setKanbanAxis] = useState(() => {
+    try { const raw = localStorage.getItem(_viewStorageKey); const p = raw ? JSON.parse(raw) : null; const v = p?.kanbanAxis; if (['receiver','reporting','stage','sender'].includes(v)) return v; } catch {}
+    return isAdmin ? 'reporting' : 'receiver';
+  });
   const [gridRefDate, setGridRefDate] = useState(() => toIso(new Date()));
   const [slotOverflowModal, setSlotOverflowModal] = useState(null); // { dateIso, hour, bookings }
-  // Persistence viewType + gridView par collab (localStorage)
+  // Persistence viewType + gridView + kanbanAxis par collab (localStorage)
   useEffect(() => {
-    try { localStorage.setItem(_viewStorageKey, JSON.stringify({ viewType, gridView })); } catch {}
-  }, [viewType, gridView, _viewStorageKey]);
+    try { localStorage.setItem(_viewStorageKey, JSON.stringify({ viewType, gridView, kanbanAxis })); } catch {}
+  }, [viewType, gridView, kanbanAxis, _viewStorageKey]);
   // Mobile detection : auto-bascule Liste si < 768 px (vue Grille non adaptée)
   const [isMobile, setIsMobile] = useState(() => (typeof window !== 'undefined' ? window.innerWidth < 768 : false));
   useEffect(() => {
@@ -611,6 +798,8 @@ const SharedAgendaTab = () => {
   useEffect(() => {
     if (isMobile && (gridView === 'month' || gridView === 'custom')) setGridView('day');
   }, [isMobile, gridView]);
+  // V1.10.4.J V1d — Garde-fou mobile : Kanban réservé desktop, auto-fallback list géré par effectiveViewType
+  // (pas besoin d'effect supplémentaire, viewType reste stocké mais effective force list sur mobile)
   // V1.10.4.J V1c — Auto-extend dateFrom/dateTo si navigation grille sort de la plage.
   // Adapté pour Jour / Semaine / Mois (Personnalisé pilote directement dateFrom/dateTo).
   useEffect(() => {
@@ -805,12 +994,13 @@ const SharedAgendaTab = () => {
             Inclure annulés
           </label>
 
-          {/* V1.10.4.J V1b — Toggle Liste / Grille (désactivé si mobile = auto Liste) */}
+          {/* V1.10.4.J V1b/V1d — Toggle Liste / Grille / Kanban (désactivé si mobile = auto Liste) */}
           {!isMobile && (
             <div style={{ marginLeft:'auto', display:'flex', gap:4, padding:3, background:T.bg, borderRadius:10, border:'1px solid '+T.border }}>
               {[
                 { id:'list', label:'Liste', icon:'list' },
                 { id:'grid', label:'Grille', icon:'grid' },
+                { id:'kanban', label:'Kanban', icon:'trello' },
               ].map(v => (
                 <div key={v.id} onClick={() => setViewType(v.id)} style={{
                   padding:'5px 12px', borderRadius:7, cursor:'pointer',
@@ -1176,6 +1366,76 @@ const SharedAgendaTab = () => {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* V1.10.4.J V1d — Vue Kanban lecture seule (4 axes : Receveur/Reporting/Stage/Sender) ── */}
+      {!loading && bookings.length > 0 && effectiveViewType === 'kanban' && (
+        <div style={{ marginBottom:14 }}>
+          <KanbanView
+            bookings={bookings}
+            axis={kanbanAxis}
+            setAxis={setKanbanAxis}
+            onClickBooking={toggleAccordion}
+            resolveStageMeta={resolveStageMeta}
+            collabName={collabName}
+            collabColor={collabColor}
+          />
+
+          {/* Accordion inline du booking sélectionné (sous le Kanban) — mirror branche Grille */}
+          {expandedId && (() => {
+            const b = bookings.find(x => x.id === expandedId);
+            if (!b) return null;
+            const stageMeta = resolveStageMeta(b.receiverPipelineStage);
+            const reportingStatus = b.bookingReportingStatus || '';
+            const tlEvents = (b.contactId && timelineByContact[b.contactId]) || [];
+            const tlLoading = b.contactId && timelineLoading[b.contactId];
+            const isCancelled = b.status === 'cancelled';
+            return (
+              <Card style={{ marginTop:12, padding:0, overflow:'hidden', borderLeft:`4px solid ${collabColor(b.agendaOwnerId)}` }}>
+                <div style={{ padding:'12px 16px', display:'flex', alignItems:'center', gap:10, borderBottom:'1px solid '+T.border, background:T.accentBg+'40' }}>
+                  <I n="calendar" s={18} style={{ color:collabColor(b.agendaOwnerId) }}/>
+                  <span style={{ fontSize:14, fontWeight:700, color:T.text, flex:1 }}>{b.contactName || b.visitorName || 'Sans nom'} · {fmtDateTime(b.date, b.time)}</span>
+                  <div onClick={() => setExpandedId(null)} title="Fermer" style={{ padding:4, cursor:'pointer', color:T.text3 }}><I n="x" s={16}/></div>
+                </div>
+                <div style={{ padding:'14px 18px' }}>
+                  <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:'8px 18px', marginBottom:14 }}>
+                    <DetailRow label="Contact" value={b.contactName || b.visitorName}/>
+                    <DetailRow label="Email" value={b.contactEmail || b.visitorEmail}/>
+                    <DetailRow label="Téléphone" value={b.contactPhone || b.visitorPhone}/>
+                    <DetailRow label="Sender" value={collabName(b.bookedByCollaboratorId)}/>
+                    <DetailRow label="Receiver" value={collabName(b.agendaOwnerId)}/>
+                    <DetailRow label="Date RDV" value={fmtDateTime(b.date, b.time)}/>
+                    <DetailRow label="Créé le" value={b.createdAt ? fmtDate(b.createdAt) : '—'}/>
+                    <DetailRow label="Statut RDV" value={isCancelled ? '🚫 Annulé' : '✅ Confirmé'}/>
+                    <DetailRow label="Statut reporting" value={REPORTING_STATUS_META[reportingStatus || 'pending']?.short || '—'}/>
+                    <DetailRow label="Statut pipeline" value={stageMeta ? stageMeta.label : '—'}/>
+                    {b.bookingReportedBy && b.bookingReportedAt && (
+                      <DetailRow label="Reporté par" value={collabName(b.bookingReportedBy) + ' (' + fmtDate(b.bookingReportedAt) + ')'}/>
+                    )}
+                  </div>
+                  {b.bookingReportingNote && (
+                    <div style={{ marginBottom:12, padding:'8px 10px', borderRadius:8, background:T.bg, border:'1px solid '+T.border, fontSize:12, color:T.text2 }}>
+                      <span style={{ fontSize:10, fontWeight:700, color:T.text3, marginRight:6 }}>Note reporting :</span>
+                      {b.bookingReportingNote}
+                    </div>
+                  )}
+                  <div style={{ fontSize:11, fontWeight:800, color:T.text2, textTransform:'uppercase', letterSpacing:0.5, marginBottom:8, display:'flex', alignItems:'center', gap:6 }}>
+                    <I n="clock" s={12}/> Timeline ({tlEvents.length} derniers événements)
+                  </div>
+                  {tlLoading && <div style={{ padding:'12px 0', textAlign:'center' }}><Spinner size={16}/></div>}
+                  {!tlLoading && tlEvents.length === 0 && (
+                    <div style={{ fontSize:12, color:T.text3, fontStyle:'italic', padding:'8px 0' }}>Aucun événement historique.</div>
+                  )}
+                  {!tlLoading && tlEvents.length > 0 && (
+                    <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                      {tlEvents.map((ev, idx) => <TimelineRow key={(ev.id || idx) + ':' + ev.kind} ev={ev} resolveStageMeta={resolveStageMeta}/>)}
+                    </div>
+                  )}
+                </div>
+              </Card>
+            );
+          })()}
         </div>
       )}
 
