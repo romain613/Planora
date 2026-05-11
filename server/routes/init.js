@@ -87,7 +87,9 @@ router.get('/', (req, res) => {
     // (fragile). Compatible 100% (champs existants préservés).
     const collaborators = _filteredCollabs.map(c => ({
       ...c,
-      _googleConnected: !!(c.google_tokens_json && c.google_tokens_json.length > 5 && c.google_email),
+      // V1.10.4.F.1.fix — parseRow() renomme google_tokens_json → google_tokens (suppression du suffixe _json).
+      // Donc côté post-parseRow on lit c.google_tokens (pas c.google_tokens_json qui est undefined).
+      _googleConnected: !!(c.google_tokens && c.google_email),
     }));
     // R3 — filtre orphelins : un calendar sans aucun collaborateur assigné est invisibilisé
     const isCalendarAssigned = (cal) => {
