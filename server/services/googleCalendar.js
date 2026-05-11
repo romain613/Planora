@@ -132,6 +132,23 @@ export async function createEvent(collaboratorId, bookingData, calendarData, opt
       requestBody: event,
       ...(isMeet ? { conferenceDataVersion: 1 } : {}),
     });
+    // V1.10.4.F.1.debug — diagnostic temporaire Meet (à retirer après validation MH).
+    if (isMeet) {
+      try {
+        console.log('[GOOGLE MEET INSERT RESPONSE]', {
+          hasHangoutLink: !!res?.data?.hangoutLink,
+          hangoutLink: res?.data?.hangoutLink || null,
+          conferenceData: res?.data?.conferenceData || null,
+          conferenceSolution: res?.data?.conferenceData?.conferenceSolution || null,
+          entryPoints: res?.data?.conferenceData?.entryPoints || null,
+          createRequestStatus: res?.data?.conferenceData?.createRequest?.status || null,
+          eventType: res?.data?.eventType || null,
+          status: res?.status,
+          id: res?.data?.id,
+          requestBodyHasConferenceData: !!event.conferenceData,
+        });
+      } catch (logErr) { console.error('[GOOGLE MEET DEBUG LOG ERR]', logErr.message); }
+    }
     const meetLink = res.data.hangoutLink || null;
     if (meetLink) console.log(`\x1b[32m[GOOGLE CAL]\x1b[0m Meet link created: ${meetLink}`);
     console.log(`\x1b[32m[GOOGLE CAL]\x1b[0m Event created: ${res.data.id}`);
