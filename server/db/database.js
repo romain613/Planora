@@ -416,6 +416,10 @@ try { db.exec("CREATE INDEX IF NOT EXISTS idx_collab_outlook_consent ON collabor
 try { db.exec('ALTER TABLE bookings ADD COLUMN outlookEventId TEXT'); } catch {}
 // V3.x.9 — Titre custom RDV (subject Outlook + display grille). Fallback : "{visitorName} — {time}".
 try { db.exec("ALTER TABLE bookings ADD COLUMN title TEXT DEFAULT ''"); } catch {}
+// V1.10.4.I — Date de création du booking (reporting "Créé le", timeline). Idempotent.
+// Backfill rows historiques via script ops/backfill-bookings-createdAt.mjs (parsing id timestamp).
+try { db.exec("ALTER TABLE bookings ADD COLUMN createdAt TEXT DEFAULT ''"); } catch {}
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_bookings_createdAt ON bookings(createdAt)"); } catch {}
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS outlook_events (

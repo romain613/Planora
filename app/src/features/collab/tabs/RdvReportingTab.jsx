@@ -1,4 +1,5 @@
 // V1.10.3 Phase 3 — Reporting Collab RDV (frontend)
+// V1.10.4.I — Accordion détaillé + Créé le + Statut pipeline actuel + Timeline 50 events.
 // Onglet collab : 2 sous-vues "Reçus" / "Transmis" + modal "Faire le reporting"
 // Dépendances : api (HTTP), T theme, I/Btn/Card/Spinner (UI), useCollabContext (collab+showNotif)
 
@@ -20,6 +21,37 @@ const STATUS_META = {
   cancelled: { label: 'Annulé',               short: 'Annulé',     color: '#94A3B8', icon: '⚪' },
   follow_up: { label: 'À suivre',             short: 'À suivre',   color: '#0EA5E9', icon: '🔵' },
   other:     { label: 'Autre',                short: 'Autre',      color: '#64748B', icon: '⚫' },
+};
+
+// V1.10.4.I — Labels pipeline_stage par défaut (fallback si PIPELINE_STAGES context absent).
+const DEFAULT_STAGE_LABELS = {
+  nouveau:        { label: 'Nouveau',        color: '#94A3B8', emoji: '✨' },
+  contacte:       { label: 'Contacté',       color: '#0EA5E9', emoji: '📞' },
+  qualifie:       { label: 'Qualifié',       color: '#F59E0B', emoji: '🔥' },
+  rdv_programme:  { label: 'RDV programmé',  color: '#2563EB', emoji: '📅' },
+  nrp:            { label: 'NRP',            color: '#EF4444', emoji: '❌' },
+  client_valide:  { label: 'Client validé',  color: '#22C55E', emoji: '🟢' },
+  perdu:          { label: 'Perdu',          color: '#7F1D1D', emoji: '🔴' },
+};
+
+// V1.10.4.I — Icones + libellés timeline par kind d'événement.
+const TIMELINE_KIND_META = {
+  pipeline_stage:   { icon: '📋', label: 'Stage',    color: '#2563EB' },
+  audit:            { icon: '🔍', label: 'Action',   color: '#7C3AED' },
+  field_change:     { icon: '✏️', label: 'Champ',    color: '#64748B' },
+  booking_created:  { icon: '📅', label: 'RDV créé', color: '#0EA5E9' },
+  booking_reported: { icon: '✅', label: 'Reporting',color: '#22C55E' },
+  reminder:         { icon: '📧', label: 'Rappel',   color: '#F59E0B' },
+  call:             { icon: '📞', label: 'Appel',    color: '#16A34A' },
+};
+
+const fmtDate = (iso) => {
+  if (!iso) return '—';
+  try {
+    const d = new Date(iso);
+    if (isNaN(d.getTime())) return iso;
+    return d.toLocaleDateString('fr-FR', { day:'numeric', month:'short', year:'numeric' }) + ' à ' + d.toLocaleTimeString('fr-FR', { hour:'2-digit', minute:'2-digit' });
+  } catch { return iso; }
 };
 
 const fmtDateTime = (date, time) => {
@@ -45,10 +77,59 @@ const StatusBadge = ({ status }) => {
   );
 };
 
+// V1.10.4.I — DetailRow accordion : label + value 2 lignes compact.
+const DetailRow = ({ label, value }) => (
+  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+    <span style={{ fontSize: 9, fontWeight: 700, color: '#9C998F', textTransform: 'uppercase', letterSpacing: 0.5 }}>{label}</span>
+    <span style={{ fontSize: 13, fontWeight: 600, color: '#1A1917', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{value || '—'}</span>
+  </div>
+);
+
+// V1.10.4.I — TimelineRow : ligne d'événement compacte avec icône + collab + détail + date.
+const TimelineRow = ({ ev, resolveStageMeta, collabName }) => {
+  const meta = TIMELINE_KIND_META[ev.kind] || { icon: '•', label: ev.kind, color: '#64748B' };
+  let summary = '';
+  if (ev.kind === 'pipeline_stage') {
+    const fromMeta = ev.fromValue ? resolveStageMeta(ev.fromValue) : null;
+    const toMeta = ev.toValue ? resolveStageMeta(ev.toValue) : null;
+    summary = (fromMeta ? fromMeta.label : (ev.fromValue || '—')) + ' → ' + (toMeta ? toMeta.label : (ev.toValue || '—'));
+    if (ev.detail) summary += ' (' + ev.detail + ')';
+  } else if (ev.kind === 'audit') {
+    summary = ev.action + (ev.detail ? ' — ' + ev.detail : '');
+  } else if (ev.kind === 'field_change') {
+    summary = ev.field + ' : ' + (ev.fromValue || '—') + ' → ' + (ev.toValue || '—');
+  } else if (ev.kind === 'booking_created') {
+    summary = 'RDV ' + (ev.bookingType || 'external') + ' pour le ' + (ev.bookingDate || '?') + ' à ' + (ev.bookingTime || '?');
+    if (ev.agendaOwnerName) summary += ' (' + ev.agendaOwnerName + ')';
+    if (ev.status === 'cancelled') summary += ' [annulé]';
+  } else if (ev.kind === 'booking_reported') {
+    summary = 'Reporting ' + (ev.reportingStatus || 'pending') + (ev.note ? ' — ' + ev.note : '');
+  } else if (ev.kind === 'reminder') {
+    summary = 'Rappel ' + (ev.reminderType || '') + ' via ' + (ev.channel || 'email');
+  } else if (ev.kind === 'call') {
+    summary = (ev.direction || 'call') + ' · ' + (ev.status || '') + (ev.duration ? ' (' + ev.duration + 's)' : '');
+  }
+  return (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '6px 0', borderBottom: '1px dashed #E5E2DD' }}>
+      <span style={{ fontSize: 14, flexShrink: 0, lineHeight: 1.4 }}>{meta.icon}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 12, color: '#1A1917', lineHeight: 1.4 }}>
+          <span style={{ fontWeight: 700, color: meta.color, marginRight: 6 }}>{meta.label}</span>
+          {summary}
+        </div>
+        <div style={{ fontSize: 10, color: '#9C998F', marginTop: 1, display: 'flex', alignItems: 'center', gap: 6 }}>
+          {ev.userName && <span><strong>{ev.userName}</strong></span>}
+          <span>{fmtDate(ev.createdAt)}</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ── Composant principal ─────────────────────────────────────────────────────
 const RdvReportingTab = () => {
   const ctx = useCollabContext();
-  const { collab, contacts, collabs, showNotif } = ctx;
+  const { collab, contacts, collabs, PIPELINE_STAGES, showNotif } = ctx;
   const allCollabs = (collabs && collabs.length) ? collabs : [];
 
   const [subTab, setSubTab] = useState('received'); // 'received' | 'sent'
@@ -58,11 +139,51 @@ const RdvReportingTab = () => {
   const [sent, setSent] = useState([]);
   const [errMsg, setErrMsg] = useState('');
 
+  // V1.10.4.I — Accordion + timeline state
+  const [expandedId, setExpandedId] = useState(null);
+  const [timelineByContact, setTimelineByContact] = useState({});
+  const [timelineLoading, setTimelineLoading] = useState({});
+
   // Modal reporting
   const [reportingBooking, setReportingBooking] = useState(null);
   const [reportStatus, setReportStatus] = useState('validated');
   const [reportNote, setReportNote] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // V1.10.4.I — Resolve pipeline stage meta (label, color, emoji) avec fallback default.
+  const resolveStageMeta = useCallback((stageId) => {
+    if (!stageId) return null;
+    if (DEFAULT_STAGE_LABELS[stageId]) return DEFAULT_STAGE_LABELS[stageId];
+    if (Array.isArray(PIPELINE_STAGES)) {
+      const s = PIPELINE_STAGES.find(x => x?.id === stageId);
+      if (s) return { label: s.label || stageId, color: s.color || '#64748B', emoji: '🏷️' };
+    }
+    return { label: stageId, color: '#64748B', emoji: '🏷️' };
+  }, [PIPELINE_STAGES]);
+
+  // V1.10.4.I — Toggle accordion + fetch timeline si pas en cache.
+  const toggleAccordion = useCallback((booking) => {
+    if (!booking?.id) return;
+    if (expandedId === booking.id) {
+      setExpandedId(null);
+      return;
+    }
+    setExpandedId(booking.id);
+    const ctId = booking.contactId;
+    if (!ctId) return;
+    if (timelineByContact[ctId]) return; // déjà en cache
+    setTimelineLoading(prev => ({ ...prev, [ctId]: true }));
+    api('/api/data/contacts/' + encodeURIComponent(ctId) + '/timeline?limit=50')
+      .then(data => {
+        if (data && Array.isArray(data.events)) {
+          setTimelineByContact(prev => ({ ...prev, [ctId]: data.events }));
+        } else {
+          setTimelineByContact(prev => ({ ...prev, [ctId]: [] }));
+        }
+      })
+      .catch(() => setTimelineByContact(prev => ({ ...prev, [ctId]: [] })))
+      .finally(() => setTimelineLoading(prev => ({ ...prev, [ctId]: false })));
+  }, [expandedId, timelineByContact]);
 
   const fetchReceived = useCallback(async () => {
     setLoadingReceived(true);
@@ -249,9 +370,19 @@ const RdvReportingTab = () => {
               && b.bookedByCollaboratorId !== collab.id;
             const reporterId = b.bookingReportedBy || '';
             const reportedAt = b.bookingReportedAt || '';
+            // V1.10.4.I — Pipeline stage meta + accordion state
+            const isExpanded = expandedId === b.id;
+            const stageMeta = resolveStageMeta(b.receiverPipelineStage);
+            const tlEvents = (b.contactId && timelineByContact[b.contactId]) || [];
+            const tlLoading = b.contactId && timelineLoading[b.contactId];
             return (
-              <Card key={b.id} style={{ padding:14 }}>
-                <div style={{ display:'flex', alignItems:'flex-start', gap:14, flexWrap:'wrap' }}>
+              <Card key={b.id} style={{ padding:0, overflow:'hidden' }}>
+                {/* ── Ligne principale cliquable (toggle accordion) ───────────── */}
+                <div
+                  onClick={() => toggleAccordion(b)}
+                  style={{ display:'flex', alignItems:'flex-start', gap:14, flexWrap:'wrap', padding:14, cursor:'pointer', background: isExpanded ? T.accentBg + '40' : 'transparent', transition:'background .15s' }}
+                  title={isExpanded ? 'Fermer le détail' : 'Voir le détail + timeline'}
+                >
                   {/* Avatar */}
                   <div style={{ width:42, height:42, borderRadius:14, background:T.accentBg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                     <I n="calendar" s={18} style={{ color:T.accent }}/>
@@ -274,6 +405,12 @@ const RdvReportingTab = () => {
                         </span>
                       )}
                       {status ? <StatusBadge status={status}/> : <StatusBadge status="pending"/>}
+                      {/* V1.10.4.I — Badge "Statut actuel" (pipeline_stage receveur) */}
+                      {stageMeta && (
+                        <span title={`Statut actuel du contact : ${stageMeta.label}`} style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:10, background:stageMeta.color+'15', border:'1px solid '+stageMeta.color+'40', color:stageMeta.color, display:'inline-flex', alignItems:'center', gap:4 }}>
+                          <span style={{ fontSize:11, lineHeight:1 }}>{stageMeta.emoji}</span> {stageMeta.label}
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize:12, color:T.text2, display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
                       <I n="clock" s={11} style={{ color:T.text3 }}/>
@@ -284,6 +421,17 @@ const RdvReportingTab = () => {
                         <span style={{ color:T.text3 }}>{peerLabel}</span>
                         <span style={{ fontWeight:600 }}>{collabName(peerId)}</span>
                       </span>
+                      {/* V1.10.4.I — "Créé le" */}
+                      {b.createdAt && (
+                        <>
+                          <span style={{ color:T.text3 }}>·</span>
+                          <span style={{ display:'inline-flex', alignItems:'center', gap:4 }} title="Date de création du RDV">
+                            <I n="plus-circle" s={11} style={{ color:T.text3 }}/>
+                            <span style={{ color:T.text3 }}>Créé le</span>
+                            <span style={{ fontWeight:600 }}>{fmtDate(b.createdAt)}</span>
+                          </span>
+                        </>
+                      )}
                     </div>
                     {/* Note de reporting si déjà fait */}
                     {b.bookingReportingNote && (
@@ -301,11 +449,50 @@ const RdvReportingTab = () => {
                   </div>
                   {/* CTA reporting (Reçus uniquement, si pas encore rapporté) */}
                   {canReport && (
-                    <Btn primary onClick={()=>openReporting(b)} style={{ flexShrink:0 }}>
+                    <Btn primary onClick={(e)=>{ e.stopPropagation(); openReporting(b); }} style={{ flexShrink:0 }}>
                       <I n="check-square" s={13}/> Faire le reporting
                     </Btn>
                   )}
+                  {/* V1.10.4.I — Chevron expand/collapse */}
+                  <div style={{ flexShrink:0, alignSelf:'center', color:T.text3 }}>
+                    <I n={isExpanded ? 'chevron-up' : 'chevron-down'} s={16}/>
+                  </div>
                 </div>
+
+                {/* V1.10.4.I — Accordion section (Détails + Timeline) ─────────── */}
+                {isExpanded && (
+                  <div style={{ borderTop:'1px solid '+T.border, background:T.bg, padding:'14px 18px' }}>
+                    {/* Détails enrichis */}
+                    <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(220px, 1fr))', gap:'8px 18px', marginBottom:14 }}>
+                      <DetailRow label="Sender" value={collabName(b.bookedByCollaboratorId)}/>
+                      <DetailRow label="Receiver" value={collabName(b.agendaOwnerId)}/>
+                      <DetailRow label="Date RDV" value={fmtDateTime(b.date, b.time)}/>
+                      <DetailRow label="Créé le" value={b.createdAt ? fmtDate(b.createdAt) : '—'}/>
+                      <DetailRow label="Statut reporting" value={STATUS_META[status || 'pending']?.label || status || 'En attente'}/>
+                      <DetailRow label="Statut pipeline actuel" value={stageMeta ? stageMeta.label : '—'}/>
+                      {b.contactEmail && <DetailRow label="Email" value={b.contactEmail}/>}
+                      {b.contactPhone && <DetailRow label="Téléphone" value={b.contactPhone}/>}
+                      {b.contactNextActionLabel && <DetailRow label="Prochaine action" value={b.contactNextActionLabel + (b.contactNextActionDate ? ' (' + b.contactNextActionDate + ')' : '')}/>}
+                      {b.contactLastActivityAt && <DetailRow label="Dernière activité" value={fmtDate(b.contactLastActivityAt)}/>}
+                    </div>
+
+                    {/* Timeline */}
+                    <div style={{ marginTop:8 }}>
+                      <div style={{ fontSize:11, fontWeight:800, color:T.text2, textTransform:'uppercase', letterSpacing:0.5, marginBottom:8, display:'flex', alignItems:'center', gap:6 }}>
+                        <I n="clock" s={12}/> Timeline ({tlEvents.length} derniers événements)
+                      </div>
+                      {tlLoading && <div style={{ padding:'12px 0', textAlign:'center' }}><Spinner size={16}/></div>}
+                      {!tlLoading && tlEvents.length === 0 && (
+                        <div style={{ fontSize:12, color:T.text3, fontStyle:'italic', padding:'8px 0' }}>Aucun événement historique.</div>
+                      )}
+                      {!tlLoading && tlEvents.length > 0 && (
+                        <div style={{ display:'flex', flexDirection:'column', gap:4 }}>
+                          {tlEvents.map((ev, idx) => <TimelineRow key={(ev.id || idx) + ':' + ev.kind} ev={ev} resolveStageMeta={resolveStageMeta} collabName={collabName}/>)}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </Card>
             );
           })}

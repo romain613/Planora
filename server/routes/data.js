@@ -1984,4 +1984,180 @@ router.delete('/pipeline-automations/:id', requireAuth, (req, res) => {
   }
 });
 
+// V1.10.4.I — GET /api/data/contacts/:id/timeline
+// Timeline V1 lecture seule : 50 derniers événements agrégés depuis tables existantes
+// (pipeline_history + audit_logs + entity_history + reminder_logs + call_logs + bookings).
+// Pas de nouvelle table. Aucun write. Auth = collab avec visibilité contact OU admin/supra.
+router.get('/contacts/:id/timeline', requireAuth, enforceCompany, (req, res) => {
+  try {
+    const contactId = req.params.id;
+    const limit = Math.min(Number(req.query.limit) || 50, 200);
+    const companyId = req.auth?.companyId || req.companyId;
+    const cid = req.auth?.collaboratorId || '';
+    const isAdmin = req.auth?.role === 'admin' || req.auth?.isSupra;
+
+    // Ownership : récupère le contact + check visibilité (mirror isContactInSuiviForCollab)
+    const contact = db.prepare('SELECT id, companyId, assignedTo, shared_with_json FROM contacts WHERE id = ?').get(contactId);
+    if (!contact) return res.status(404).json({ error: 'Contact introuvable' });
+    if (!req.auth.isSupra && contact.companyId !== companyId) return res.status(403).json({ error: 'Accès interdit' });
+
+    if (!isAdmin) {
+      let shared = [];
+      try { shared = JSON.parse(contact.shared_with_json || '[]'); } catch {}
+      const isOwner = contact.assignedTo === cid;
+      const isShared = shared.includes(cid);
+      const hasTransferRdv = db.prepare(
+        `SELECT 1 FROM bookings WHERE contactId = ? AND bookingType IN ('share_transfer','transfer','internal')
+         AND (bookedByCollaboratorId = ? OR agendaOwnerId = ?) AND bookedByCollaboratorId != agendaOwnerId LIMIT 1`
+      ).get(contactId, cid, cid);
+      if (!isOwner && !isShared && !hasTransferRdv) {
+        return res.status(403).json({ error: 'Accès interdit — contact hors périmètre' });
+      }
+    }
+
+    // Cache collaborateurs (name lookup pour userId résolution)
+    const _allCollabs = db.prepare('SELECT id, name FROM collaborators WHERE companyId = ?').all(companyId);
+    const _collabName = new Map(_allCollabs.map(c => [c.id, c.name]));
+    const _resolveName = (userId, fallback) => {
+      if (fallback && fallback !== '') return fallback;
+      if (userId && _collabName.has(userId)) return _collabName.get(userId);
+      return '';
+    };
+
+    const events = [];
+
+    // 1) pipeline_history — transitions stage
+    try {
+      const ph = db.prepare(
+        `SELECT id, fromStage, toStage, userId, userName, note, createdAt
+         FROM pipeline_history WHERE contactId = ? ORDER BY createdAt DESC LIMIT ?`
+      ).all(contactId, limit);
+      for (const r of ph) events.push({
+        kind: 'pipeline_stage',
+        id: r.id,
+        userId: r.userId || '',
+        userName: _resolveName(r.userId, r.userName),
+        fromValue: r.fromStage || '',
+        toValue: r.toStage || '',
+        detail: r.note || '',
+        createdAt: r.createdAt,
+      });
+    } catch {}
+
+    // 2) audit_logs — actions génériques (entityType=contact)
+    try {
+      const al = db.prepare(
+        `SELECT id, action, userId, userName, detail, createdAt
+         FROM audit_logs WHERE entityType = 'contact' AND entityId = ? ORDER BY createdAt DESC LIMIT ?`
+      ).all(contactId, limit);
+      for (const r of al) events.push({
+        kind: 'audit',
+        id: r.id,
+        userId: r.userId || '',
+        userName: _resolveName(r.userId, r.userName),
+        action: r.action || '',
+        detail: r.detail || '',
+        createdAt: r.createdAt,
+      });
+    } catch {}
+
+    // 3) entity_history — audit cellule (field changes)
+    try {
+      const eh = db.prepare(
+        `SELECT id, field, oldValue, newValue, userId, userName, createdAt
+         FROM entity_history WHERE entityType = 'contact' AND entityId = ? ORDER BY createdAt DESC LIMIT ?`
+      ).all(contactId, limit);
+      for (const r of eh) events.push({
+        kind: 'field_change',
+        id: r.id,
+        userId: r.userId || '',
+        userName: _resolveName(r.userId, r.userName),
+        field: r.field || '',
+        fromValue: r.oldValue || '',
+        toValue: r.newValue || '',
+        createdAt: r.createdAt,
+      });
+    } catch {}
+
+    // 4) bookings — RDV créés / reportés
+    try {
+      const bk = db.prepare(
+        `SELECT id, date, time, duration, status, bookingType, bookedByCollaboratorId, agendaOwnerId,
+                bookingReportingStatus, bookingReportingNote, bookingReportedBy, bookingReportedAt, createdAt
+         FROM bookings WHERE contactId = ? ORDER BY COALESCE(createdAt, '') DESC, date DESC, time DESC LIMIT ?`
+      ).all(contactId, limit);
+      for (const r of bk) {
+        events.push({
+          kind: 'booking_created',
+          id: r.id,
+          userId: r.bookedByCollaboratorId || '',
+          userName: _resolveName(r.bookedByCollaboratorId, ''),
+          bookingDate: r.date,
+          bookingTime: r.time,
+          bookingType: r.bookingType,
+          agendaOwnerId: r.agendaOwnerId,
+          agendaOwnerName: _resolveName(r.agendaOwnerId, ''),
+          status: r.status,
+          createdAt: r.createdAt || '',
+        });
+        if (r.bookingReportedAt) {
+          events.push({
+            kind: 'booking_reported',
+            id: r.id + '_rep',
+            userId: r.bookingReportedBy || '',
+            userName: _resolveName(r.bookingReportedBy, ''),
+            reportingStatus: r.bookingReportingStatus,
+            note: r.bookingReportingNote || '',
+            createdAt: r.bookingReportedAt,
+          });
+        }
+      }
+    } catch {}
+
+    // 5) reminder_logs — emails de rappel envoyés
+    try {
+      const rl = db.prepare(
+        `SELECT rl.id, rl.bookingId, rl.type, rl.channel, rl.sentAt
+         FROM reminder_logs rl JOIN bookings b ON rl.bookingId = b.id
+         WHERE b.contactId = ? ORDER BY rl.sentAt DESC LIMIT ?`
+      ).all(contactId, limit);
+      for (const r of rl) events.push({
+        kind: 'reminder',
+        id: r.id,
+        bookingId: r.bookingId,
+        reminderType: r.type,
+        channel: r.channel,
+        createdAt: r.sentAt,
+      });
+    } catch {}
+
+    // 6) call_logs — appels VoIP du contact
+    try {
+      const cl = db.prepare(
+        `SELECT id, direction, status, duration, collaboratorId, createdAt
+         FROM call_logs WHERE contactId = ? ORDER BY createdAt DESC LIMIT ?`
+      ).all(contactId, limit);
+      for (const r of cl) events.push({
+        kind: 'call',
+        id: r.id,
+        userId: r.collaboratorId || '',
+        userName: _resolveName(r.collaboratorId, ''),
+        direction: r.direction,
+        status: r.status,
+        duration: r.duration,
+        createdAt: r.createdAt,
+      });
+    } catch {}
+
+    // Tri global par createdAt DESC + limite finale
+    events.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+    const sliced = events.slice(0, limit);
+
+    res.json({ contactId, count: sliced.length, total: events.length, events: sliced });
+  } catch (err) {
+    console.error('[TIMELINE ERR]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 export default router;

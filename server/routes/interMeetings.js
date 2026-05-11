@@ -307,17 +307,18 @@ router.post('/book', requireAuth, enforceCompany, (req, res) => {
     const status = executor.autoAcceptMeetings ? 'confirmed' : 'pending';
     const safeBookingType = bookingType === 'transfer' ? 'transfer' : 'internal';
 
+    // V1.10.4.I — Stamp createdAt (reporting "Créé le", timeline). `now` déjà calculé ligne 306.
     db.prepare(`
       INSERT INTO bookings (id, calendarId, collaboratorId, date, time, duration, visitorName, visitorEmail, visitorPhone,
         status, notes, source, contactId, companyId, bookedByCollaboratorId, meetingCollaboratorId, agendaOwnerId,
-        bookingType, transferMode)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        bookingType, transferMode, createdAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       bookingId, finalCalendarId, executorCollaboratorId, date, time, safeDuration,
       contact.name || '', contact.email || '', contact.phone || '',
       status, notes || '', 'inter-collab', contactId, companyId,
       req.auth.collaboratorId, executorCollaboratorId, executorCollaboratorId,
-      safeBookingType, transferMode || ''
+      safeBookingType, transferMode || '', now
     );
 
     // Mettre à jour le contact avec le meeting executor

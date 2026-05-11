@@ -136,14 +136,15 @@ export function sendContactToCollab(db, params) {
       const visitorName = contact.name || '';
       const visitorEmail = contact.email || '';
       const visitorPhone = contact.phone || '';
+      // V1.10.4.I — Stamp createdAt (reporting "Créé le", timeline).
       db.prepare(
         `INSERT INTO bookings (
           id, calendarId, collaboratorId, date, time, duration,
           visitorName, visitorEmail, visitorPhone,
           status, notes, internalNotes,
           source, companyId, contactId,
-          bookedByCollaboratorId, meetingCollaboratorId, agendaOwnerId, bookingType
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?, ?, 'share_transfer', ?, ?, ?, ?, ?, 'share_transfer')`
+          bookedByCollaboratorId, meetingCollaboratorId, agendaOwnerId, bookingType, createdAt
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?, ?, 'share_transfer', ?, ?, ?, ?, ?, 'share_transfer', ?)`
       ).run(
         createdBookingId,
         calendarId,
@@ -160,7 +161,8 @@ export function sendContactToCollab(db, params) {
         contactId,
         actorCollaboratorId,
         targetCollaboratorId,
-        targetCollaboratorId
+        targetCollaboratorId,
+        new Date().toISOString()
       );
 
       // Lien booking ↔ contact (champ spécifique V1 share — pas géré par le helper).

@@ -381,9 +381,10 @@ router.post('/book', async (req, res) => {
     const manageToken = 'mt_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 10);
 
     const bookingDuration = duration || cal.duration;
-    db.prepare(`INSERT INTO bookings (id, calendarId, collaboratorId, companyId, date, time, duration, visitorName, visitorEmail, visitorPhone, status, notes, noShow, source, rating, tags_json, checkedIn, internalNotes, reconfirmed, visitorTimezone, manageToken)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'public', NULL, '[]', 0, ?, 0, ?, ?)`)
-      .run(id, cal.id, collaboratorId || null, cal.companyId, date, time, bookingDuration, visitorName, visitorEmail || '', visitorPhone || '', status, answers ? JSON.stringify(answers) : '', '', visitorTimezone || null, manageToken);
+    // V1.10.4.I — Stamp createdAt (reporting "Créé le", timeline). Colonne additive idempotente.
+    db.prepare(`INSERT INTO bookings (id, calendarId, collaboratorId, companyId, date, time, duration, visitorName, visitorEmail, visitorPhone, status, notes, noShow, source, rating, tags_json, checkedIn, internalNotes, reconfirmed, visitorTimezone, manageToken, createdAt)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'public', NULL, '[]', 0, ?, 0, ?, ?, ?)`)
+      .run(id, cal.id, collaboratorId || null, cal.companyId, date, time, bookingDuration, visitorName, visitorEmail || '', visitorPhone || '', status, answers ? JSON.stringify(answers) : '', '', visitorTimezone || null, manageToken, new Date().toISOString());
 
     // 3. Sync to Google Calendar + generate Meet link FIRST (need meetLink for emails)
     let meetLink = null;

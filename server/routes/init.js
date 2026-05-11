@@ -379,12 +379,14 @@ router.get('/', (req, res) => {
       // Préserve ownership contact (assignedTo) et shared_with (V7 / V1.10.4 P1) inchangés.
       // V1.10.4.A.fix no-op : exclure les bookings revenus chez le sender (self-back après
       // cancel/resume) — ils ne sont pas un vrai RDV transmis et causent visibilité redondante.
+      // V1.10.4.I — filtre status !== 'cancelled' retiré : le sender doit garder visibilité
+      // sur les contacts transmis même si tous les bookings share_transfer sont annulés
+      // (sinon les contacts cancelled-only disparaissent du pipeline du sender).
       const _myTransferRdv = parsedBookings.find(b =>
         b && b.contactId === c.id
         && (b.agendaOwnerId === collabId || b.bookedByCollaboratorId === collabId)
         && ['share_transfer','transfer','internal'].includes(b.bookingType)
-        && b.agendaOwnerId !== b.bookedByCollaboratorId
-        && b.status !== 'cancelled');
+        && b.agendaOwnerId !== b.bookedByCollaboratorId);
       if (_myTransferRdv) return true;
       return false;
     });

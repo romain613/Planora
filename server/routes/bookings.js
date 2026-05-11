@@ -241,6 +241,8 @@ router.post('/', requireAuth, enforceCompany, requirePermission('bookings.create
         : ((b.bookedByCollaboratorId && b.collaboratorId && b.bookedByCollaboratorId !== b.collaboratorId)
             ? 'share_transfer'
             : 'external'),
+      // V1.10.4.I — Stamp createdAt à la création (reporting "Créé le", timeline).
+      createdAt: new Date().toISOString(),
     });
 
     // Sync to Google Calendar + Meet link
@@ -653,11 +655,20 @@ router.get('/reporting', requireAuth, enforceCompany, (req, res) => {
     //                        preserver historique reporting + capacite receiver)
     // V1.12.x.2 — expose 3 champs archive du contact pour badge Reporting frontend
     const targetCol = role === 'received' ? 'agendaOwnerId' : 'bookedByCollaboratorId';
+    // V1.10.4.I — JOIN contacts expose receiverPipelineStage + next_action_label/date + lastActivityAt
+    // pour afficher "Statut actuel" et "Prochaine action" sur chaque card reporting.
     const rows = db.prepare(
       `SELECT b.*,
               ct.archivedAt AS contactArchivedAt,
               ct.archivedBy AS contactArchivedBy,
-              ct.archivedReason AS contactArchivedReason
+              ct.archivedReason AS contactArchivedReason,
+              ct.pipeline_stage AS receiverPipelineStage,
+              ct.next_action_label AS contactNextActionLabel,
+              ct.next_action_date AS contactNextActionDate,
+              ct.lastActivityAt AS contactLastActivityAt,
+              ct.name AS contactName,
+              ct.email AS contactEmail,
+              ct.phone AS contactPhone
        FROM bookings b
        JOIN calendars c ON b.calendarId = c.id
        INNER JOIN contacts ct ON b.contactId = ct.id
