@@ -6842,6 +6842,22 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                 </div>}
                 {_scheduleTargetCollabId!==collab.id && <div style={{marginTop:6,padding:'6px 10px',borderRadius:8,background:'#7C3AED10',border:'1px solid #7C3AED25',fontSize:11,color:'#6D28D9',display:'flex',alignItems:'center',gap:6}}><span>👥</span> Vous prenez ce RDV pour <b>{_scheduleTargetCollab.name||_scheduleTargetCollab.firstName||''}</b> — il apparaîtra dans son agenda</div>}
               </div>}
+              {/* V1.10.4.F.1 Google Meet — checkbox sous Collaborateur, avant Agenda/Date.
+                  Source de vérité unique : _googleConnected booléen calculé /api/init (mirror PublicBooking). */}
+              {(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{})._bookingMode && (()=>{
+                const _pf = (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{});
+                const _targetId = _pf.collaboratorId || collab.id;
+                const _targetCollab = (collabs||[]).find(c => c.id === _targetId);
+                const _googleOn = !!_targetCollab?._googleConnected;
+                // V1.10.4.F.1 DEBUG temporaire — à retirer après validation MH
+                try { console.log('[GOOGLE MEET DEBUG]', { targetId: _targetId, targetCollab: _targetCollab && {id:_targetCollab.id,name:_targetCollab.name,_googleConnected:_targetCollab._googleConnected}, googleConnected: _googleOn, collabId: collab?.id, formCollabId: _pf.collaboratorId }); } catch {}
+                if (!_googleOn) return null;
+                return <label style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:10,background:_pf.createGoogleMeet?'#00897B12':'#f9fafb',border:`1px solid ${_pf.createGoogleMeet?'#00897B':'#e5e7eb'}`,cursor:'pointer',transition:'all .15s'}}>
+                  <input type="checkbox" checked={!!_pf.createGoogleMeet} onChange={e=>(typeof setPhoneScheduleForm==='function'?setPhoneScheduleForm:function(){})(p=>({...p,createGoogleMeet:e.target.checked}))} style={{width:18,height:18,accentColor:'#00897B',cursor:'pointer'}}/>
+                  <span style={{fontSize:13,fontWeight:600,color:_pf.createGoogleMeet?'#00897B':T.text}}>📹 RDV en visio Google Meet</span>
+                  <span style={{fontSize:11,color:T.text3,marginLeft:'auto'}}>Lien généré automatiquement</span>
+                </label>;
+              })()}
               {/* V1.8.2 — Sélecteur Agenda filtré sur le collab cible */}
               {(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{})._bookingMode && _scheduleAvailableCalendars.length>1 && <div>
                 <label style={{fontSize:12,fontWeight:600,color:T.text2,marginBottom:4,display:'block'}}>Agenda</label>
@@ -6988,19 +7004,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                 <summary style={{cursor:'pointer',fontSize:12,fontWeight:600,color:T.text2,padding:'4px 0',userSelect:'none'}}>Notes</summary>
                 <textarea value={(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).notes} onChange={e=>(typeof setPhoneScheduleForm==='function'?setPhoneScheduleForm:function(){})(p=>({...p,notes:e.target.value}))} placeholder="Ajouter une note..." rows={2} style={{width:'100%',padding:'10px 14px',borderRadius:10,border:'1px solid #e5e7eb',background:'#f9fafb',fontSize:13,fontFamily:'inherit',color:'#111',resize:'none',outline:'none',marginTop:6}}/>
               </details>
-              {/* Phase 1 Google Meet — checkbox visible uniquement si target collab a Google Agenda connecté */}
-              {(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{})._bookingMode && (()=>{
-                const _pf = (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{});
-                const _targetId = _pf.collaboratorId || collab.id;
-                const _targetCollab = (collabs||[]).find(c => c.id === _targetId);
-                const _googleOn = !!(_targetCollab?.google_tokens_json && _targetCollab?.google_email);
-                if (!_googleOn) return null;
-                return <label style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:10,background:_pf.createGoogleMeet?'#00897B12':'#f9fafb',border:`1px solid ${_pf.createGoogleMeet?'#00897B':'#e5e7eb'}`,cursor:'pointer',transition:'all .15s'}}>
-                  <input type="checkbox" checked={!!_pf.createGoogleMeet} onChange={e=>(typeof setPhoneScheduleForm==='function'?setPhoneScheduleForm:function(){})(p=>({...p,createGoogleMeet:e.target.checked}))} style={{width:18,height:18,accentColor:'#00897B',cursor:'pointer'}}/>
-                  <span style={{fontSize:13,fontWeight:600,color:_pf.createGoogleMeet?'#00897B':T.text}}>📹 RDV en visio Google Meet</span>
-                  <span style={{fontSize:11,color:T.text3,marginLeft:'auto'}}>Lien généré automatiquement</span>
-                </label>;
-              })()}
+              {/* V1.10.4.F.1 — checkbox Google Meet déplacée sous Collaborateur (cf. plus haut) */}
               {/* V1.8.11 — confirmation email : icône compacte, tooltip descriptif */}
               {(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{})._bookingMode && (()=>{
                 const _pf = (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{});

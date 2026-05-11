@@ -81,7 +81,14 @@ router.get('/', (req, res) => {
     // Wave D — filtre archivés par défaut. Pour vue admin "archivés" : ?includeArchived=1
     const includeArchivedCollabs = req.query.includeArchived === '1' || req.query.includeArchived === 'true';
     const _allCompanyCollabs = getByCompany('collaborators', companyId);
-    const collaborators = includeArchivedCollabs ? _allCompanyCollabs : _allCompanyCollabs.filter(c => !c.archivedAt || c.archivedAt === '');
+    const _filteredCollabs = includeArchivedCollabs ? _allCompanyCollabs : _allCompanyCollabs.filter(c => !c.archivedAt || c.archivedAt === '');
+    // V1.10.4.F.1 — booléen unifié _googleConnected (mirror PublicBooking pattern).
+    // Source de vérité unique côté backend. Frontend ne dépend plus de google_tokens_json
+    // (fragile). Compatible 100% (champs existants préservés).
+    const collaborators = _filteredCollabs.map(c => ({
+      ...c,
+      _googleConnected: !!(c.google_tokens_json && c.google_tokens_json.length > 5 && c.google_email),
+    }));
     // R3 — filtre orphelins : un calendar sans aucun collaborateur assigné est invisibilisé
     const isCalendarAssigned = (cal) => {
       try {

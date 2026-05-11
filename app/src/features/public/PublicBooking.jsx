@@ -376,7 +376,7 @@ const PublicBooking = ({ companySlug, calSlug }) => {
                     {/* Phase 1 Google Meet — checkbox visible uniquement si collab assigné a Google Agenda connecté */}
                     {(()=>{
                       const _assignedCollab = (calData?.collaborators || []).find(c => c.id === selectedSlot?.collaboratorId);
-                      if (!_assignedCollab?._googleConnected) return null;
+                      if (!_assignedCollab?._googleConnected) return null; // V1.10.4.F.1 — flag unifié backend
                       return <label style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", borderRadius:10, background:createGoogleMeet ? "#00897B12" : "#F9F8F4", border:`1px solid ${createGoogleMeet ? "#00897B" : "#E5E2D8"}`, cursor:"pointer", transition:"all .15s" }}>
                         <input type="checkbox" checked={createGoogleMeet} onChange={e=>setCreateGoogleMeet(e.target.checked)} style={{ width:18, height:18, accentColor:"#00897B", cursor:"pointer" }}/>
                         <span style={{ fontSize:13, fontWeight:600, color:createGoogleMeet ? "#00897B" : "#1A1917" }}>📹 RDV en visio Google Meet</span>
