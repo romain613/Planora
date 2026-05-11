@@ -34,10 +34,19 @@ router.get('/calendar/:companySlug/:calSlug', (req, res) => {
     parsed.requireApproval = !!parsed.requireApproval;
 
     // Get collaborators for this calendar (include timezone)
+    // Phase 1 Google Meet (2026-05-11) — _googleConnected booléen exposé pour UI checkbox visio.
+    // Lecture directe colonne google_tokens_json (=non vide => connecté). Pas d'appel API Google.
     const collabIds = parsed.collaborators || [];
-    const collaborators = collabIds.length > 0
-      ? db.prepare(`SELECT id, name, color, timezone FROM collaborators WHERE id IN (${collabIds.map(() => '?').join(',')})`).all(...collabIds)
+    const collaboratorsRaw = collabIds.length > 0
+      ? db.prepare(`SELECT id, name, color, timezone, google_tokens_json, google_email FROM collaborators WHERE id IN (${collabIds.map(() => '?').join(',')})`).all(...collabIds)
       : [];
+    const collaborators = collaboratorsRaw.map(c => ({
+      id: c.id,
+      name: c.name,
+      color: c.color,
+      timezone: c.timezone,
+      _googleConnected: !!(c.google_tokens_json && c.google_tokens_json.length > 5 && c.google_email),
+    }));
 
     // Company timezone + booking window from settings
     const settingsRow = db.prepare('SELECT timezone, maxAdvanceDays FROM settings WHERE companyId = ?').get(company.id);
@@ -384,7 +393,9 @@ router.post('/book', async (req, res) => {
 
     if (collaboratorId && isConnected(collaboratorId)) {
       try {
-        const result = await createEvent(collaboratorId, { date, time, duration: bookingDuration, visitorName, visitorEmail, visitorPhone }, { name: cal.name, location: cal.location || '' });
+        // Phase 1 Google Meet (2026-05-11) — option.createMeet = booléen visiteur (cf. body createGoogleMeet).
+        // Backwards-compat : trigger legacy location="Google Meet" continue de fonctionner.
+        const result = await createEvent(collaboratorId, { date, time, duration: bookingDuration, visitorName, visitorEmail, visitorPhone }, { name: cal.name, location: cal.location || '' }, { createMeet: !!req.body.createGoogleMeet });
         if (result?.googleEventId) {
           db.prepare('UPDATE bookings SET googleEventId = ? WHERE id = ?').run(result.googleEventId, id);
         }

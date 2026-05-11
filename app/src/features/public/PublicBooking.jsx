@@ -15,6 +15,7 @@ const PublicBooking = ({ companySlug, calSlug }) => {
   const [selectedSlot, setSelectedSlot] = useState(null);
   const [step, setStep] = useState("date"); // date → time → form → done
   const [form, setForm] = useState({ name:"", email:"", phone:"" });
+  const [createGoogleMeet, setCreateGoogleMeet] = useState(false); // Phase 1 Google Meet
   const [answers, setAnswers] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState(null);
@@ -93,6 +94,7 @@ const PublicBooking = ({ companySlug, calSlug }) => {
         collaboratorId: selectedSlot.collaboratorId,
         answers,
         visitorTimezone: visitorTz,
+        createGoogleMeet: !!createGoogleMeet, // Phase 1 Google Meet
       },
     });
     setResult(res);
@@ -370,6 +372,17 @@ const PublicBooking = ({ companySlug, calSlug }) => {
                     <Input label="Nom complet *" value={form.name} onChange={e => setForm(p => ({...p, name:e.target.value}))} icon="user"/>
                     <Input label="Email *" value={form.email} onChange={e => setForm(p => ({...p, email:e.target.value}))} icon="mail" type="email"/>
                     <Input label="Téléphone" value={form.phone} onChange={e => setForm(p => ({...p, phone:e.target.value}))} icon="phone"/>
+
+                    {/* Phase 1 Google Meet — checkbox visible uniquement si collab assigné a Google Agenda connecté */}
+                    {(()=>{
+                      const _assignedCollab = (calData?.collaborators || []).find(c => c.id === selectedSlot?.collaboratorId);
+                      if (!_assignedCollab?._googleConnected) return null;
+                      return <label style={{ display:"flex", alignItems:"center", gap:10, padding:"10px 14px", borderRadius:10, background:createGoogleMeet ? "#00897B12" : "#F9F8F4", border:`1px solid ${createGoogleMeet ? "#00897B" : "#E5E2D8"}`, cursor:"pointer", transition:"all .15s" }}>
+                        <input type="checkbox" checked={createGoogleMeet} onChange={e=>setCreateGoogleMeet(e.target.checked)} style={{ width:18, height:18, accentColor:"#00897B", cursor:"pointer" }}/>
+                        <span style={{ fontSize:13, fontWeight:600, color:createGoogleMeet ? "#00897B" : "#1A1917" }}>📹 RDV en visio Google Meet</span>
+                        <span style={{ fontSize:11, color:"#9C998F", marginLeft:"auto" }}>Lien généré automatiquement</span>
+                      </label>;
+                    })()}
 
                     {/* Custom questions */}
                     {cal.questions && cal.questions.map(q => (

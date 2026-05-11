@@ -84,7 +84,10 @@ function getCalendarClient(collaboratorId) {
 /**
  * Create a Google Calendar event from a booking
  */
-export async function createEvent(collaboratorId, bookingData, calendarData) {
+export async function createEvent(collaboratorId, bookingData, calendarData, options = {}) {
+  // Phase 1 Google Meet (2026-05-11) — options.createMeet (boolean) force la création d'un lien Meet
+  // indépendamment du champ calendar.location. Backwards-compat 100% : si options.createMeet
+  // n'est pas fourni, le trigger legacy `location contains "meet"` reste actif.
   const cal = getCalendarClient(collaboratorId);
   if (!cal) return null;
 
@@ -99,7 +102,7 @@ export async function createEvent(collaboratorId, bookingData, calendarData) {
   const endDateTime = end.toFormat("yyyy-MM-dd'T'HH:mm:ss");
 
   const location = calendarData.location || '';
-  const isMeet = /google\s*meet|meet/i.test(location);
+  const isMeet = options.createMeet === true || /google\s*meet|meet/i.test(location);
 
   const event = {
     // V3.x.14 — titre compact `{visitorName} — {HH:mm}` (plus de calendars.name/dupond legacy).

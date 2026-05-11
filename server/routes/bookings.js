@@ -242,9 +242,11 @@ router.post('/', requireAuth, enforceCompany, requirePermission('bookings.create
     });
 
     // Sync to Google Calendar + Meet link
+    // Phase 1 Google Meet (2026-05-11) — accepte b.createGoogleMeet pour forcer génération
+    // d'un lien Meet sur ce booking spécifique (backwards-compat avec trigger legacy location).
     if (b.collaboratorId && isConnected(b.collaboratorId)) {
       const cal = db.prepare('SELECT name, location FROM calendars WHERE id = ?').get(b.calendarId);
-      createEvent(b.collaboratorId, { date: b.date, time: b.time, duration: b.duration || 30, visitorName: b.visitorName, visitorEmail: b.visitorEmail, visitorPhone: b.visitorPhone }, cal || { name: '', location: '' })
+      createEvent(b.collaboratorId, { date: b.date, time: b.time, duration: b.duration || 30, visitorName: b.visitorName, visitorEmail: b.visitorEmail, visitorPhone: b.visitorPhone }, cal || { name: '', location: '' }, { createMeet: !!b.createGoogleMeet })
         .then(result => {
           if (result?.googleEventId) db.prepare('UPDATE bookings SET googleEventId = ? WHERE id = ?').run(result.googleEventId, id);
           if (result?.meetLink) db.prepare('UPDATE bookings SET meetLink = ? WHERE id = ?').run(result.meetLink, id);

@@ -2134,7 +2134,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       console.log('[BOOKING DEBUG] calId:', calId, 'calendars:', calendars?.length, 'collab.id:', collab.id);
       if(!calId) { setBookErr('Aucun calendrier trouvé pour votre compte — contactez votre admin'); console.error('[BOOKING BLOCK] No calendarId found'); return false; }
       const prevStage = ct?.pipeline_stage||'nouveau';
-      const bk = {id:bkId, companyId:company.id, collaboratorId:f.collaboratorId||collab.id, agendaOwnerId:f.collaboratorId||collab.id, bookedByCollaboratorId:collab.id, calendarId:calId, contactId:f.contactId, visitorName:ct?.name||f.contactName||'', visitorEmail:ct?.email||'', visitorPhone:f.number||ct?.phone||'', title:(f.title||'').trim(), date:f.date, time:f.time, duration:f.duration||30, status:'confirmed', source:'pipeline', notes:f.notes||'RDV depuis pipeline', rdv_category:f.rdv_category||'', rdv_subcategory:f.rdv_subcategory||''};
+      const bk = {id:bkId, companyId:company.id, collaboratorId:f.collaboratorId||collab.id, agendaOwnerId:f.collaboratorId||collab.id, bookedByCollaboratorId:collab.id, calendarId:calId, contactId:f.contactId, visitorName:ct?.name||f.contactName||'', visitorEmail:ct?.email||'', visitorPhone:f.number||ct?.phone||'', title:(f.title||'').trim(), date:f.date, time:f.time, duration:f.duration||30, status:'confirmed', source:'pipeline', notes:f.notes||'RDV depuis pipeline', rdv_category:f.rdv_category||'', rdv_subcategory:f.rdv_subcategory||'', createGoogleMeet:!!f.createGoogleMeet /* Phase 1 Google Meet */};
       // Ajouter immédiatement au state local (optimistic)
       setBookings(p=>[...p,bk]);
       // Déplacer en rdv_programme (optimistic)
@@ -6176,6 +6176,16 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
 
                   {b.notes && (<div style={{ padding:"10px 14px", borderRadius:8, background:T.warningBg, border:`1px solid ${T.warning}22`, marginBottom:16, fontSize:13, color:T.text }}><span style={{ fontWeight:600, color:T.warning }}>Notes :</span> {b.notes}</div>)}
 
+                  {/* Phase 1 Google Meet — bouton Rejoindre Google Meet si meetLink présent */}
+                  {b.meetLink && (
+                    <div style={{ marginBottom:16 }}>
+                      <a href={b.meetLink} target="_blank" rel="noreferrer" style={{ display:"inline-flex", alignItems:"center", gap:8, padding:"10px 18px", borderRadius:10, background:"#00897B", color:"#fff", fontSize:13, fontWeight:700, textDecoration:"none" }}>
+                        📹 Rejoindre Google Meet
+                      </a>
+                      <div style={{ fontSize:11, color:T.text3, marginTop:4, wordBreak:'break-all' }}>{b.meetLink}</div>
+                    </div>
+                  )}
+
                   {/* Reschedule */}
                   {(typeof rescheduleData!=='undefined'?rescheduleData:null) && (
                     <div style={{ padding:16, borderRadius:10, background:T.accentBg, border:`1px solid ${T.accentBorder}`, marginBottom:16 }}>
@@ -6978,6 +6988,19 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                 <summary style={{cursor:'pointer',fontSize:12,fontWeight:600,color:T.text2,padding:'4px 0',userSelect:'none'}}>Notes</summary>
                 <textarea value={(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{}).notes} onChange={e=>(typeof setPhoneScheduleForm==='function'?setPhoneScheduleForm:function(){})(p=>({...p,notes:e.target.value}))} placeholder="Ajouter une note..." rows={2} style={{width:'100%',padding:'10px 14px',borderRadius:10,border:'1px solid #e5e7eb',background:'#f9fafb',fontSize:13,fontFamily:'inherit',color:'#111',resize:'none',outline:'none',marginTop:6}}/>
               </details>
+              {/* Phase 1 Google Meet — checkbox visible uniquement si target collab a Google Agenda connecté */}
+              {(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{})._bookingMode && (()=>{
+                const _pf = (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{});
+                const _targetId = _pf.collaboratorId || collab.id;
+                const _targetCollab = (collabs||[]).find(c => c.id === _targetId);
+                const _googleOn = !!(_targetCollab?.google_tokens_json && _targetCollab?.google_email);
+                if (!_googleOn) return null;
+                return <label style={{display:'flex',alignItems:'center',gap:10,padding:'10px 14px',borderRadius:10,background:_pf.createGoogleMeet?'#00897B12':'#f9fafb',border:`1px solid ${_pf.createGoogleMeet?'#00897B':'#e5e7eb'}`,cursor:'pointer',transition:'all .15s'}}>
+                  <input type="checkbox" checked={!!_pf.createGoogleMeet} onChange={e=>(typeof setPhoneScheduleForm==='function'?setPhoneScheduleForm:function(){})(p=>({...p,createGoogleMeet:e.target.checked}))} style={{width:18,height:18,accentColor:'#00897B',cursor:'pointer'}}/>
+                  <span style={{fontSize:13,fontWeight:600,color:_pf.createGoogleMeet?'#00897B':T.text}}>📹 RDV en visio Google Meet</span>
+                  <span style={{fontSize:11,color:T.text3,marginLeft:'auto'}}>Lien généré automatiquement</span>
+                </label>;
+              })()}
               {/* V1.8.11 — confirmation email : icône compacte, tooltip descriptif */}
               {(typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{})._bookingMode && (()=>{
                 const _pf = (typeof phoneScheduleForm!=='undefined'?phoneScheduleForm:{});
