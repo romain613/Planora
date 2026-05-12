@@ -180,15 +180,41 @@ router.put('/endpoint', (req, res) => {
 | **PM2 config** | `/var/www/planora/ecosystem.config.cjs` | Définit 4 env vars : `DB_PATH`, `CONTROL_TOWER_PATH`, `TENANTS_DIR`, `STORAGE_DIR` (E.3.8-E) |
 | **Archives** | `/var/backups/planora/` | 6 `.tar.gz` (baseline + pre-step2/4/8E + fantômes + tenants) |
 
-### Commande de déploiement COMPLÈTE
+### Déploiement frontend — RÈGLE R9-PROTECT (2026-05-12)
+
+> ⚠ **Ne JAMAIS builder sur le VPS.** Voir [docs/R9-PROTECT.md](docs/R9-PROTECT.md) +
+> [docs/FRONTEND-DEPLOY-CHECKLIST.md](docs/FRONTEND-DEPLOY-CHECKLIST.md).
+> Build = Mac MH aligné sur `origin/clean-main`, puis rsync vers httpdocs.
+> Bundle local doit passer `./ops/r9-protect.sh full` avant deploy.
+
 ```bash
-# 1. Build
-cd /var/www/planora/app && npm run build
-# 2. COPIER VERS HTTPDOCS (sinon nginx sert l'ancienne version !)
-cp -r /var/www/planora/app/dist/* /var/www/vhosts/calendar360.fr/httpdocs/
-# 3. Restart backend
-cd /var/www/planora && pm2 restart ecosystem.config.cjs
+# 1. Pré-build : alignement Git (depuis Mac, repo root)
+./ops/r9-protect.sh check-source
+
+# 2. Build minifié (Mac, jamais VPS)
+cd app && npm run build && cd ..
+
+# 3. Post-build : marqueurs critiques présents (15+ obligatoires)
+./ops/r9-protect.sh check-bundle
+
+# 4. Backup httpdocs avant deploy
+ssh -i ~/.ssh/id_ed25519 root@136.144.204.115 \
+  "tar czf /var/backups/planora/pre-deploy-$(date +%Y%m%d-%H%M%S)-httpdocs.tar.gz \
+   -C /var/www/vhosts/calendar360.fr/httpdocs ."
+
+# 5. Deploy rsync SANS --delete + 6 exclusions OBLIGATOIRES
+rsync -avz --no-times -e "ssh -i ~/.ssh/id_ed25519" \
+  --exclude=.htaccess --exclude=mentions-legales.html \
+  --exclude=privacy.html --exclude=terms.html \
+  --exclude=favicon.svg --exclude=vite.svg \
+  app/dist/ root@136.144.204.115:/var/www/vhosts/calendar360.fr/httpdocs/
+
+# 6. Si backend modifié uniquement : pm2 restart
+ssh -i ~/.ssh/id_ed25519 root@136.144.204.115 "pm2 restart calendar360"
 ```
+
+**Interdictions** : `npm run build` sur VPS · `rsync --delete` sans les 6 exclusions ·
+considérer le bundle live comme source de vérité · tag sans validation R9-PROTECT.
 
 ### Backups sur le VPS (`/var/www/planora/app/src/`)
 | Fichier | Date | Lignes | Description |
