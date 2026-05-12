@@ -8,6 +8,7 @@ import { _T } from "./shared/state/tabState";
 import PublicForm from "./features/public/PublicForm";
 import ClientPortal from "./features/client/ClientPortal";
 import ManageBooking from "./features/public/ManageBooking";
+import ConsentForm from "./features/public/ConsentForm"; // Phase 3 — public consent page
 import PublicPage from "./features/public/PublicPage";
 import VisitorBooking from "./features/public/VisitorBooking";
 import PublicBooking from "./features/public/PublicBooking";
@@ -168,6 +169,13 @@ export default function App() {
     return match ? { token: match[1] } : null;
   }, []);
 
+  // URL-based routing for /consent/:token  (Phase 3 — HMAC token cnst.v1.<b64>.<b64>)
+  const consentRoute = useMemo(() => {
+    const path = window.location.pathname;
+    const match = path.match(/^\/consent\/([A-Za-z0-9._-]+)/);
+    return match ? { token: match[1] } : null;
+  }, []);
+
   // If we're on a /page/:companySlug/:pageSlug URL, show PublicPage directly
   if (pageRoute) return <PublicPage companySlug={pageRoute.companySlug} pageSlug={pageRoute.pageSlug}/>;
   // If we're on a /book/:companySlug/:calSlug URL, show PublicBooking directly
@@ -178,6 +186,8 @@ export default function App() {
   if (manageRoute) return <ManageBooking token={manageRoute.token}/>;
   // If we're on a /espace/:token URL, show ClientPortal
   if (espaceRoute) return <ClientPortal token={espaceRoute.token}/>;
+  // If we're on a /consent/:token URL, show ConsentForm (Phase 3 — public consent page)
+  if (consentRoute) return <ConsentForm token={consentRoute.token}/>;
 
   const [view, setView] = useState(() => {
     try { return localStorage.getItem("calendar360-session") ? "admin" : "landing"; } catch { return "landing"; }

@@ -56,6 +56,7 @@ import fauconRoutes from './routes/faucon.js';
 import rolesRoutes from './routes/roles.js';
 import auditLogsRoutes from './routes/auditLogs.js';
 import transferRoutes from './routes/transfer.js';
+import consentRoutes from './routes/consent.js'; // Phase 3 — public consent endpoints (HMAC + rate-limit)
 import pipelineTemplatesRoutes from './routes/pipelineTemplates.js';
 import contactShareRoutes from './routes/contactShare.js';
 import { renderLandingPage } from './templates/landingPage.js';
@@ -197,6 +198,7 @@ app.use('/api/interaction-responses', interactionResponsesRouter);
 app.use('/api/contact-fields', contactFieldsRoutes);
 app.use('/api/contact-documents', contactDocumentsRoutes);
 app.use('/api/transfer', transferRoutes);
+app.use('/api/consent', consentRoutes); // Phase 3 — public consent endpoints (token + HMAC + rate-limit)
 app.use('/api/admin/pipeline-templates', pipelineTemplatesRoutes);
 app.use('/api/contact-share', contactShareRoutes);
 
