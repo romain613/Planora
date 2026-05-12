@@ -57,8 +57,14 @@ const PostCallResultModal = ({ data, onClose }) => {
   const [otherNote, setOtherNote] = useState('');
   const [topStageIds, setTopStageIds] = useState(FALLBACK_TOP_STAGES);
   const [submitting, setSubmitting] = useState(false);
+  const [showNrpHistory, setShowNrpHistory] = useState(false);
 
-  const { contact, duration, callLogId } = data || {};
+  const {
+    contact, duration, callLogId,
+    isNrp = false, isShortCall = false,
+    nrpCount = 0, followups = [],
+  } = data || {};
+  const nrpHistory = (followups || []).filter(f => f && f.done).slice().reverse();
 
   // Fetch top stages utilisés par collab (last 30j, jusqu'à 6)
   useEffect(() => {
@@ -95,11 +101,55 @@ const PostCallResultModal = ({ data, onClose }) => {
     if (submitting || !contact?.id) return;
     setSubmitting(true);
     try {
+      // V1.10.4-r9 NRP-merge — si contact déjà NRP ET stage choisi = nrp,
+      // incrémente nrp_followups_json (NRP #N+1) au lieu d'un simple changement de stage.
+      if (isNrp && stage.id === 'nrp') {
+        const nextCount = nrpCount + 1;
+        const newFollowup = {
+          date: new Date().toISOString(),
+          done: true,
+          note: 'Tentative appel #' + nextCount + ' — pas de reponse',
+        };
+        const updatedFollowups = [...followups, newFollowup];
+        handleCollabUpdateContact(contact.id, {
+          nrp_followups_json: JSON.stringify(updatedFollowups),
+          _source: 'post_call',
+          _origin: 'post_call_smart_pipeline_nrp_increment',
+          _reason: `NRP #${nextCount} (${fmtDuration(duration || 0)})`,
+        });
+        api('/api/data/pipeline-history', {
+          method: 'POST',
+          body: {
+            contactId: contact.id,
+            companyId: company?.id || contact.companyId,
+            fromStage: 'nrp',
+            toStage: 'nrp',
+            userId: collab?.id || '',
+            userName: collab?.name || '',
+            note: 'Tentative appel #' + nextCount + ' — NRP (pas de reponse)',
+          },
+        }).catch(() => {});
+        if (callLogId) {
+          api(`/api/voip/calls/${callLogId}`, {
+            method: 'PUT',
+            body: { pipelineAction: 'nrp' },
+          }).catch(() => {});
+        }
+        showNotif?.(`NRP #${nextCount} enregistré`, 'warning');
+        onClose?.();
+        return;
+      }
+
+      // Cas standard : changement de stage normal.
+      // Note enrichie si le contact était NRP et a répondu (autre stage que nrp).
+      const enrichedReason = (isNrp && stage.id !== 'nrp')
+        ? `A répondu après ${nrpCount} tentatives NRP (${fmtDuration(duration || 0)})`
+        : `Résultat appel (${fmtDuration(duration || 0)})`;
       handleCollabUpdateContact(contact.id, {
         pipeline_stage: stage.id,
         _source: 'post_call',
         _origin: 'post_call_smart_pipeline',
-        _reason: `Résultat appel (${fmtDuration(duration || 0)})`
+        _reason: enrichedReason,
       });
       if (callLogId) {
         api(`/api/voip/calls/${callLogId}`, {
@@ -160,19 +210,58 @@ const PostCallResultModal = ({ data, onClose }) => {
     return <span style={{ fontSize: Math.max(14, size - 2), lineHeight: 1 }}>{v.emoji}</span>;
   };
 
+  // V1.10.4-r9 — Progress NRP visuelle (0 → 20 tentatives)
+  const nrpProgress = isNrp ? Math.min((nrpCount / 20) * 100, 100) : 0;
+  const nrpProgressColor = nrpProgress > 75 ? '#EF4444' : nrpProgress > 50 ? '#F59E0B' : '#3B82F6';
+
   return (
     <Modal open={true} onClose={onClose} title={null} width={560}>
-      {/* Header — titre + sub-line contact/durée */}
+      {/* Header — titre + sub-line contact/durée + badge NRP si applicable */}
       <div style={{ marginBottom: 6 }}>
         <h3 style={{
           fontSize: 17, fontWeight: 800, margin: 0, color: T.text,
-          display: 'flex', alignItems: 'center', gap: 9
+          display: 'flex', alignItems: 'center', gap: 9, flexWrap: 'wrap'
         }}>
           <I n="phone-call" s={18} /> Résultat de l'appel
+          {isNrp && (
+            <span style={{
+              fontSize: 11, fontWeight: 800, padding: '3px 10px', borderRadius: 8,
+              background: '#EF4444', color: '#fff', letterSpacing: 0.3
+            }}>
+              NRP #{nrpCount}
+            </span>
+          )}
         </h3>
         <div style={{ fontSize: 12, color: T.text3, marginTop: 4, fontWeight: 500 }}>
           {contact.name || '(sans nom)'} · {fmtDuration(duration || 0)}
         </div>
+        {/* V1.10.4-r9 — Barre de progression NRP */}
+        {isNrp && (
+          <div style={{ marginTop: 8 }}>
+            <div style={{ height: 5, borderRadius: 3, background: T.border + '50', overflow: 'hidden' }}>
+              <div style={{
+                height: '100%', borderRadius: 3, width: nrpProgress + '%',
+                background: nrpProgressColor, transition: 'width .4s ease'
+              }} />
+            </div>
+            <div style={{ fontSize: 10, color: T.text3, marginTop: 3 }}>
+              {nrpCount} tentative{nrpCount > 1 ? 's' : ''} sans réponse · clic sur "NRP" ajoute une #{nrpCount + 1}
+            </div>
+          </div>
+        )}
+        {/* V1.10.4-r9 — Bandeau "appel court" */}
+        {isShortCall && (
+          <div style={{
+            marginTop: 8, padding: '8px 12px', borderRadius: 10,
+            background: '#F59E0B12', border: '1px solid #F59E0B30',
+            display: 'flex', alignItems: 'center', gap: 8
+          }}>
+            <I n="zap" s={14} style={{ color: '#F59E0B' }} />
+            <span style={{ fontSize: 12, color: '#92400E', fontWeight: 600 }}>
+              Appel très court ({duration || 0}s) — probablement pas de réponse
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Micro-copy */}
@@ -385,6 +474,61 @@ const PostCallResultModal = ({ data, onClose }) => {
             <span style={{ fontSize: 13 }}>✏️</span>
             Autre — ajouter une note libre
           </button>
+
+          {/* V1.10.4-r9 — Historique NRP (révélable, uniquement si déjà NRP avec tentatives) */}
+          {isNrp && nrpHistory.length > 0 && (
+            <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${T.border}40` }}>
+              <button
+                onClick={() => setShowNrpHistory(s => !s)}
+                style={{
+                  width: '100%', padding: '7px 12px',
+                  background: 'transparent', border: 'none',
+                  cursor: 'pointer', fontSize: 11, fontWeight: 700,
+                  color: T.text3, textTransform: 'uppercase', letterSpacing: 0.5,
+                  display: 'flex', alignItems: 'center', gap: 6, fontFamily: 'inherit'
+                }}
+              >
+                <I n="clock" s={12} />
+                Historique NRP ({nrpHistory.length} tentative{nrpHistory.length > 1 ? 's' : ''})
+                <span style={{ marginLeft: 'auto', display: 'inline-flex', transition: 'transform .2s ease', transform: showNrpHistory ? 'rotate(180deg)' : 'rotate(0deg)' }}>
+                  <I n="chevron-down" s={12} />
+                </span>
+              </button>
+              {showNrpHistory && (
+                <div style={{ maxHeight: 180, overflow: 'auto', marginTop: 6 }}>
+                  {nrpHistory.map((f, i) => {
+                    const d = f.date ? new Date(f.date) : null;
+                    return (
+                      <div key={i} style={{
+                        display: 'flex', alignItems: 'center', gap: 8,
+                        padding: '6px 8px', marginBottom: 4, borderRadius: 8,
+                        background: '#EF444408', border: '1px solid #EF444418'
+                      }}>
+                        <div style={{
+                          width: 22, height: 22, borderRadius: 7, background: '#EF444418',
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          fontSize: 9, fontWeight: 800, color: '#EF4444'
+                        }}>
+                          {nrpHistory.length - i}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 11, fontWeight: 600, color: T.text }}>
+                            {f.note || 'NRP #' + (nrpHistory.length - i)}
+                          </div>
+                          {d && (
+                            <div style={{ fontSize: 10, color: T.text3 }}>
+                              {d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'short' })} à {d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                            </div>
+                          )}
+                        </div>
+                        <I n="phone-missed" s={12} style={{ color: '#EF4444' }} />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          )}
         </>
       )}
 

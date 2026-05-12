@@ -2383,18 +2383,25 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       const ct = callContact || (contacts||[]).find(c=>c.phone && calledNumber && c.phone.replace(/[^\d]/g,'').slice(-9) === calledNumber.replace(/[^\d]/g,'').slice(-9));
 
       if (ct) {
-        // Show post-call CTA
+        // Show post-call CTA — V1.10.4-r9 : Smart modal devient flow unique.
+        // Le NRP (compteur, historique, incrément followups) est absorbé par PostCallResultModal.
         setTimeout(() => {
           const isNrp = ct.pipeline_stage === 'nrp';
-          const nrpCount = (()=>{ try { return JSON.parse(ct.nrp_followups_json||'[]').filter(f=>f.done).length; } catch { return 0; } })();
-
-          if (isNrp || duration < 10) {
-            // NRP or short call → NRP modal
-            const followups = (()=>{ try { return JSON.parse(ct.nrp_followups_json||'[]'); } catch { return []; } })();
-            setNrpPostCallModal({ contact: ct, nrpCount, followups, isShortCall: !isNrp && duration < 10, duration, isNrp });
-            setNrpModalShowStages(false);
-            setNrpModalShowHistory(false);
-            // SMS AUTO NRP
+          const followups = (()=>{ try { return JSON.parse(ct.nrp_followups_json||'[]'); } catch { return []; } })();
+          const nrpCount = followups.filter(f=>f.done).length;
+          const isShortCall = !isNrp && duration < 10;
+          setPostCallResultModal({
+            contact: ct,
+            duration,
+            calledNumber,
+            callLogId: (typeof voipCurrentCallLogId!=='undefined'?voipCurrentCallLogId:null),
+            isNrp,
+            isShortCall,
+            nrpCount,
+            followups,
+          });
+          // SMS AUTO NRP — déclenché si contact déjà NRP OU si appel court (mêmes cas que l'ancien modal).
+          if (isNrp || isShortCall) {
             try {
               const nrpSmsOn = localStorage.getItem('c360-phone-autosms-nrp-'+collab.id)==='1';
               if (nrpSmsOn && calledNumber) {
@@ -2405,10 +2412,6 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                 }).catch(()=>{});
               }
             } catch {}
-          } else if (duration >= 10) {
-            // ── APPEL DECROCHE >10s → Popup résultat d'appel obligatoire ──
-            // V3.x — passer callLogId (voipCurrentCallLogId) pour log pipelineAction
-            setPostCallResultModal({ contact: ct, duration, calledNumber, callLogId: (typeof voipCurrentCallLogId!=='undefined'?voipCurrentCallLogId:null) });
           }
         }, 500);
       }
