@@ -875,12 +875,15 @@ router.put('/:id/report', requireAuth, enforceCompany, (req, res) => {
       return res.status(403).json({ error: 'Seul le receveur du RDV (agendaOwner) peut reporter' });
     }
 
-    // 4. Anti double-reporting (sauf admin/supra)
-    if (booking.bookingReportingStatus && booking.bookingReportingStatus !== '') {
-      if (!(isAdmin || isSupra)) {
-        return res.status(403).json({ error: 'Reporting déjà effectué — modification réservée à un admin' });
-      }
-    }
+    // V1.10.4-r10.0.a — Modification reporting autorisée pour le RECEVEUR lui-même
+    // (en plus de admin/supra). Permission de modification = même règle que création :
+    //   isReceiver (cid === agendaOwnerId) || isAdmin || isSupra
+    // La permission de base a déjà été validée plus haut (étape 3). Donc à ce stade
+    // le caller est légitime. On distingue juste le cas "création" vs "modification"
+    // pour l'audit log (etape 7 ci-dessous).
+    const isUpdate = !!(booking.bookingReportingStatus && booking.bookingReportingStatus !== '');
+    const previousStatus = booking.bookingReportingStatus || '';
+    const previousNote = booking.bookingReportingNote || '';
 
     // 5. Validation enum + note obligatoire
     const status = String(req.body?.status || '').trim();
@@ -905,8 +908,32 @@ router.put('/:id/report', requireAuth, enforceCompany, (req, res) => {
     ).run(status, note, now, reporterId, bookingId);
 
     // 7. Audit log immutable
+    //   V1.10.4-r10.0.a — Différencie création (booking_reported) vs modification
+    //   (reporting_updated). metadata_json stocke previousStatus/previousNote pour
+    //   permettre une timeline rétroactive en attendant la table reporting_events
+    //   (Vague r10.1).
     try {
       const auditId = 'aud' + Date.now() + Math.random().toString(36).slice(2, 6);
+      const auditAction = isUpdate ? 'reporting_updated' : 'booking_reported';
+      const auditDetail = isUpdate
+        ? `Reporting RDV ${booking.visitorName || ''} modifié : ${previousStatus} → ${status}`
+        : `Reporting RDV ${booking.visitorName || ''} → ${status}`;
+      const auditMeta = {
+        newStatus: status,
+        newNote: note,
+        sender: booking.bookedByCollaboratorId || '',
+        receiver: booking.agendaOwnerId || '',
+        contactId: booking.contactId || '',
+      };
+      if (isUpdate) {
+        auditMeta.previousStatus = previousStatus;
+        auditMeta.previousNote = previousNote;
+        auditMeta.action = 'reporting_updated';
+      } else {
+        // Compat r9.x : champs status/note existaient en plat dans l'ancien metadata
+        auditMeta.status = status;
+        auditMeta.note = note;
+      }
       db.prepare(
         `INSERT INTO audit_logs (id, companyId, userId, userName, userRole, action, category, entityType, entityId, detail, metadata_json, ipAddress, userAgent, createdAt)
          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
@@ -916,12 +943,12 @@ router.put('/:id/report', requireAuth, enforceCompany, (req, res) => {
         reporterId,
         req.auth?.userName || req.auth?.email || '',
         req.auth?.role || (isSupra ? 'supra_admin' : ''),
-        'booking_reported',
+        auditAction,
         'rdv_reporting',
         'booking',
         bookingId,
-        `Reporting RDV ${booking.visitorName || ''} → ${status}`,
-        JSON.stringify({ status, note, sender: booking.bookedByCollaboratorId || '', receiver: booking.agendaOwnerId || '', contactId: booking.contactId || '' }),
+        auditDetail,
+        JSON.stringify(auditMeta),
         req.ip || '',
         req.get('user-agent') || '',
         now

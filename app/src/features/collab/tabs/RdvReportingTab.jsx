@@ -226,13 +226,18 @@ const RdvReportingTab = () => {
 
   const openReporting = (booking) => {
     if (!booking) return;
-    if (booking.bookingReportingStatus) {
-      showNotif && showNotif('Ce RDV a déjà été rapporté', 'info');
-      return;
-    }
+    // V1.10.4-r10.0.a — Mode édition : si reporting existe, pré-remplir le modal
+    // avec status + note existants. Le backend accepte désormais la modification
+    // pour le receiver (ainsi qu'admin/supra). L'historique est tracé via
+    // audit_logs metadata_json (previousStatus + previousNote + newStatus + newNote).
     setReportingBooking(booking);
-    setReportStatus('validated');
-    setReportNote('');
+    if (booking.bookingReportingStatus) {
+      setReportStatus(booking.bookingReportingStatus);
+      setReportNote(booking.bookingReportingNote || '');
+    } else {
+      setReportStatus('validated');
+      setReportNote('');
+    }
   };
 
   const closeReporting = () => {
@@ -524,6 +529,24 @@ const RdvReportingTab = () => {
                         <I n="check-square" s={13}/> Faire le reporting
                       </Btn>
                     )}
+                    {/* V1.10.4-r10.0.a — Bouton "Modifier reporting" : visible si un reporting
+                        existe déjà ET que l'utilisateur est receveur du RDV (mêmes conditions
+                        de permission que côté backend PUT /:id/report). */}
+                    {subTab === 'received' && status && b.agendaOwnerId === collab.id && b.bookedByCollaboratorId !== collab.id && (
+                      <button
+                        type="button"
+                        onClick={(e)=>{ e.stopPropagation(); openReporting(b); }}
+                        title="Modifier le reporting existant — l'historique est conservé via audit_logs"
+                        style={{ fontSize:11, fontWeight:600, padding:'5px 10px', borderRadius:8,
+                          border:'1px solid '+T.border, background:T.surface, color:T.text2,
+                          cursor:'pointer', fontFamily:'inherit', display:'inline-flex',
+                          alignItems:'center', gap:5, transition:'all .15s' }}
+                        onMouseEnter={e=>{ e.currentTarget.style.borderColor = T.accent; e.currentTarget.style.color = T.accent; }}
+                        onMouseLeave={e=>{ e.currentTarget.style.borderColor = T.border; e.currentTarget.style.color = T.text2; }}
+                      >
+                        ✏️ Modifier reporting
+                      </button>
+                    )}
                     {/* V1.10.4-r9.3 — Bouton rapide "Marquer perdu" — RECEIVER UNIQUEMENT
                         (le sender n'a pas l'ownership pour modifier le pipeline du contact).
                         Visible uniquement si :
@@ -644,7 +667,9 @@ const RdvReportingTab = () => {
                 <I n="check-square" s={18} style={{ color:'#fff' }}/>
               </div>
               <div style={{ flex:1, minWidth:0, overflow:'hidden' }}>
-                <div style={{ fontWeight:800, fontSize:15 }}>Faire le reporting</div>
+                <div style={{ fontWeight:800, fontSize:15 }}>
+                  {reportingBooking.bookingReportingStatus ? 'Modifier reporting' : 'Faire le reporting'}
+                </div>
                 <div style={{ fontSize:11, color:T.text3, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>
                   {contactName(reportingBooking)} · {fmtDateTime(reportingBooking.date, reportingBooking.time)}
                 </div>
