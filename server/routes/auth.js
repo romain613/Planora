@@ -12,8 +12,11 @@ const router = Router();
 // ═════════════════════════════════════════════════════════
 const _authAttempts = new Map(); // key: IP -> { count, firstAt, blockedUntil }
 const RATE_LIMIT_WINDOW = 15 * 60 * 1000; // 15 minutes
-const RATE_LIMIT_MAX = 10; // max 10 attempts per window
-const RATE_LIMIT_BLOCK = 5 * 60 * 1000; // block for 5 min after exceeding
+// V1.10.4-r9 — Limit raised 10→30 to absorb the 3x amplification from
+// Landing.jsx chained calls (/login + /login code + /supra-login per attempt).
+// Block reduced 5min→2min for faster recovery once exceeded. Per-IP only.
+const RATE_LIMIT_MAX = 30; // max 30 attempts per window
+const RATE_LIMIT_BLOCK = 2 * 60 * 1000; // block for 2 min after exceeding
 
 // Cleanup old entries every 30 min
 setInterval(() => {
@@ -45,7 +48,7 @@ function checkRateLimit(req, res) {
   if (entry.count > RATE_LIMIT_MAX) {
     entry.blockedUntil = now + RATE_LIMIT_BLOCK;
     logAudit(req, 'rate_limited', 'security', '', '', `Auth rate limit exceeded: IP ${ip} (${entry.count} attempts)`);
-    res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 5 minutes.' });
+    res.status(429).json({ error: 'Trop de tentatives. Réessayez dans 2 minutes.' });
     return true; // blocked
   }
 
