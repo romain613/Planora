@@ -1930,8 +1930,26 @@ if (n === ph) matched.set(c.id, c);
               proprement avec message UX). */}
           {_refRdv && _transferTypes.has(_refRdv.bookingType) && _refRdv.status !== 'cancelled' && (_amSender || _amReceiver || _isAdmin) && <div style={{marginTop:8,paddingTop:8,borderTop:`1px dashed ${T.border}`}}>
             <div style={{fontSize:9,fontWeight:800,color:T.text3,textTransform:'uppercase',letterSpacing:0.5,marginBottom:5}}>Actions RDV transmis</div>
-            {_hasExtSync && <div style={{fontSize:10,color:'#9A3412',fontStyle:'italic',marginBottom:6,padding:'3px 6px',borderRadius:5,background:'#FFF7ED',border:'1px solid #FED7AA',display:'inline-block'}}>
-              🔗 Synchronisé {_hasGoogleSync ? 'Google' : ''}{(_hasGoogleSync && _hasOutlookSync) ? ' + ' : ''}{_hasOutlookSync ? 'Outlook' : ''} — actions désactivées (Phase 3)
+            {/* V1.10.4-r9 UX — Bannière explicite Phase 3 différée, pleine largeur, contraste renforcé.
+                Le RDV est synchronisé Google/Outlook : la modification cross-collab via API
+                propagerait potentiellement des incohérences (cf. spec V1.10.4.B Phase 3).
+                Workaround clair : annuler le RDV ici (libère le slot externe via V1.10.4.G),
+                puis recréer le RDV chez le bon collab. */}
+            {_hasExtSync && <div style={{fontSize:11,color:'#9A3412',marginBottom:8,padding:'8px 10px',borderRadius:8,background:'#FFF7ED',border:'1px solid #FED7AA',lineHeight:1.4}}>
+              <div style={{fontWeight:700,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>
+                <span>🔗</span> RDV synchronisé {_hasGoogleSync ? 'Google' : ''}{(_hasGoogleSync && _hasOutlookSync) ? ' + ' : ''}{_hasOutlookSync ? 'Outlook' : ''}
+              </div>
+              <div style={{fontSize:10,fontStyle:'italic'}}>
+                Reprendre/Réattribuer désactivés (sync externe — Phase 3 différée). <b>Workaround :</b> annule ce RDV depuis l'agenda du destinataire, puis recrée-le chez le bon collaborateur.
+              </div>
+            </div>}
+            {_reportingLocked && !_hasExtSync && <div style={{fontSize:11,color:'#7F1D1D',marginBottom:8,padding:'8px 10px',borderRadius:8,background:'#FEF2F2',border:'1px solid #FECACA',lineHeight:1.4}}>
+              <div style={{fontWeight:700,marginBottom:3,display:'flex',alignItems:'center',gap:6}}>
+                <span>🔒</span> Reporting verrouillé ({_refRdv.bookingReportingStatus})
+              </div>
+              <div style={{fontSize:10,fontStyle:'italic'}}>
+                Le RDV a déjà été rapporté (validé/signé/no-show/annulé) — actions cross-collab désactivées pour préserver l'intégrité du reporting.
+              </div>
             </div>}
             <div style={{display:'flex',flexWrap:'wrap',gap:6}}>
               {/* V1.10.4.A merge — bouton unifié "🔄 Reprendre / annuler transmission" :
@@ -1941,14 +1959,14 @@ if (n === ph) matched.set(c.id, c);
                 type="button"
                 onClick={_doRecoverTransmission}
                 disabled={_hasExtSync || _reportingLocked}
-                title={_disabledReason || "Reprendre / annuler la transmission — le RDV revient chez l'apporteur"}
+                title={_hasExtSync ? "Désactivé : RDV synchronisé Google/Outlook (Phase 3 différée). Annule depuis l'agenda du destinataire puis recrée." : (_reportingLocked ? "Désactivé : reporting déjà rapporté (verrouillé)." : "Reprendre / annuler la transmission — le RDV revient chez l'apporteur")}
                 style={{fontSize:10,padding:'4px 9px',borderRadius:6,border:'1px solid '+(_hasExtSync||_reportingLocked?'#94A3B8':'#0EA5E9')+'40',background:_hasExtSync||_reportingLocked?'#F1F5F9':'#E0F2FE',color:_hasExtSync||_reportingLocked?'#94A3B8':'#0369A1',cursor:_hasExtSync||_reportingLocked?'not-allowed':'pointer',fontWeight:600,fontFamily:'inherit',opacity:_hasExtSync||_reportingLocked?0.6:1}}
               >🔄 Reprendre / annuler transmission</button>}
               {(_amSender || _isAdmin) && <button
                 type="button"
                 onClick={_doReassign}
                 disabled={_hasExtSync || _reportingLocked}
-                title={_disabledReason || "Réattribuer ce RDV à un autre collaborateur"}
+                title={_hasExtSync ? "Désactivé : RDV synchronisé Google/Outlook (Phase 3 différée). Annule depuis l'agenda du destinataire puis recrée." : (_reportingLocked ? "Désactivé : reporting déjà rapporté (verrouillé)." : "Réattribuer ce RDV à un autre collaborateur")}
                 style={{fontSize:10,padding:'4px 9px',borderRadius:6,border:'1px solid '+(_hasExtSync||_reportingLocked?'#94A3B8':'#7C3AED')+'40',background:_hasExtSync||_reportingLocked?'#F1F5F9':'#F5F3FF',color:_hasExtSync||_reportingLocked?'#94A3B8':'#6D28D9',cursor:_hasExtSync||_reportingLocked?'not-allowed':'pointer',fontWeight:600,fontFamily:'inherit',opacity:_hasExtSync||_reportingLocked?0.6:1}}
               >↩️ Réattribuer</button>}
             </div>
