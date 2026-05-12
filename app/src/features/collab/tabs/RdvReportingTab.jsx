@@ -299,20 +299,27 @@ const RdvReportingTab = () => {
   const loading = subTab === 'received' ? loadingReceived : loadingSent;
   const onRefresh = subTab === 'received' ? fetchReceived : fetchSent;
 
-  // V1.10.4-r9 — Filtre status client-side : Tous / Confirmés / Annulés.
-  // Le backend retourne tout (status=all par défaut depuis V1.10.4-r9) ; ce filtre
-  // permet à l'utilisateur de zoomer sans round-trip serveur.
+  // V1.10.4-r9.4 — Filtre métier : Tous / Confirmés / Perdus (pas "Annulés").
+  // Le booking.status='cancelled' n'est PAS un statut métier : un RDV agenda annulé
+  // peut représenter un lead encore actif (R2, contacté, en réflexion, etc.).
+  // Les vrais "Perdus" sont définis par le pipeline_stage receveur OU par un
+  // bookingReportingStatus signalant une perte (no_show, cancelled au sens reporting).
+  const isPerdu = (b) => (
+    b.receiverPipelineStage === 'perdu'
+    || b.bookingReportingStatus === 'no_show'
+    || b.bookingReportingStatus === 'cancelled'
+  );
   const [statusFilter, setStatusFilter] = useState('all');
   const list = rawList.filter(b => {
     if (statusFilter === 'all') return true;
     if (statusFilter === 'confirmed') return b.status === 'confirmed';
-    if (statusFilter === 'cancelled') return b.status === 'cancelled';
+    if (statusFilter === 'perdu') return isPerdu(b);
     return true;
   });
   const countByStatus = {
     all: rawList.length,
     confirmed: rawList.filter(b => b.status === 'confirmed').length,
-    cancelled: rawList.filter(b => b.status === 'cancelled').length,
+    perdu: rawList.filter(isPerdu).length,
   };
 
   return (
@@ -385,19 +392,21 @@ const RdvReportingTab = () => {
         ))}
       </div>
 
-      {/* V1.10.4-r9 — Filtre status client-side (Tous / Confirmés / Annulés).
-          Backend retourne déjà tous les statuts ; ce filtre permet à l'utilisateur
-          de focaliser sur un sous-ensemble sans round-trip. */}
+      {/* V1.10.4-r9.4 — Filtre métier client-side : Tous / Confirmés / Perdus.
+          "Annulés" (booking.status='cancelled') retiré comme catégorie principale —
+          il s'agit d'une donnée technique secondaire affichée discrètement sur la
+          ligne via le badge "📅 RDV initial annulé". Le vrai indicateur métier
+          d'un lead perdu = pipeline_stage='perdu' OU reporting no_show/cancelled. */}
       <div style={{ display:'flex', gap:5, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
         <span style={{ fontSize:10, fontWeight:700, color:T.text3, textTransform:'uppercase', letterSpacing:0.5, marginRight:4 }}>Filtre :</span>
         {[
           { id:'all',       label:'Tous',      color:T.text2,  count: countByStatus.all },
-          { id:'confirmed', label:'Confirmés', color:'#22C55E', count: countByStatus.confirmed },
-          { id:'cancelled', label:'Annulés',   color:'#EF4444', count: countByStatus.cancelled },
+          { id:'confirmed', label:'Confirmés', color:'#22C55E', count: countByStatus.confirmed, hint:'RDV encore programmés (booking.status=confirmed)' },
+          { id:'perdu',     label:'Perdus',    color:'#EF4444', count: countByStatus.perdu,     hint:'Leads marqués perdu (pipeline ou reporting)' },
         ].map(f => {
           const isActive = statusFilter === f.id;
           return (
-            <div key={f.id} onClick={()=>setStatusFilter(f.id)} style={{
+            <div key={f.id} onClick={()=>setStatusFilter(f.id)} title={f.hint || ''} style={{
               display:'inline-flex', alignItems:'center', gap:5,
               padding:'4px 10px', borderRadius:8, cursor:'pointer',
               background: isActive ? f.color+'15' : 'transparent',
