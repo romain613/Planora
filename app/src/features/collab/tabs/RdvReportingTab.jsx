@@ -295,9 +295,25 @@ const RdvReportingTab = () => {
     return '';
   };
 
-  const list = subTab === 'received' ? received : sent;
+  const rawList = subTab === 'received' ? received : sent;
   const loading = subTab === 'received' ? loadingReceived : loadingSent;
   const onRefresh = subTab === 'received' ? fetchReceived : fetchSent;
+
+  // V1.10.4-r9 — Filtre status client-side : Tous / Confirmés / Annulés.
+  // Le backend retourne tout (status=all par défaut depuis V1.10.4-r9) ; ce filtre
+  // permet à l'utilisateur de zoomer sans round-trip serveur.
+  const [statusFilter, setStatusFilter] = useState('all');
+  const list = rawList.filter(b => {
+    if (statusFilter === 'all') return true;
+    if (statusFilter === 'confirmed') return b.status === 'confirmed';
+    if (statusFilter === 'cancelled') return b.status === 'cancelled';
+    return true;
+  });
+  const countByStatus = {
+    all: rawList.length,
+    confirmed: rawList.filter(b => b.status === 'confirmed').length,
+    cancelled: rawList.filter(b => b.status === 'cancelled').length,
+  };
 
   return (
     <div>
@@ -349,7 +365,7 @@ const RdvReportingTab = () => {
       </div>
 
       {/* ── Sous-onglets Reçus / Transmis ─────────────────────────────── */}
-      <div style={{ display:'flex', gap:6, marginBottom:16, flexWrap:'wrap' }}>
+      <div style={{ display:'flex', gap:6, marginBottom:10, flexWrap:'wrap' }}>
         {[
           { id:'received', label:'Reçus',    icon:'inbox',  count: received.length, hint:'RDV transmis pour moi' },
           { id:'sent',     label:'Transmis', icon:'send',   count: sent.length,     hint:'RDV que j\'ai transmis' },
@@ -367,6 +383,34 @@ const RdvReportingTab = () => {
             {t.count > 0 && <span style={{ fontSize:10, fontWeight:800, background:subTab===t.id?T.accent:T.text3+'30', color:subTab===t.id?'#fff':T.text3, padding:'1px 7px', borderRadius:10 }}>{t.count}</span>}
           </div>
         ))}
+      </div>
+
+      {/* V1.10.4-r9 — Filtre status client-side (Tous / Confirmés / Annulés).
+          Backend retourne déjà tous les statuts ; ce filtre permet à l'utilisateur
+          de focaliser sur un sous-ensemble sans round-trip. */}
+      <div style={{ display:'flex', gap:5, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
+        <span style={{ fontSize:10, fontWeight:700, color:T.text3, textTransform:'uppercase', letterSpacing:0.5, marginRight:4 }}>Filtre :</span>
+        {[
+          { id:'all',       label:'Tous',      color:T.text2,  count: countByStatus.all },
+          { id:'confirmed', label:'Confirmés', color:'#22C55E', count: countByStatus.confirmed },
+          { id:'cancelled', label:'Annulés',   color:'#EF4444', count: countByStatus.cancelled },
+        ].map(f => {
+          const isActive = statusFilter === f.id;
+          return (
+            <div key={f.id} onClick={()=>setStatusFilter(f.id)} style={{
+              display:'inline-flex', alignItems:'center', gap:5,
+              padding:'4px 10px', borderRadius:8, cursor:'pointer',
+              background: isActive ? f.color+'15' : 'transparent',
+              border: '1px solid ' + (isActive ? f.color+'50' : T.border),
+              color: isActive ? f.color : T.text2,
+              fontSize:11, fontWeight: isActive ? 700 : 500,
+              transition: 'all .15s'
+            }}>
+              {f.label}
+              <span style={{ fontSize:9, fontWeight:800, background: isActive ? f.color : T.text3+'25', color: isActive ? '#fff' : T.text3, padding:'1px 6px', borderRadius:8 }}>{f.count}</span>
+            </div>
+          );
+        })}
       </div>
 
       {/* ── Erreur globale ───────────────────────────────────────────── */}
@@ -399,6 +443,12 @@ const RdvReportingTab = () => {
         <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
           {list.map(b => {
             const status = b.bookingReportingStatus || '';
+            // V1.10.4-r9 — Suivi des transmissions cancelled côté Transmis :
+            // l'apporteur (sender) doit voir tous ses transferts, même annulés par le receveur.
+            const isCancelled = b.status === 'cancelled';
+            // V1.10.4-r9 — Contact hard-supprimé : le flag _contactGhost vient du backend
+            // via LEFT JOIN. La transmission reste tracée, fallback sur visitorName du booking.
+            const isGhost = !!b._contactGhost;
             const peerId = subTab === 'received' ? b.bookedByCollaboratorId : b.agendaOwnerId;
             const peerLabel = subTab === 'received' ? 'Transmis par' : 'Pour';
             // V1.11.4 — Garde defensive : "Faire le reporting" affiche uniquement si
@@ -430,9 +480,30 @@ const RdvReportingTab = () => {
                   {/* Info principale */}
                   <div style={{ flex:1, minWidth:200 }}>
                     <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:4 }}>
-                      <span style={{ fontSize:14, fontWeight:700, color:T.text }}>{contactName(b)}</span>
+                      <span style={{ fontSize:14, fontWeight:700, color: isGhost ? T.text3 : T.text, fontStyle: isGhost ? 'italic' : 'normal' }}>
+                        {contactName(b)}
+                      </span>
+                      {/* V1.10.4-r9 — Badge "RDV annulé" (status='cancelled') visible Transmis pour
+                          que l'apporteur garde la traçabilité même si le receveur a annulé le RDV. */}
+                      {isCancelled && (
+                        <span
+                          title="RDV annulé — la transmission reste tracée pour le reporting de l'apporteur."
+                          style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:10, background:'#FEE2E2', border:'1px solid #FCA5A5', color:'#B91C1C', display:'inline-flex', alignItems:'center', gap:3 }}>
+                          🚫 RDV annulé
+                        </span>
+                      )}
+                      {/* V1.10.4-r9 — Badge "Contact supprimé" : fiche hard-deleted mais transmission
+                          conservée pour l'historique reporting. Données fallback depuis le booking
+                          (visitorName/Email/Phone, bookingId, date transmission). */}
+                      {isGhost && (
+                        <span
+                          title={"Fiche contact supprimée — transmission tracée via bookingId=" + b.id + ". Données affichées depuis le booking."}
+                          style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:10, background:'#FEF3C7', border:'1px solid #FCD34D', color:'#92400E', display:'inline-flex', alignItems:'center', gap:3 }}>
+                          📂 Contact supprimé
+                        </span>
+                      )}
                       {/* V1.12.x.2 — badge contact archivé (RDV reste visible pour traçabilité) */}
-                      {b.contactArchivedAt && b.contactArchivedAt !== '' && (
+                      {!isGhost && b.contactArchivedAt && b.contactArchivedAt !== '' && (
                         <span
                           title="Ce contact est archivé mais ce RDV reste visible pour conserver la traçabilité."
                           style={{ fontSize:9, fontWeight:700, padding:'2px 6px', borderRadius:4, background:'#64748B18', color:'#64748B', display:'inline-flex', alignItems:'center', gap:3, cursor:'help' }}>
@@ -445,10 +516,16 @@ const RdvReportingTab = () => {
                         </span>
                       )}
                       {status ? <StatusBadge status={status}/> : <StatusBadge status="pending"/>}
-                      {/* V1.10.4.I — Badge "Statut actuel" (pipeline_stage receveur) */}
+                      {/* V1.10.4.I — Badge "Statut actuel" (pipeline_stage receveur).
+                          V1.10.4-r9 — Côté Transmis : préfixé "Chez {receveur} :" pour clarifier
+                          que ce statut est celui du contact CHEZ Julie, pas chez Ilane. */}
                       {stageMeta && (
-                        <span title={`Statut actuel du contact : ${stageMeta.label}`} style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:10, background:stageMeta.color+'15', border:'1px solid '+stageMeta.color+'40', color:stageMeta.color, display:'inline-flex', alignItems:'center', gap:4 }}>
-                          <span style={{ fontSize:11, lineHeight:1 }}>{stageMeta.emoji}</span> {stageMeta.label}
+                        <span title={`Statut actuel du contact${subTab === 'sent' ? ' chez ' + collabName(b.agendaOwnerId) : ''} : ${stageMeta.label}`} style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:10, background:stageMeta.color+'15', border:'1px solid '+stageMeta.color+'40', color:stageMeta.color, display:'inline-flex', alignItems:'center', gap:4 }}>
+                          <span style={{ fontSize:11, lineHeight:1 }}>{stageMeta.emoji}</span>
+                          {subTab === 'sent' && (
+                            <span style={{ fontWeight:600, opacity:0.85 }}>Chez {collabName(b.agendaOwnerId)} : </span>
+                          )}
+                          {stageMeta.label}
                         </span>
                       )}
                     </div>

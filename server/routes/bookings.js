@@ -654,11 +654,30 @@ router.get('/reporting', requireAuth, enforceCompany, (req, res) => {
     //   PRESERVE V1.12.5.d : pas de filtre archivedAt (contacts archivés OK pour
     //                        preserver historique reporting + capacite receiver)
     // V1.12.x.2 — expose 3 champs archive du contact pour badge Reporting frontend
+    //
+    // V1.10.4-r9 — Status filter : default 'all' pour les 2 rôles.
+    //   Le Reporting = traçabilité complète des transmissions inter-collabs.
+    //   Une transmission ne doit JAMAIS être masquée du Reporting, même si :
+    //     - RDV annulé / passé / non honoré
+    //     - contact reclassé en R2 / FIN / Contacté
+    //     - contact archivé ou hard-supprimé (LEFT JOIN ci-dessous)
+    //   Override explicite via ?status=confirmed|cancelled|all si UI veut filtrer.
     const targetCol = role === 'received' ? 'agendaOwnerId' : 'bookedByCollaboratorId';
-    // V1.10.4.I — JOIN contacts expose receiverPipelineStage + next_action_label/date + lastActivityAt
+    const statusFilter = String(req.query.status || 'all').toLowerCase();
+    if (!['confirmed', 'cancelled', 'all'].includes(statusFilter)) {
+      return res.status(400).json({ error: 'status: confirmed|cancelled|all' });
+    }
+    const statusClause = statusFilter === 'all' ? '' : 'AND b.status = ?';
+    const sqlParams = statusFilter === 'all' ? [companyId, cid] : [companyId, cid, statusFilter];
+
+    // V1.10.4-r9 — LEFT JOIN contacts (au lieu d'INNER) pour préserver la traçabilité
+    // des transmissions vers contacts hard-supprimés. Frontend affiche un badge
+    // "Contact supprimé" et fallback sur visitorName/Email/Phone (preservés dans bookings).
+    // V1.10.4.I — Champs receiverPipelineStage + next_action_label/date + lastActivityAt
     // pour afficher "Statut actuel" et "Prochaine action" sur chaque card reporting.
     const rows = db.prepare(
       `SELECT b.*,
+              ct.id AS _contactExistsId,
               ct.archivedAt AS contactArchivedAt,
               ct.archivedBy AS contactArchivedBy,
               ct.archivedReason AS contactArchivedReason,
@@ -671,13 +690,13 @@ router.get('/reporting', requireAuth, enforceCompany, (req, res) => {
               ct.phone AS contactPhone
        FROM bookings b
        JOIN calendars c ON b.calendarId = c.id
-       INNER JOIN contacts ct ON b.contactId = ct.id
+       LEFT JOIN contacts ct ON b.contactId = ct.id
        WHERE c.companyId = ?
          AND b.bookingType = 'share_transfer'
          AND b.${targetCol} = ?
-         AND b.status = 'confirmed'
+         ${statusClause}
        ORDER BY b.date DESC, b.time DESC`
-    ).all(companyId, cid);
+    ).all(...sqlParams);
 
     const parsed = rows.map(b => {
       const r = { ...b };
@@ -686,6 +705,11 @@ router.get('/reporting', requireAuth, enforceCompany, (req, res) => {
       r.noShow = !!r.noShow;
       r.checkedIn = !!r.checkedIn;
       r.reconfirmed = !!r.reconfirmed;
+      // V1.10.4-r9 — Flag explicite "contact hard-supprimé" pour UI badge.
+      // ct.id IS NULL via LEFT JOIN = contact n'existe plus, mais la transmission
+      // reste tracée. Frontend fallback sur visitorName/Email/Phone du booking.
+      r._contactGhost = !r._contactExistsId;
+      delete r._contactExistsId;
       return r;
     });
     res.json(parsed);
