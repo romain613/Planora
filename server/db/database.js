@@ -2600,5 +2600,162 @@ export function getActiveExecutor(contactId, companyId) {
   ).get(contactId, companyId) || null;
 }
 
+// ═══════════════════════════════════════════════════════════════════════
+// CONSENT PHASE 1 — Module consentement téléphonique par enveloppe
+// Schema additif idempotent — 2026-05-12
+// Spec : AUDIT-CONSENT-TELEMARKETING-2026-05-11 + GO MH Phase 1
+// ═══════════════════════════════════════════════════════════════════════
+// Scope strict Phase 1 (schema DB uniquement) :
+//   - 5 colonnes additives lead_envelopes (config consentement)
+//   - 13 colonnes additives incoming_leads (state machine consent)
+//   - 3 nouvelles tables : consent_tokens, consent_proofs, consent_campaigns
+//   - Indexes + triggers immutabilité consent_proofs (RGPD)
+//
+// Décisions business gravées (par défaut, ne bloquent pas Phase 1) :
+//   - TTL token : 30j (consentExpireDays default)
+//   - Rétention preuves : 5 ans (purge cron Phase 6 si besoin)
+//   - Version texte légal : snapshot + hash + version stockés en DB
+//   - STOP SMS : révocation limitée à enveloppe/campagne (campaignId tracé)
+//   - Twilio multi-tenant : reporté (credentials globales actuelles)
+//
+// NOTE : permissions consent.view/manage/send/export à ajouter dans
+// middleware/auth.js ALL_PERMISSIONS lors de Phase 4 (UI campagne) — pas ici.
+// ═══════════════════════════════════════════════════════════════════════
+
+// ─── CONSENT-PHASE1.A — Extensions lead_envelopes (5 colonnes) ─────────
+const _consentEnvelopeCols = [
+  "telemarketingApprovalEnabled INTEGER DEFAULT 0",
+  "consentCampaignId TEXT",
+  "consentSmsTemplate TEXT",
+  "consentTextVersion TEXT",
+  "consentExpireDays INTEGER DEFAULT 30"
+];
+for (const col of _consentEnvelopeCols) {
+  try { db.exec(`ALTER TABLE lead_envelopes ADD COLUMN ${col}`); } catch {}
+}
+
+// ─── CONSENT-PHASE1.B — Extensions incoming_leads (13 colonnes) ────────
+const _consentLeadCols = [
+  "consentStatus TEXT DEFAULT 'not_requested'",
+  "callable INTEGER DEFAULT 0",
+  "consentRequestedAt TEXT",
+  "consentSmsSentAt TEXT",
+  "consentClickedAt TEXT",
+  "consentValidatedAt TEXT",
+  "consentRefusedAt TEXT",
+  "consentRevokedAt TEXT",
+  "consentExpiredAt TEXT",
+  "consentProofId TEXT",
+  "externalCrmExportedAt TEXT",
+  "externalCrmExportStatus TEXT",
+  "externalCrmExportTarget TEXT"
+];
+for (const col of _consentLeadCols) {
+  try { db.exec(`ALTER TABLE incoming_leads ADD COLUMN ${col}`); } catch {}
+}
+
+// ─── CONSENT-PHASE1.C — Table consent_tokens (lookup token → lead) ─────
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS consent_tokens (
+      id TEXT PRIMARY KEY,
+      tokenHash TEXT UNIQUE NOT NULL,
+      companyId TEXT NOT NULL,
+      envelopeId TEXT NOT NULL,
+      leadId TEXT NOT NULL,
+      campaignId TEXT,
+      phone TEXT NOT NULL,
+      expiresAt TEXT NOT NULL,
+      usedAt TEXT,
+      clickedAt TEXT,
+      status TEXT DEFAULT 'pending',
+      createdAt TEXT NOT NULL
+    );
+  `);
+} catch (e) { console.error('[CONSENT-PHASE1] consent_tokens create:', e.message); }
+
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_consent_tokens_hash ON consent_tokens(tokenHash)"); } catch {}
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_consent_tokens_lead ON consent_tokens(leadId)"); } catch {}
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_consent_tokens_company ON consent_tokens(companyId, status)"); } catch {}
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_consent_tokens_envelope ON consent_tokens(envelopeId)"); } catch {}
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_consent_tokens_expiry ON consent_tokens(expiresAt)"); } catch {}
+
+// ─── CONSENT-PHASE1.D — Table consent_proofs (preuve immuable) ─────────
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS consent_proofs (
+      id TEXT PRIMARY KEY,
+      companyId TEXT NOT NULL,
+      envelopeId TEXT NOT NULL,
+      campaignId TEXT,
+      leadId TEXT NOT NULL,
+      contactId TEXT,
+      phone TEXT NOT NULL,
+      firstName TEXT,
+      lastName TEXT,
+      status TEXT NOT NULL,
+      consentSource TEXT NOT NULL DEFAULT 'sms_link',
+      consentTextSnapshot TEXT NOT NULL,
+      consentTextHash TEXT NOT NULL,
+      legalVersion TEXT NOT NULL,
+      tokenHash TEXT NOT NULL,
+      smsSentAt TEXT,
+      clickedAt TEXT,
+      validatedAt TEXT,
+      refusedAt TEXT,
+      revokedAt TEXT,
+      ip TEXT,
+      port TEXT,
+      userAgent TEXT,
+      pdfStoragePath TEXT,
+      pdfHash TEXT,
+      metadata_json TEXT DEFAULT '{}',
+      createdAt TEXT NOT NULL
+    );
+  `);
+} catch (e) { console.error('[CONSENT-PHASE1] consent_proofs create:', e.message); }
+
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_consent_proofs_company ON consent_proofs(companyId, createdAt)"); } catch {}
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_consent_proofs_envelope ON consent_proofs(envelopeId)"); } catch {}
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_consent_proofs_lead ON consent_proofs(leadId)"); } catch {}
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_consent_proofs_phone ON consent_proofs(phone)"); } catch {}
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_consent_proofs_status ON consent_proofs(status, companyId)"); } catch {}
+
+// Immutability triggers — mirror audit_logs pattern (RGPD requirement)
+try { db.exec(`CREATE TRIGGER IF NOT EXISTS prevent_consent_proof_update BEFORE UPDATE ON consent_proofs BEGIN SELECT RAISE(ABORT, 'consent_proofs are immutable'); END;`); } catch {}
+try { db.exec(`CREATE TRIGGER IF NOT EXISTS prevent_consent_proof_delete BEFORE DELETE ON consent_proofs BEGIN SELECT RAISE(ABORT, 'consent_proofs cannot be deleted'); END;`); } catch {}
+
+// ─── CONSENT-PHASE1.E — Table consent_campaigns (batch tracking) ───────
+try {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS consent_campaigns (
+      id TEXT PRIMARY KEY,
+      companyId TEXT NOT NULL,
+      envelopeId TEXT NOT NULL,
+      name TEXT,
+      smsTemplate TEXT,
+      legalVersion TEXT NOT NULL,
+      legalTextSnapshot TEXT NOT NULL,
+      totalLeads INTEGER DEFAULT 0,
+      smsSentCount INTEGER DEFAULT 0,
+      clickedCount INTEGER DEFAULT 0,
+      validatedCount INTEGER DEFAULT 0,
+      refusedCount INTEGER DEFAULT 0,
+      revokedCount INTEGER DEFAULT 0,
+      expiredCount INTEGER DEFAULT 0,
+      status TEXT DEFAULT 'draft',
+      startedAt TEXT,
+      completedAt TEXT,
+      createdBy TEXT,
+      createdAt TEXT NOT NULL
+    );
+  `);
+} catch (e) { console.error('[CONSENT-PHASE1] consent_campaigns create:', e.message); }
+
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_consent_campaigns_envelope ON consent_campaigns(envelopeId)"); } catch {}
+try { db.exec("CREATE INDEX IF NOT EXISTS idx_consent_campaigns_company ON consent_campaigns(companyId, status)"); } catch {}
+
+console.log('[CONSENT-PHASE1] consent schema ready');
+
 export { db, parseRow };
 export default db;
