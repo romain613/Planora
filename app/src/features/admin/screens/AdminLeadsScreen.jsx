@@ -91,7 +91,7 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
             const searchQ = (typeof csvFile === 'string' && csvFile) ? '&search='+encodeURIComponent(csvFile) : '';
             Promise.all([
               api(`/api/leads/sources?companyId=${company.id}`),
-              api(`/api/leads/incoming?companyId=${company.id}${statusFilter?'&status='+statusFilter:''}${searchQ}`),
+              api(`/api/leads/incoming?companyId=${company.id}&limit=10000${statusFilter?'&status='+statusFilter:''}${searchQ}`),
               api(`/api/leads/envelopes?companyId=${company.id}`),
               api(`/api/leads/stats?companyId=${company.id}`),
               api(`/api/leads/history?companyId=${company.id}`),
