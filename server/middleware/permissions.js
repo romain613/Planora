@@ -33,6 +33,8 @@ export const ALL_PERMISSIONS = [
   'settings.view', 'settings.manage',
   // AI
   'ai_copilot.use',
+  // Consent (Phase 4 — telemarketing approval per envelope)
+  'consent.view', 'consent.manage', 'consent.send', 'consent.export',
 ];
 
 /**

@@ -24,6 +24,7 @@ import {
   ENVELOPE_ICONS, ENVELOPE_PRIORITIES, resolveEnvelopeIcon, resolveEnvelopePriority,
   DEFAULT_ENVELOPE_COLOR, DEFAULT_ENVELOPE_ICON, DEFAULT_ENVELOPE_PRIORITY,
 } from "../data/envelopeOptions.js";
+import EnvelopeConsentSection from "../components/EnvelopeConsentSection"; // Phase 4 consent
 
 export default function AdminLeadsScreen({ collab, collabs, company, contacts, pushNotification }) {
 
@@ -822,6 +823,14 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
                     <span style={{fontSize:12,fontWeight:600,color:status.color}}>{status.label}</span>
                   </div>
                 </div>
+
+                {/* Phase 4 — Section consentement téléphonique (admin only) */}
+                <EnvelopeConsentSection
+                  envelopeId={env.id}
+                  envelopeName={env.name}
+                  companyId={company?.id}
+                  isAdmin={collab?.role === 'admin' || collab?.role === 'supra'}
+                />
 
                 {/* FILTRE PERIODE */}
                 <div style={{display:'flex',gap:6,marginBottom:14,alignItems:'center',flexWrap:'wrap'}}>
