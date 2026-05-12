@@ -19,6 +19,8 @@ node_modules
 # Local source backups (timestamp-suffixed)
 *.pre-*.bak
 *.bak-*
+*.pre-*
+*.log
 
 # Build artefacts intermédiaires (dist temporaires)
 app/dist-minified.bak/
