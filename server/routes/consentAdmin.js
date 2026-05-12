@@ -109,8 +109,25 @@ function _getSmsCredits(companyId) {
   return row ? row.credits : 0;
 }
 
+// ─── Resolve companyId (fix supra impersonation — pattern V7 transfer 2026-04-19) ───
+// req.auth.companyId est NULL pour les supras ; activeCompanyId contient la company impersonée.
+// Fallback body/query pour les cas legacy. Aucun bypass de companyId — toujours scoped.
+function _resolveCompanyId(req) {
+  return req.auth?.companyId
+      || req.auth?._activeCompanyId
+      || req.body?.companyId
+      || req.query?.companyId
+      || null;
+}
+
 // ─── Verify ownership envelope ↔ company ───────────────────────────────
-function _resolveEnvelope(envelopeId, companyId) {
+// Accepte soit un req Express (résolution supra-safe) soit un companyId string direct
+// (utilisé pour les call sites où lead.companyId est déjà connu).
+function _resolveEnvelope(envelopeId, reqOrCompanyId) {
+  const companyId = (typeof reqOrCompanyId === 'string')
+    ? reqOrCompanyId
+    : _resolveCompanyId(reqOrCompanyId);
+  if (!companyId) return null;
   const env = db.prepare('SELECT * FROM lead_envelopes WHERE id = ? AND companyId = ?').get(envelopeId, companyId);
   return env || null;
 }
@@ -120,7 +137,7 @@ function _resolveEnvelope(envelopeId, companyId) {
 // ════════════════════════════════════════════════════════════════════════
 router.post('/envelopes/:id/consent/toggle', requireAuth, requireAdmin, enforceCompany, requirePermission('consent.manage'), (req, res) => {
   try {
-    const env = _resolveEnvelope(req.params.id, req.auth.companyId);
+    const env = _resolveEnvelope(req.params.id, req);
     if (!env) return res.status(404).json({ error: 'ENVELOPE_NOT_FOUND' });
     const enabled = req.body?.enabled === true || req.body?.enabled === 1 ? 1 : 0;
     db.prepare('UPDATE lead_envelopes SET telemarketingApprovalEnabled = ? WHERE id = ? AND companyId = ?').run(enabled, env.id, env.companyId);
@@ -137,7 +154,7 @@ router.post('/envelopes/:id/consent/toggle', requireAuth, requireAdmin, enforceC
 // ════════════════════════════════════════════════════════════════════════
 router.put('/envelopes/:id/consent/settings', requireAuth, requireAdmin, enforceCompany, requirePermission('consent.manage'), (req, res) => {
   try {
-    const env = _resolveEnvelope(req.params.id, req.auth.companyId);
+    const env = _resolveEnvelope(req.params.id, req);
     if (!env) return res.status(404).json({ error: 'ENVELOPE_NOT_FOUND' });
     const { consentSmsTemplate, consentTextVersion, consentExpireDays } = req.body || {};
     const tpl = consentSmsTemplate != null ? String(consentSmsTemplate).slice(0, 500) : null;
@@ -164,7 +181,7 @@ router.put('/envelopes/:id/consent/settings', requireAuth, requireAdmin, enforce
 // ════════════════════════════════════════════════════════════════════════
 router.get('/envelopes/:id/consent/preview', requireAuth, requireAdmin, enforceCompany, requirePermission('consent.view'), (req, res) => {
   try {
-    const env = _resolveEnvelope(req.params.id, req.auth.companyId);
+    const env = _resolveEnvelope(req.params.id, req);
     if (!env) return res.status(404).json({ error: 'ENVELOPE_NOT_FOUND' });
     const counts = _eligibilityCounts(env.id, env.companyId);
     const smsCreditsAvailable = _getSmsCredits(env.companyId);
@@ -198,7 +215,7 @@ router.get('/envelopes/:id/consent/preview', requireAuth, requireAdmin, enforceC
 // ════════════════════════════════════════════════════════════════════════
 router.post('/envelopes/:id/consent/campaign/send', requireAuth, requireAdmin, enforceCompany, requirePermission('consent.send'), async (req, res) => {
   try {
-    const env = _resolveEnvelope(req.params.id, req.auth.companyId);
+    const env = _resolveEnvelope(req.params.id, req);
     if (!env) return res.status(404).json({ error: 'ENVELOPE_NOT_FOUND' });
     if (env.telemarketingApprovalEnabled !== 1) {
       return res.status(409).json({ error: 'CONSENT_NOT_ENABLED' });
@@ -318,7 +335,7 @@ router.post('/envelopes/:id/consent/campaign/send', requireAuth, requireAdmin, e
 // ════════════════════════════════════════════════════════════════════════
 router.get('/envelopes/:id/consent/stats', requireAuth, requireAdmin, enforceCompany, requirePermission('consent.view'), (req, res) => {
   try {
-    const env = _resolveEnvelope(req.params.id, req.auth.companyId);
+    const env = _resolveEnvelope(req.params.id, req);
     if (!env) return res.status(404).json({ error: 'ENVELOPE_NOT_FOUND' });
     const counts = _eligibilityCounts(env.id, env.companyId);
     const callable = db.prepare('SELECT COUNT(*) as c FROM incoming_leads WHERE envelope_id = ? AND companyId = ? AND callable = 1').get(env.id, env.companyId).c;
@@ -347,7 +364,9 @@ router.get('/envelopes/:id/consent/stats', requireAuth, requireAdmin, enforceCom
 // ════════════════════════════════════════════════════════════════════════
 router.post('/leads/:leadId/consent/resend', requireAuth, requireAdmin, enforceCompany, requirePermission('consent.send'), async (req, res) => {
   try {
-    const lead = db.prepare('SELECT * FROM incoming_leads WHERE id = ? AND companyId = ?').get(req.params.leadId, req.auth.companyId);
+    const _companyId = _resolveCompanyId(req);
+    if (!_companyId) return res.status(400).json({ error: 'COMPANY_CONTEXT_MISSING' });
+    const lead = db.prepare('SELECT * FROM incoming_leads WHERE id = ? AND companyId = ?').get(req.params.leadId, _companyId);
     if (!lead) return res.status(404).json({ error: 'LEAD_NOT_FOUND' });
     if (!_isValidPhone(lead.phone)) return res.status(400).json({ error: 'INVALID_PHONE' });
     if (!lead.envelope_id) return res.status(409).json({ error: 'LEAD_HAS_NO_ENVELOPE' });
@@ -402,7 +421,9 @@ router.post('/leads/:leadId/consent/resend', requireAuth, requireAdmin, enforceC
 // ════════════════════════════════════════════════════════════════════════
 router.post('/leads/:leadId/consent/revoke', requireAuth, requireAdmin, enforceCompany, requirePermission('consent.manage'), (req, res) => {
   try {
-    const lead = db.prepare('SELECT * FROM incoming_leads WHERE id = ? AND companyId = ?').get(req.params.leadId, req.auth.companyId);
+    const _companyId = _resolveCompanyId(req);
+    if (!_companyId) return res.status(400).json({ error: 'COMPANY_CONTEXT_MISSING' });
+    const lead = db.prepare('SELECT * FROM incoming_leads WHERE id = ? AND companyId = ?').get(req.params.leadId, _companyId);
     if (!lead) return res.status(404).json({ error: 'LEAD_NOT_FOUND' });
     const env = lead.envelope_id ? _resolveEnvelope(lead.envelope_id, lead.companyId) : null;
     const reason = String(req.body?.reason || 'manual_admin_revoke').slice(0, 256);
@@ -457,7 +478,7 @@ router.get('/leads/check-callable', requireAuth, enforceCompany, (req, res) => {
       return res.status(400).json({ error: 'MISSING_PARAMS', detail: 'phone, contactId or leadId required' });
     }
     const result = checkCallable({
-      companyId: req.auth.companyId,
+      companyId: _resolveCompanyId(req),
       phone: phone ? String(phone) : undefined,
       contactId: contactId ? String(contactId) : undefined,
       leadId: leadId ? String(leadId) : undefined,
