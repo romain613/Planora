@@ -486,23 +486,27 @@ const RdvReportingTab = () => {
                   <div style={{ width:42, height:42, borderRadius:14, background:T.accentBg, display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0 }}>
                     <I n="calendar" s={18} style={{ color:T.accent }}/>
                   </div>
-                  {/* Info principale */}
+                  {/* V1.10.4-r9.5 — VUE LISTE COMPACTE : ligne principale minimaliste.
+                      Seule l'info de pilotage rapide est exposée :
+                        - Nom contact (italic muted si ghost)
+                        - Téléphone
+                        - 1 SEUL badge statut métier (pipeline_stage du receveur)
+                      Tout le reste (Sender/Receiver/Date RDV/Créé le/RDV initial annulé/
+                      Contact supprimé/Contact archivé/Reporting/Note) → accordéon au clic. */}
                   <div style={{ flex:1, minWidth:200 }}>
-                    <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap', marginBottom:4 }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:10, flexWrap:'wrap' }}>
                       <span style={{ fontSize:14, fontWeight:700, color: isGhost ? T.text3 : T.text, fontStyle: isGhost ? 'italic' : 'normal' }}>
                         {contactName(b)}
                       </span>
                       {contactPhone(b) && (
-                        <span style={{ fontSize:11, color:T.text3, display:'inline-flex', alignItems:'center', gap:3 }}>
-                          <I n="phone" s={11}/> {contactPhone(b)}
+                        <span style={{ fontSize:12, color:T.text3, display:'inline-flex', alignItems:'center', gap:4 }}>
+                          <I n="phone" s={12}/> {contactPhone(b)}
                         </span>
                       )}
-                      {/* V1.10.4-r9.3 — RÈGLE UX : Le Reporting suit le LEAD, pas l'état technique
-                          du RDV. Le pipeline_stage actuel du receveur est l'info PRINCIPALE.
-                          Ordre des badges : stage (principal) → reporting → ghost/archived → cancelled (discret). */}
-                      {/* Badge stage = info principale (pipeline actuel chez le receveur) */}
-                      {stageMeta && (
-                        <span title={`Statut actuel du contact${subTab === 'sent' ? ' chez ' + collabName(b.agendaOwnerId) : ''} : ${stageMeta.label}`} style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:10, background:stageMeta.color+'15', border:'1px solid '+stageMeta.color+'40', color:stageMeta.color, display:'inline-flex', alignItems:'center', gap:4 }}>
+                      {/* Badge unique = statut métier (pipeline_stage actuel chez le receveur).
+                          Préfixe "Chez {receiver} :" côté Transmis pour clarifier l'ownership. */}
+                      {stageMeta && !isGhost && (
+                        <span title={`Statut actuel du contact${subTab === 'sent' ? ' chez ' + collabName(b.agendaOwnerId) : ''} : ${stageMeta.label}`} style={{ fontSize:11, fontWeight:700, padding:'3px 10px', borderRadius:10, background:stageMeta.color+'15', border:'1px solid '+stageMeta.color+'40', color:stageMeta.color, display:'inline-flex', alignItems:'center', gap:4 }}>
                           <span style={{ fontSize:11, lineHeight:1 }}>{stageMeta.emoji}</span>
                           {subTab === 'sent' && (
                             <span style={{ fontWeight:600, opacity:0.85 }}>Chez {collabName(b.agendaOwnerId)} : </span>
@@ -510,71 +514,7 @@ const RdvReportingTab = () => {
                           {stageMeta.label}
                         </span>
                       )}
-                      {/* Badge reporting = info secondaire (statut reporting du RDV) */}
-                      {status ? <StatusBadge status={status}/> : <StatusBadge status="pending"/>}
-                      {/* V1.10.4-r9 — Badge "Contact supprimé" : fiche hard-deleted mais transmission
-                          conservée pour l'historique reporting. */}
-                      {isGhost && (
-                        <span
-                          title={"Fiche contact supprimée — transmission tracée via bookingId=" + b.id + ". Données affichées depuis le booking."}
-                          style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:10, background:'#FEF3C7', border:'1px solid #FCD34D', color:'#92400E', display:'inline-flex', alignItems:'center', gap:3 }}>
-                          📂 Contact supprimé
-                        </span>
-                      )}
-                      {/* V1.12.x.2 — badge contact archivé (RDV reste visible pour traçabilité) */}
-                      {!isGhost && b.contactArchivedAt && b.contactArchivedAt !== '' && (
-                        <span
-                          title="Ce contact est archivé mais ce RDV reste visible pour conserver la traçabilité."
-                          style={{ fontSize:9, fontWeight:700, padding:'2px 6px', borderRadius:4, background:'#64748B18', color:'#64748B', display:'inline-flex', alignItems:'center', gap:3, cursor:'help' }}>
-                          📦 Contact archivé
-                        </span>
-                      )}
-                      {/* V1.10.4-r9.3 — Badge "RDV initial annulé" DISCRET (gris, fin de ligne).
-                          Le RDV agenda annulé n'implique PAS un lead perdu : Julie peut avoir
-                          annulé le RDV après contact téléphonique et reclassé le contact en R2,
-                          Contacté, En réflexion, etc. Le lead reste actif. */}
-                      {isCancelled && (
-                        <span
-                          title="Le RDV agenda initial a été annulé. Le lead reste suivi selon son pipeline actuel."
-                          style={{ fontSize:9, fontWeight:600, padding:'2px 6px', borderRadius:4, background:T.bg, border:`1px solid ${T.border}`, color:T.text3, display:'inline-flex', alignItems:'center', gap:3, cursor:'help' }}>
-                          📅 RDV initial annulé
-                        </span>
-                      )}
                     </div>
-                    <div style={{ fontSize:12, color:T.text2, display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>
-                      <I n="clock" s={11} style={{ color:T.text3 }}/>
-                      <span>{fmtDateTime(b.date, b.time)}</span>
-                      <span style={{ color:T.text3 }}>·</span>
-                      <span style={{ display:'inline-flex', alignItems:'center', gap:4 }}>
-                        <I n="user" s={11} style={{ color:T.text3 }}/>
-                        <span style={{ color:T.text3 }}>{peerLabel}</span>
-                        <span style={{ fontWeight:600 }}>{collabName(peerId)}</span>
-                      </span>
-                      {/* V1.10.4.I — "Créé le" */}
-                      {b.createdAt && (
-                        <>
-                          <span style={{ color:T.text3 }}>·</span>
-                          <span style={{ display:'inline-flex', alignItems:'center', gap:4 }} title="Date de création du RDV">
-                            <I n="plus-circle" s={11} style={{ color:T.text3 }}/>
-                            <span style={{ color:T.text3 }}>Créé le</span>
-                            <span style={{ fontWeight:600 }}>{fmtDate(b.createdAt)}</span>
-                          </span>
-                        </>
-                      )}
-                    </div>
-                    {/* Note de reporting si déjà fait */}
-                    {b.bookingReportingNote && (
-                      <div style={{ marginTop:8, padding:'8px 10px', borderRadius:8, background:T.bg, border:'1px solid '+T.border, fontSize:12, color:T.text2, lineHeight:1.5 }}>
-                        <span style={{ fontSize:10, fontWeight:700, color:T.text3, marginRight:6 }}>Note :</span>
-                        {b.bookingReportingNote}
-                      </div>
-                    )}
-                    {/* Méta reporting (qui + quand) */}
-                    {reporterId && reportedAt && (
-                      <div style={{ marginTop:6, fontSize:10, color:T.text3, display:'flex', alignItems:'center', gap:4 }}>
-                        <I n="check-circle" s={10}/> Rapporté par {collabName(reporterId)} · {new Date(reportedAt).toLocaleString('fr-FR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}
-                      </div>
-                    )}
                   </div>
                   {/* V1.10.4-r9.3 — Quick actions zone (flex column pour empilage sur petit écran) */}
                   <div style={{ flexShrink:0, display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end' }}>
@@ -626,7 +566,9 @@ const RdvReportingTab = () => {
                   </div>
                 </div>
 
-                {/* V1.10.4.I — Accordion section (Détails + Timeline) ─────────── */}
+                {/* V1.10.4-r9.5 — Accordéon enrichi : absorbe tout ce qui a été retiré
+                    de la ligne principale (Sender/Receiver/Date RDV/Créé le/Statut booking/
+                    Contact supprimé/Contact archivé/Note reporting + métadonnées). */}
                 {isExpanded && (
                   <div style={{ borderTop:'1px solid '+T.border, background:T.bg, padding:'14px 18px' }}>
                     {/* Détails enrichis */}
@@ -635,13 +577,40 @@ const RdvReportingTab = () => {
                       <DetailRow label="Receiver" value={collabName(b.agendaOwnerId)}/>
                       <DetailRow label="Date RDV" value={fmtDateTime(b.date, b.time)}/>
                       <DetailRow label="Créé le" value={b.createdAt ? fmtDate(b.createdAt) : '—'}/>
+                      {/* V1.10.4-r9.5 — Statut booking (technique) déplacé du badge ligne vers ici.
+                          Annulé n'est PAS une catégorie métier : Julie peut avoir annulé le RDV
+                          puis reclassé en R2 / En réflexion / etc. Le lead reste actif. */}
+                      <DetailRow label="Statut booking" value={isCancelled ? '📅 RDV initial annulé' : '✅ Confirmé'}/>
                       <DetailRow label="Statut reporting" value={STATUS_META[status || 'pending']?.label || status || 'En attente'}/>
-                      <DetailRow label="Statut pipeline actuel" value={stageMeta ? stageMeta.label : '—'}/>
+                      <DetailRow label="Pipeline actuel" value={stageMeta ? stageMeta.label : '—'}/>
+                      {/* V1.10.4-r9.5 — Indicateurs ghost / archivé déplacés du badge ligne vers ici */}
+                      {isGhost && <DetailRow label="État fiche contact" value="📂 Fiche supprimée — transmission tracée via bookingId"/>}
+                      {!isGhost && b.contactArchivedAt && b.contactArchivedAt !== '' && (
+                        <DetailRow label="État fiche contact" value="📦 Archivé"/>
+                      )}
                       {b.contactEmail && <DetailRow label="Email" value={b.contactEmail}/>}
                       {b.contactPhone && <DetailRow label="Téléphone" value={b.contactPhone}/>}
                       {b.contactNextActionLabel && <DetailRow label="Prochaine action" value={b.contactNextActionLabel + (b.contactNextActionDate ? ' (' + b.contactNextActionDate + ')' : '')}/>}
                       {b.contactLastActivityAt && <DetailRow label="Dernière activité" value={fmtDate(b.contactLastActivityAt)}/>}
                     </div>
+
+                    {/* V1.10.4-r9.5 — Note reporting (déplacée de la ligne vers l'accordéon) */}
+                    {b.bookingReportingNote && (
+                      <div style={{ marginBottom:14, padding:'10px 12px', borderRadius:10, background:T.surface, border:'1px solid '+T.border, fontSize:12, color:T.text2, lineHeight:1.5 }}>
+                        <div style={{ fontSize:10, fontWeight:700, color:T.text3, textTransform:'uppercase', letterSpacing:0.5, marginBottom:4 }}>Note reporting</div>
+                        {b.bookingReportingNote}
+                      </div>
+                    )}
+
+                    {/* V1.10.4-r9.5 — Méta reporting (qui + quand) déplacée vers accordéon */}
+                    {reporterId && reportedAt && (
+                      <div style={{ marginBottom:14, fontSize:11, color:T.text3, display:'flex', alignItems:'center', gap:6 }}>
+                        <I n="check-circle" s={12} style={{ color:'#22C55E' }}/>
+                        Rapporté par <strong style={{ color:T.text2 }}>{collabName(reporterId)}</strong>
+                        <span style={{ color:T.text3 }}>·</span>
+                        {new Date(reportedAt).toLocaleString('fr-FR', { day:'numeric', month:'short', year:'numeric', hour:'2-digit', minute:'2-digit' })}
+                      </div>
+                    )}
 
                     {/* Timeline */}
                     <div style={{ marginTop:8 }}>
