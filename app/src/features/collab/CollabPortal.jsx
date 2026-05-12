@@ -26,6 +26,10 @@ import { COMPANIES, INIT_COLLABS, defAvail, INIT_AVAILS, INIT_CALS, INIT_BOOKING
 // Phase 3 — API service
 import { API_BASE, recUrl, collectEnv, api, getAutoTicketCompanyId, setAutoTicketCompanyId } from "../../shared/services/api";
 
+// Phase 5 (consent) — guard pre-call + modal
+import { checkConsentBeforeCall } from "../../shared/utils/consentCheck";
+import ConsentGuardModal from "./modals/ConsentGuardModal";
+
 // Phase 4 — extracted screens (relative path from features/collab/)
 import {
   FicheClientMsgScreen,
@@ -807,6 +811,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   // Payload : { booking, conflictBookingId?, detail? } — set par _doRecoverTransmission
   // dans PhoneTab quand backend renvoie 409 SENDER_SLOT_CONFLICT.
   const [senderConflictModal, setSenderConflictModal] = useState(null);
+
+  // Phase 5 (consent) — guard pre-call modal
+  const [consentGuardModal, setConsentGuardModal] = useState(null); // { leadId, envelopeId, consentStatus, reason } | null
   const [v7FollowersMap, setV7FollowersMap] = useState({});
   const v7FollowersLoadedRef = useRef(false);
 
@@ -954,6 +961,21 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       return false;
     }
     if ((typeof voipCredits!=='undefined'?voipCredits:null) <= 0) { showNotif('Crédits VoIP insuffisants !','danger'); return false; }
+
+    // Phase 5 — Consent guard : pré-check avant tout appel sortant (UX propre, backend redondant)
+    try {
+      const guard = await checkConsentBeforeCall({
+        phone: !_maskedContact ? phoneNumber : undefined,
+        contactId: contact?.id || undefined,
+      });
+      if (guard.consentRequired && !guard.callable) {
+        console.warn('[CONSENT GUARD FRONT] blocked', guard);
+        setConsentGuardModal(guard);
+        setVoipState('idle');
+        return false;
+      }
+    } catch (e) { console.warn('[CONSENT CHECK] exception, allowing call:', e?.message); }
+
     const fromNumber = selectedLine || ((typeof appMyPhoneNumbers!=='undefined'?appMyPhoneNumbers:null)||[]).find(pn => pn.collaboratorId === collab.id && pn.status === 'assigned')?.phoneNumber || '';
     const callStartedAt = new Date().toISOString();
     setVoipState('connecting');
@@ -4493,6 +4515,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
             <ReassignBookingModal />
             {/* V1.10.4.D étape 2 — Sender conflict modal (rendu conditionné sur senderConflictModal) */}
             <SenderConflictModal />
+            {/* Phase 5 — Consent guard modal (bloque l'appel si lead consent non validé) */}
+            <ConsentGuardModal open={!!consentGuardModal} onClose={()=>setConsentGuardModal(null)} guardData={consentGuardModal} />
 
             {/* V7 TRANSFER MODAL */}
             {v7TransferModal && (

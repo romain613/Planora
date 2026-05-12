@@ -37,6 +37,7 @@ import { logAudit } from '../helpers/audit.js';
 import { generateConsentToken } from '../services/consentToken.js';
 import { sendTwilioSms } from '../services/twilioSms.js';
 import { sendSms } from '../services/brevoSms.js';
+import { checkCallable } from '../services/consentGuard.js'; // Phase 5
 
 const router = Router();
 
@@ -440,6 +441,30 @@ router.post('/leads/:leadId/consent/revoke', requireAuth, requireAdmin, enforceC
     res.json({ success: true, leadId: lead.id, status: 'revoked', proofId });
   } catch (e) {
     console.error('[CONSENT REVOKE]', e.message);
+    res.status(500).json({ error: 'INTERNAL', detail: e.message });
+  }
+});
+
+// ════════════════════════════════════════════════════════════════════════
+// 8. GET /api/leads/check-callable — Phase 5 pre-call lookup (UX guard)
+// ════════════════════════════════════════════════════════════════════════
+// Léger : authentifié simple (pas d'admin requis) — utilisé avant chaque appel
+// pour décider d'afficher la modale ConsentGuardModal côté frontend.
+router.get('/leads/check-callable', requireAuth, enforceCompany, (req, res) => {
+  try {
+    const { phone, contactId, leadId } = req.query;
+    if (!phone && !contactId && !leadId) {
+      return res.status(400).json({ error: 'MISSING_PARAMS', detail: 'phone, contactId or leadId required' });
+    }
+    const result = checkCallable({
+      companyId: req.auth.companyId,
+      phone: phone ? String(phone) : undefined,
+      contactId: contactId ? String(contactId) : undefined,
+      leadId: leadId ? String(leadId) : undefined,
+    });
+    res.json(result);
+  } catch (e) {
+    console.error('[CHECK-CALLABLE]', e.message);
     res.status(500).json({ error: 'INTERNAL', detail: e.message });
   }
 });

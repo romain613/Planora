@@ -18,6 +18,7 @@ import { requireSupra, requireAdmin, requireAuth, enforceCompany } from '../midd
 import { getOrCreateConversation, addCallEvent } from './conversations.js';
 import { analyzeTranscription } from '../services/secureIaPhone.js';
 import { resolveFromCallSid, resolveFromPhone, validateWebhookContext } from '../helpers/resolveContext.js';
+import { checkCallable } from '../services/consentGuard.js'; // Phase 5 — consent guard on outbound calls
 import { archiveCallTranscript } from '../services/transcriptArchive.js';
 
 const router = Router();
@@ -937,6 +938,29 @@ router.post('/calls', requireAuth, enforceCompany, (req, res) => {
     const { contactId, collaboratorId, toNumber, fromNumber, twilioCallSid, direction: reqDirection } = req.body;
     const companyId = req.auth.companyId;
     const dir = reqDirection === 'inbound' ? 'inbound' : 'outbound';
+
+    // ─── Phase 5 — Consent guard on outbound calls (no admin/supra bypass V1) ───
+    if (dir === 'outbound') {
+      const guardResult = checkCallable({
+        companyId,
+        phone: toNumber || fromNumber || undefined,
+        contactId: contactId || undefined,
+      });
+      if (guardResult.consentRequired && !guardResult.callable) {
+        console.warn('[VOIP CONSENT GUARD] BLOCKED outbound call', {
+          collaboratorId, leadId: guardResult.leadId,
+          envelopeId: guardResult.envelopeId, consentStatus: guardResult.consentStatus,
+        });
+        return res.status(403).json({
+          error: 'CONSENT_REQUIRED',
+          message: 'Le lead n\'a pas validé son consentement téléphonique pour cette enveloppe.',
+          leadId: guardResult.leadId,
+          envelopeId: guardResult.envelopeId,
+          consentStatus: guardResult.consentStatus,
+          reason: guardResult.reason,
+        });
+      }
+    }
     const id = 'cl' + Date.now();
     db.prepare(`INSERT INTO call_logs (id, companyId, contactId, collaboratorId, direction, toNumber, fromNumber, status, twilioCallSid, createdAt, startedAt)
       VALUES (?, ?, ?, ?, ?, ?, ?, 'initiated', ?, ?, ?)`)
