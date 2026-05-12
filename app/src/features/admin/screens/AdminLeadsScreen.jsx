@@ -829,7 +829,7 @@ export default function AdminLeadsScreen({ collab, collabs, company, contacts, p
                   envelopeId={env.id}
                   envelopeName={env.name}
                   companyId={company?.id}
-                  isAdmin={collab?.role === 'admin' || collab?.role === 'supra'}
+                  isAdmin={(() => { try { const s = JSON.parse(localStorage.getItem('calendar360-session')||'null'); return s?.role === 'admin' || s?.role === 'supra' || s?.supraAdmin === true; } catch { return false; } })()}
                 />
 
                 {/* FILTRE PERIODE */}
