@@ -746,7 +746,13 @@ const SharedAgendaTab = () => {
   const [receiverIds, setReceiverIds] = useState([]);
   const [reportingStatusFilter, setReportingStatusFilter] = useState([]);
   const [pipelineStageFilter, setPipelineStageFilter] = useState([]);
-  const [includeCancelled, setIncludeCancelled] = useState(false);
+  // V1.10.4-r9.6 — Filtre statut métier remplace la case "Inclure annulés" :
+  //   'all'       → toutes les transmissions (défaut — Agenda partagé = traçabilité)
+  //   'confirmed' → uniquement booking.status='confirmed'
+  //   'perdu'     → uniquement leads marqués perdu (pipeline OU reporting lost)
+  // Le filtrage 'confirmed' va via backend (status=confirmed). 'all' et 'perdu' vont
+  // via status=all puis filtrage client-side sur isPerdu().
+  const [statusFilter, setStatusFilter] = useState('all');
 
   // Plage date par défaut : J-30 → J+90
   const todayIso = toIso(new Date());
@@ -756,9 +762,34 @@ const SharedAgendaTab = () => {
   const [dateTo, setDateTo] = useState(defaultTo);
 
   // ── Data state ────────────────────────────────────────────────────────────
-  const [bookings, setBookings] = useState([]);
+  // V1.10.4-r9.6 — rawBookings = réponse backend brute (toujours status=all
+  // sauf si filtre 'confirmed' explicite). bookings (dérivé) applique le filtre
+  // 'perdu' côté client. Cela évite de toucher au backend et permet d'avoir
+  // les comptes Tous/Confirmés/Perdus simultanément.
+  const [rawBookings, setRawBookings] = useState([]);
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState('');
+
+  // Helper isPerdu (cohérent avec RdvReportingTab r9.4)
+  const isPerdu = useCallback((b) => (
+    b.receiverPipelineStage === 'perdu'
+    || b.bookingReportingStatus === 'no_show'
+    || b.bookingReportingStatus === 'cancelled'
+  ), []);
+
+  // Liste affichée — filtrage client-side sur 'perdu' uniquement (les autres
+  // filtres sont déjà appliqués côté backend ou via les autres MultiSelect).
+  const bookings = useMemo(() => {
+    if (statusFilter === 'perdu') return rawBookings.filter(isPerdu);
+    return rawBookings;
+  }, [rawBookings, statusFilter, isPerdu]);
+
+  // Counts par catégorie pour les badges du segmented filter.
+  const filterCounts = useMemo(() => ({
+    all: rawBookings.length,
+    confirmed: rawBookings.filter(b => b.status === 'confirmed').length,
+    perdu: rawBookings.filter(isPerdu).length,
+  }), [rawBookings, isPerdu]);
 
   // ── Accordion + timeline state ────────────────────────────────────────────
   const [expandedId, setExpandedId] = useState(null);
@@ -879,7 +910,8 @@ const SharedAgendaTab = () => {
     try {
       const qs = new URLSearchParams();
       qs.set('mode', mode);
-      qs.set('status', includeCancelled ? 'all' : 'confirmed');
+      // V1.10.4-r9.6 — Confirmés via backend filter ; Tous + Perdus = fetch all puis filtre client-side.
+      qs.set('status', statusFilter === 'confirmed' ? 'confirmed' : 'all');
       qs.set('from', dateFrom);
       qs.set('to', dateTo);
       if (senderIds.length) qs.set('senders', senderIds.join(','));
@@ -887,12 +919,12 @@ const SharedAgendaTab = () => {
       if (reportingStatusFilter.length) qs.set('reportingStatus', reportingStatusFilter.join(','));
       if (pipelineStageFilter.length) qs.set('pipelineStage', pipelineStageFilter.join(','));
       const data = await api('/api/bookings/transmitted?' + qs.toString());
-      if (data && Array.isArray(data.bookings)) setBookings(data.bookings);
+      if (data && Array.isArray(data.bookings)) setRawBookings(data.bookings);
       else if (data?.error) setErrMsg(data.error);
-      else setBookings([]);
-    } catch (e) { setErrMsg(e?.message || 'Erreur réseau'); setBookings([]); }
+      else setRawBookings([]);
+    } catch (e) { setErrMsg(e?.message || 'Erreur réseau'); setRawBookings([]); }
     setLoading(false);
-  }, [mode, includeCancelled, dateFrom, dateTo, senderIds, receiverIds, reportingStatusFilter, pipelineStageFilter]);
+  }, [mode, statusFilter, dateFrom, dateTo, senderIds, receiverIds, reportingStatusFilter, pipelineStageFilter]);
 
   // Refetch quand un filtre change (debounced via dep array)
   useEffect(() => { fetchBookings(); }, [fetchBookings]);
@@ -988,11 +1020,31 @@ const SharedAgendaTab = () => {
             <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} style={{ border:'none', background:'transparent', fontSize:12, fontFamily:'inherit', color:T.text, outline:'none' }}/>
           </div>
 
-          {/* Toggle Annulés */}
-          <label style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'5px 10px', borderRadius:8, border:'1px solid '+(includeCancelled ? '#EF4444'+'40' : T.border), background: includeCancelled ? '#EF444412' : T.bg, cursor:'pointer', fontSize:12, fontWeight:600, color: includeCancelled ? '#EF4444' : T.text2 }}>
-            <input type="checkbox" checked={includeCancelled} onChange={e=>setIncludeCancelled(e.target.checked)} style={{ accentColor:'#EF4444' }}/>
-            Inclure annulés
-          </label>
+          {/* V1.10.4-r9.6 — Filtre métier Tous / Confirmés / Perdus (remplace "Inclure annulés").
+              Default 'all' : Agenda partagé = traçabilité complète des transmissions.
+              Les counts sont calculés sur rawBookings (pré-filtre client-side perdu). */}
+          <div style={{ display:'inline-flex', gap:4, padding:3, background:T.bg, borderRadius:9, border:'1px solid '+T.border }}>
+            {[
+              { id:'all',       label:'Tous',      color:T.text2,  count: filterCounts.all,       hint:'Toutes les transmissions' },
+              { id:'confirmed', label:'Confirmés', color:'#22C55E', count: filterCounts.confirmed, hint:'RDV encore programmés (booking.status=confirmed)' },
+              { id:'perdu',     label:'Perdus',    color:'#EF4444', count: filterCounts.perdu,     hint:'Leads marqués perdu (pipeline ou reporting)' },
+            ].map(f => {
+              const isActive = statusFilter === f.id;
+              return (
+                <div key={f.id} onClick={()=>setStatusFilter(f.id)} title={f.hint} style={{
+                  display:'inline-flex', alignItems:'center', gap:5,
+                  padding:'4px 10px', borderRadius:7, cursor:'pointer',
+                  background: isActive ? f.color+'15' : 'transparent',
+                  color: isActive ? f.color : T.text2,
+                  fontSize:11, fontWeight: isActive ? 700 : 500,
+                  transition: 'all .15s'
+                }}>
+                  {f.label}
+                  <span style={{ fontSize:9, fontWeight:800, background: isActive ? f.color : T.text3+'25', color: isActive ? '#fff' : T.text3, padding:'1px 6px', borderRadius:7 }}>{f.count}</span>
+                </div>
+              );
+            })}
+          </div>
 
           {/* V1.10.4.J V1b/V1d — Toggle Liste / Grille / Kanban (désactivé si mobile = auto Liste) */}
           {!isMobile && (
