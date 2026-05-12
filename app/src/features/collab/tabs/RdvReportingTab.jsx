@@ -131,7 +131,7 @@ const TimelineRow = ({ ev, resolveStageMeta, collabName }) => {
 // ── Composant principal ─────────────────────────────────────────────────────
 const RdvReportingTab = () => {
   const ctx = useCollabContext();
-  const { collab, contacts, collabs, PIPELINE_STAGES, showNotif } = ctx;
+  const { collab, contacts, collabs, PIPELINE_STAGES, showNotif, handleCollabUpdateContact } = ctx;
   const allCollabs = (collabs && collabs.length) ? collabs : [];
 
   // V1.10.4.J merge — Parent-tab : Reporting | Agenda partagé. Défaut : reporting.
@@ -483,18 +483,28 @@ const RdvReportingTab = () => {
                       <span style={{ fontSize:14, fontWeight:700, color: isGhost ? T.text3 : T.text, fontStyle: isGhost ? 'italic' : 'normal' }}>
                         {contactName(b)}
                       </span>
-                      {/* V1.10.4-r9 — Badge "RDV annulé" (status='cancelled') visible Transmis pour
-                          que l'apporteur garde la traçabilité même si le receveur a annulé le RDV. */}
-                      {isCancelled && (
-                        <span
-                          title="RDV annulé — la transmission reste tracée pour le reporting de l'apporteur."
-                          style={{ fontSize:10, fontWeight:700, padding:'2px 8px', borderRadius:10, background:'#FEE2E2', border:'1px solid #FCA5A5', color:'#B91C1C', display:'inline-flex', alignItems:'center', gap:3 }}>
-                          🚫 RDV annulé
+                      {contactPhone(b) && (
+                        <span style={{ fontSize:11, color:T.text3, display:'inline-flex', alignItems:'center', gap:3 }}>
+                          <I n="phone" s={11}/> {contactPhone(b)}
                         </span>
                       )}
+                      {/* V1.10.4-r9.3 — RÈGLE UX : Le Reporting suit le LEAD, pas l'état technique
+                          du RDV. Le pipeline_stage actuel du receveur est l'info PRINCIPALE.
+                          Ordre des badges : stage (principal) → reporting → ghost/archived → cancelled (discret). */}
+                      {/* Badge stage = info principale (pipeline actuel chez le receveur) */}
+                      {stageMeta && (
+                        <span title={`Statut actuel du contact${subTab === 'sent' ? ' chez ' + collabName(b.agendaOwnerId) : ''} : ${stageMeta.label}`} style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:10, background:stageMeta.color+'15', border:'1px solid '+stageMeta.color+'40', color:stageMeta.color, display:'inline-flex', alignItems:'center', gap:4 }}>
+                          <span style={{ fontSize:11, lineHeight:1 }}>{stageMeta.emoji}</span>
+                          {subTab === 'sent' && (
+                            <span style={{ fontWeight:600, opacity:0.85 }}>Chez {collabName(b.agendaOwnerId)} : </span>
+                          )}
+                          {stageMeta.label}
+                        </span>
+                      )}
+                      {/* Badge reporting = info secondaire (statut reporting du RDV) */}
+                      {status ? <StatusBadge status={status}/> : <StatusBadge status="pending"/>}
                       {/* V1.10.4-r9 — Badge "Contact supprimé" : fiche hard-deleted mais transmission
-                          conservée pour l'historique reporting. Données fallback depuis le booking
-                          (visitorName/Email/Phone, bookingId, date transmission). */}
+                          conservée pour l'historique reporting. */}
                       {isGhost && (
                         <span
                           title={"Fiche contact supprimée — transmission tracée via bookingId=" + b.id + ". Données affichées depuis le booking."}
@@ -510,22 +520,15 @@ const RdvReportingTab = () => {
                           📦 Contact archivé
                         </span>
                       )}
-                      {contactPhone(b) && (
-                        <span style={{ fontSize:11, color:T.text3, display:'inline-flex', alignItems:'center', gap:3 }}>
-                          <I n="phone" s={11}/> {contactPhone(b)}
-                        </span>
-                      )}
-                      {status ? <StatusBadge status={status}/> : <StatusBadge status="pending"/>}
-                      {/* V1.10.4.I — Badge "Statut actuel" (pipeline_stage receveur).
-                          V1.10.4-r9 — Côté Transmis : préfixé "Chez {receveur} :" pour clarifier
-                          que ce statut est celui du contact CHEZ Julie, pas chez Ilane. */}
-                      {stageMeta && (
-                        <span title={`Statut actuel du contact${subTab === 'sent' ? ' chez ' + collabName(b.agendaOwnerId) : ''} : ${stageMeta.label}`} style={{ fontSize:11, fontWeight:700, padding:'2px 8px', borderRadius:10, background:stageMeta.color+'15', border:'1px solid '+stageMeta.color+'40', color:stageMeta.color, display:'inline-flex', alignItems:'center', gap:4 }}>
-                          <span style={{ fontSize:11, lineHeight:1 }}>{stageMeta.emoji}</span>
-                          {subTab === 'sent' && (
-                            <span style={{ fontWeight:600, opacity:0.85 }}>Chez {collabName(b.agendaOwnerId)} : </span>
-                          )}
-                          {stageMeta.label}
+                      {/* V1.10.4-r9.3 — Badge "RDV initial annulé" DISCRET (gris, fin de ligne).
+                          Le RDV agenda annulé n'implique PAS un lead perdu : Julie peut avoir
+                          annulé le RDV après contact téléphonique et reclassé le contact en R2,
+                          Contacté, En réflexion, etc. Le lead reste actif. */}
+                      {isCancelled && (
+                        <span
+                          title="Le RDV agenda initial a été annulé. Le lead reste suivi selon son pipeline actuel."
+                          style={{ fontSize:9, fontWeight:600, padding:'2px 6px', borderRadius:4, background:T.bg, border:`1px solid ${T.border}`, color:T.text3, display:'inline-flex', alignItems:'center', gap:3, cursor:'help' }}>
+                          📅 RDV initial annulé
                         </span>
                       )}
                     </div>
@@ -564,12 +567,50 @@ const RdvReportingTab = () => {
                       </div>
                     )}
                   </div>
-                  {/* CTA reporting (Reçus uniquement, si pas encore rapporté) */}
-                  {canReport && (
-                    <Btn primary onClick={(e)=>{ e.stopPropagation(); openReporting(b); }} style={{ flexShrink:0 }}>
-                      <I n="check-square" s={13}/> Faire le reporting
-                    </Btn>
-                  )}
+                  {/* V1.10.4-r9.3 — Quick actions zone (flex column pour empilage sur petit écran) */}
+                  <div style={{ flexShrink:0, display:'flex', flexDirection:'column', gap:6, alignItems:'flex-end' }}>
+                    {/* CTA reporting (Reçus uniquement, si pas encore rapporté) */}
+                    {canReport && (
+                      <Btn primary onClick={(e)=>{ e.stopPropagation(); openReporting(b); }}>
+                        <I n="check-square" s={13}/> Faire le reporting
+                      </Btn>
+                    )}
+                    {/* V1.10.4-r9.3 — Bouton rapide "Marquer perdu" — RECEIVER UNIQUEMENT
+                        (le sender n'a pas l'ownership pour modifier le pipeline du contact).
+                        Visible uniquement si :
+                          - subTab='received' (Julie sur ses propres reçus)
+                          - elle est bien l'agendaOwner (defensive vs admin override)
+                          - le contact existe (pas ghost)
+                          - le contact n'est pas DÉJÀ en stage 'perdu'
+                          - handleCollabUpdateContact disponible dans le context */}
+                    {subTab === 'received' && !isGhost && b.agendaOwnerId === collab.id
+                      && b.receiverPipelineStage !== 'perdu'
+                      && typeof handleCollabUpdateContact === 'function' && (
+                      <button
+                        type="button"
+                        onClick={(e)=>{
+                          e.stopPropagation();
+                          if (!confirm(`Marquer "${contactName(b)}" comme perdu ?\n\nLe contact sera déplacé dans la colonne "Perdu" de votre pipeline.`)) return;
+                          handleCollabUpdateContact(b.contactId, {
+                            pipeline_stage: 'perdu',
+                            _source: 'reporting_quick_lost',
+                            _origin: 'reporting_tab',
+                            _reason: 'Marqué perdu depuis Reporting Reçus',
+                          });
+                          showNotif && showNotif(`${contactName(b)} marqué perdu`, 'success');
+                          // Refresh la liste pour que le badge stage se mette à jour
+                          setTimeout(() => fetchReceived(), 300);
+                        }}
+                        title="Marquer ce contact comme perdu (déplace en colonne Perdu du pipeline)"
+                        style={{ fontSize:11, fontWeight:600, padding:'5px 10px', borderRadius:8,
+                          border:'1px solid #FCA5A5', background:'#FEF2F2', color:'#B91C1C',
+                          cursor:'pointer', fontFamily:'inherit', display:'inline-flex',
+                          alignItems:'center', gap:5, transition:'all .15s' }}
+                      >
+                        🔴 Marquer perdu
+                      </button>
+                    )}
+                  </div>
                   {/* V1.10.4.I — Chevron expand/collapse */}
                   <div style={{ flexShrink:0, alignSelf:'center', color:T.text3 }}>
                     <I n={isExpanded ? 'chevron-up' : 'chevron-down'} s={16}/>
