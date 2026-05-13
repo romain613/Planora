@@ -327,6 +327,8 @@ router.post('/book', async (req, res) => {
         date,
         startTime: time,
         duration: duration || cal.duration || 30,
+        bufferBefore: cal.bufferBefore || 0,
+        bufferAfter: cal.bufferAfter || 0,
       });
       if (conflict) {
         console.log(`[PUBLIC-BOOK CONFLICT] collab=${collaboratorId} date=${date} time=${time} vs existing=${existingBooking.id}@${existingBooking.time}`);

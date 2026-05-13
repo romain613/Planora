@@ -290,11 +290,14 @@ router.post('/book', requireAuth, enforceCompany, (req, res) => {
 
     // R1 + R5 — check conflit via helper partagé (source de vérité unique)
     {
+      const _calBuf = finalCalendarId ? db.prepare('SELECT bufferBefore, bufferAfter FROM calendars WHERE id = ?').get(finalCalendarId) : null;
       const { conflict, existingBooking } = checkBookingConflict(db, {
         collaboratorId: executorCollaboratorId,
         date,
         startTime: time,
         duration: safeDuration,
+        bufferBefore: _calBuf?.bufferBefore || 0,
+        bufferAfter: _calBuf?.bufferAfter || 0,
       });
       if (conflict) {
         console.log(`[INTER-MEETING CONFLICT] executor=${executorCollaboratorId} date=${date} time=${time} vs existing=${existingBooking.id}@${existingBooking.time}`);

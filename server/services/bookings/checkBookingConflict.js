@@ -22,6 +22,8 @@ function checkBookingConflict(db, {
   duration,
   excludeBookingId = null,
   excludeOutlookEventId = null,  // V3.x.9 — éviter qu'un booking se bloque lui-même via son miroir Outlook lors d'un UPDATE
+  bufferBefore = 0,              // V1.10.4-r11.0.4 — buffers du calendrier cible, alignement avec public.js generateSlots
+  bufferAfter = 0,
 }) {
   if (!db) throw new Error('DB_REQUIRED');
   if (!collaboratorId || !date || !startTime) {
@@ -41,6 +43,13 @@ function checkBookingConflict(db, {
     return { conflict: false };
   }
 
+  // V1.10.4-r11.0.4 — Élargir la fenêtre du new booking par les buffers du calendrier cible.
+  // On garde les existing events bruts ; seul le slot testé est étendu (miroir public.js:218-221).
+  const bb = Math.max(0, Number(bufferBefore) || 0);
+  const ba = Math.max(0, Number(bufferAfter) || 0);
+  const newStartBuf = newStart - bb;
+  const newEndBuf = newEnd + ba;
+
   // V3.x.5.1 — Resolve collaborator timezone for correct UTC ms comparison vs google_events / outlook_events.
   // BUG fix : `new Date(date + 'T00:00:00')` was interpreted in process TZ (VPS=UTC),
   // misaligning the slot ms with Google/Outlook events stored as ISO with offset.
@@ -48,8 +57,8 @@ function checkBookingConflict(db, {
   const collabRow = db.prepare('SELECT companyId FROM collaborators WHERE id = ?').get(collaboratorId);
   const collabTz = getCollaboratorTimezone(collaboratorId, collabRow?.companyId);
   const dayDt = DateTime.fromISO(`${date}T00:00:00`, { zone: collabTz });
-  const newStartMsTz = dayDt.plus({ minutes: newStart }).toMillis();
-  const newEndMsTz = dayDt.plus({ minutes: newEnd }).toMillis();
+  const newStartMsTz = dayDt.plus({ minutes: newStartBuf }).toMillis();
+  const newEndMsTz = dayDt.plus({ minutes: newEndBuf }).toMillis();
 
   const rows = db.prepare(
     "SELECT id, time, duration, visitorName FROM bookings WHERE collaboratorId = ? AND date = ? AND status = 'confirmed'"
@@ -60,7 +69,7 @@ function checkBookingConflict(db, {
     const exStart = toMinutes(existing.time);
     if (exStart == null) continue;
     const exEnd = exStart + (Number(existing.duration) || 30);
-    if (newStart < exEnd && newEnd > exStart) {
+    if (newStartBuf < exEnd && newEndBuf > exStart) {
       return { conflict: true, existingBooking: existing, source: 'booking' };
     }
   }
