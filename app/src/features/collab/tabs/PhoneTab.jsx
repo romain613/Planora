@@ -8883,46 +8883,91 @@ else showNotif(res?.error || 'Erreur CRM', 'error');
 })()}
 
 {/* ═══════════════════════════════════════════════════════════════════
-    PERDU MOTIF MODAL — Motif obligatoire pour classer en Perdu
+    PERDU MOTIF MODAL — V1.10.4-r10.0.f UX 1-clic
+    - "Hors cible" / "Pas intéressé" → 1 clic = action directe + note auto
+    - "Autre" → expand textarea + bouton Valider visible/actif
+    Format note : "<catégorie> : <texte>".
+    Perdu = poubelle opérationnelle du pipeline.
     ═══════════════════════════════════════════════════════════════════ */}
-{(typeof perduMotifModal!=='undefined'?perduMotifModal:null) && (
-  <div style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:10001,display:'flex',alignItems:'center',justifyContent:'center',backdropFilter:'blur(6px)'}}>
-    <div onClick={e=>e.stopPropagation()} style={{width:440,borderRadius:20,background:'#fff',boxShadow:'0 20px 60px rgba(0,0,0,0.3)',padding:28}}>
-      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:20}}>
-<div style={{width:44,height:44,borderRadius:12,background:'#EF444415',display:'flex',alignItems:'center',justifyContent:'center'}}><I n="x-circle" s={22} style={{color:'#EF4444'}}/></div>
-<div>
-<div style={{fontSize:17,fontWeight:800,color:'#1F2937'}}>Classer en Perdu</div>
-<div style={{fontSize:11,color:'#6B7280'}}>Sélectionnez un motif ou ajoutez une explication</div>
-</div>
-<div onClick={()=>setPerduMotifModal(null)} style={{marginLeft:'auto',cursor:'pointer',padding:6,borderRadius:8,background:'#F3F4F6'}}><I n="x" s={16}/></div>
+{(typeof perduMotifModal!=='undefined'?perduMotifModal:null) && (() => {
+  const _selectedCat = (typeof perduMotifModal!=='undefined'?perduMotifModal:{}).category || '';
+  const _setSelectedCat = (cat) => setPerduMotifModal(p => p ? {...p, category: cat} : p);
+  // 1-click categories (auto note depuis le hint). "Autre" requiert texte libre.
+  const _categories = [
+    { id: 'Hors cible',     label: 'Hors cible',     hint: 'Pas le bon profil / hors zone / hors marché', autoNote: true },
+    { id: 'Pas intéressé',  label: 'Pas intéressé',  hint: 'Refus explicite ou désintérêt manifeste',     autoNote: true },
+    { id: 'Autre',          label: 'Autre',          hint: 'Précisez le contexte ci-dessous',             autoNote: false },
+  ];
+  const _commitPerdu = (note) => {
+    const _contactId = (typeof perduMotifModal!=='undefined'?perduMotifModal:{}).contactId;
+    handlePipelineStageChange(_contactId, 'perdu', note);
+    setPerduMotifModal(null);
+  };
+  const _showTextarea = _selectedCat === 'Autre';
+  return (
+  <div onClick={()=>setPerduMotifModal(null)} style={{position:'fixed',inset:0,background:'rgba(0,0,0,0.7)',zIndex:10001,display:'flex',alignItems:'center',justifyContent:'center',backdropFilter:'blur(6px)',padding:16,boxSizing:'border-box'}}>
+    <div onClick={e=>e.stopPropagation()} style={{width:'100%',maxWidth:460,borderRadius:20,background:'#fff',boxShadow:'0 20px 60px rgba(0,0,0,0.3)',padding:24,boxSizing:'border-box'}}>
+      <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:18}}>
+        <div style={{width:44,height:44,borderRadius:12,background:'#EF444415',display:'flex',alignItems:'center',justifyContent:'center'}}><I n="x-circle" s={22} style={{color:'#EF4444'}}/></div>
+        <div style={{flex:1}}>
+          <div style={{fontSize:17,fontWeight:800,color:'#1F2937'}}>Classer en Perdu</div>
+          <div style={{fontSize:11,color:'#6B7280'}}>1 clic = classement direct · "Autre" pour préciser</div>
+        </div>
+        <div onClick={()=>setPerduMotifModal(null)} title="Annuler — aucun changement pipeline" style={{cursor:'pointer',padding:6,borderRadius:8,background:'#F3F4F6'}}><I n="x" s={16}/></div>
       </div>
 
-      <div style={{fontSize:12,fontWeight:700,color:'#374151',marginBottom:8}}>Motif rapide :</div>
-      <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:16}}>
-{['Faux numéro','Ne répond jamais','Pas intéressé','Hors cible / pas le bon profil','Déjà client ailleurs','Budget insuffisant','Demande irréaliste','Doublon'].map(motif=>(
-<div key={motif} onClick={()=>{
-  handlePipelineStageChange((typeof perduMotifModal!=='undefined'?perduMotifModal:{}).contactId, 'perdu', motif);
-  setPerduMotifModal(null);
-}} style={{padding:'10px 14px',borderRadius:10,border:'1px solid #E5E7EB',background:'#F9FAFB',cursor:'pointer',fontSize:13,fontWeight:500,color:'#374151',transition:'all .15s',display:'flex',alignItems:'center',gap:8}} onMouseEnter={e=>{e.currentTarget.style.background='#EF444410';e.currentTarget.style.borderColor='#EF4444';}} onMouseLeave={e=>{e.currentTarget.style.background='#F9FAFB';e.currentTarget.style.borderColor='#E5E7EB';}}>
-  <div style={{width:6,height:6,borderRadius:3,background:'#EF4444'}}/> {motif}
-</div>
-))}
+      {/* ── Catégorie ── */}
+      <div style={{display:'flex',flexDirection:'column',gap:6,marginBottom:_showTextarea ? 14 : 0}}>
+        {_categories.map(c => {
+          const isActive = _selectedCat === c.id;
+          // 1-click direct si autoNote, sinon select pour expand textarea
+          const onClickCat = c.autoNote
+            ? () => _commitPerdu(c.id + ' : ' + c.hint)
+            : () => _setSelectedCat(c.id);
+          return (
+            <div key={c.id} onClick={onClickCat} style={{
+              padding:'12px 14px',borderRadius:10,
+              border:'2px solid '+(isActive?'#EF4444':'#E5E7EB'),
+              background: isActive ? '#FEF2F2' : '#F9FAFB',
+              cursor:'pointer',transition:'all .15s',
+              display:'flex',alignItems:'center',gap:10
+            }}>
+              <div style={{width:18,height:18,borderRadius:9,border:'2px solid '+(isActive?'#EF4444':'#9CA3AF'),background:isActive?'#EF4444':'transparent',flexShrink:0,display:'flex',alignItems:'center',justifyContent:'center'}}>
+                {isActive && <div style={{width:6,height:6,borderRadius:3,background:'#fff'}}/>}
+              </div>
+              <div style={{flex:1}}>
+                <div style={{fontSize:13,fontWeight:700,color:isActive?'#991B1B':'#374151'}}>{c.label}</div>
+                <div style={{fontSize:11,color:'#6B7280',marginTop:1}}>{c.hint}</div>
+              </div>
+              {c.autoNote && (
+                <div style={{fontSize:10,fontWeight:700,color:'#9CA3AF',whiteSpace:'nowrap'}}>1 clic →</div>
+              )}
+            </div>
+          );
+        })}
       </div>
 
-      <div style={{fontSize:12,fontWeight:700,color:'#374151',marginBottom:6}}>Ou motif personnalisé :</div>
-      <textarea id="perdu-motif-custom" placeholder="Expliquez pourquoi ce lead est perdu..." rows={2} style={{width:'100%',padding:10,borderRadius:10,border:'1px solid #E5E7EB',background:'#F9FAFB',fontSize:13,fontFamily:'inherit',color:'#374151',resize:'none',outline:'none'}}/>
-      <div style={{display:'flex',gap:8,marginTop:12}}>
-<div onClick={()=>setPerduMotifModal(null)} style={{flex:1,padding:'10px 0',textAlign:'center',borderRadius:10,border:'1px solid #E5E7EB',cursor:'pointer',fontSize:13,fontWeight:600,color:'#6B7280'}}>Annuler</div>
-<div onClick={()=>{
-const custom = document.getElementById('perdu-motif-custom')?.value?.trim();
-if(!custom){showNotif('Saisissez un motif ou choisissez dans la liste','danger');return;}
-handlePipelineStageChange((typeof perduMotifModal!=='undefined'?perduMotifModal:{}).contactId, 'perdu', custom);
-setPerduMotifModal(null);
-}} style={{flex:1,padding:'10px 0',textAlign:'center',borderRadius:10,background:'#EF4444',cursor:'pointer',fontSize:13,fontWeight:700,color:'#fff'}}>Confirmer</div>
-      </div>
+      {/* ── Textarea contexte (visible uniquement quand "Autre" sélectionné) ── */}
+      {_showTextarea && (
+        <div>
+          <div style={{fontSize:11,fontWeight:700,color:'#374151',marginBottom:6,textTransform:'uppercase',letterSpacing:0.5}}>Précision / contexte <span style={{color:'#EF4444'}}>*</span></div>
+          <textarea id="perdu-motif-custom" autoFocus placeholder="Pourquoi ce lead est perdu ? Précisez le contexte..." rows={3} style={{width:'100%',padding:10,borderRadius:10,border:'1.5px solid #E5E7EB',background:'#F9FAFB',fontSize:13,fontFamily:'inherit',color:'#374151',resize:'vertical',outline:'none',boxSizing:'border-box'}} onFocus={e=>e.target.style.borderColor='#EF4444'} onBlur={e=>e.target.style.borderColor='#E5E7EB'}/>
+
+          {/* Actions visibles uniquement en mode "Autre" */}
+          <div style={{display:'flex',gap:8,marginTop:14}}>
+            <div onClick={()=>setPerduMotifModal(null)} style={{flex:1,padding:'11px 0',textAlign:'center',borderRadius:10,border:'1px solid #E5E7EB',cursor:'pointer',fontSize:13,fontWeight:600,color:'#6B7280',background:'#fff'}}>Annuler</div>
+            <div onClick={()=>{
+              const _texte = document.getElementById('perdu-motif-custom')?.value?.trim() || '';
+              if (!_texte) { showNotif('Le contexte est obligatoire','danger'); return; }
+              _commitPerdu('Autre : ' + _texte);
+            }} style={{flex:1.5,padding:'11px 0',textAlign:'center',borderRadius:10,background:'#EF4444',cursor:'pointer',fontSize:13,fontWeight:700,color:'#fff'}}>Valider</div>
+          </div>
+        </div>
+      )}
     </div>
   </div>
-)}
+  );
+})()}
 
 {/* ═══════════════════════════════════════════════════════════════════
     SCAN IMAGE MODAL — Import contacts par photo/screenshot

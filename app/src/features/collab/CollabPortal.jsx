@@ -2013,7 +2013,22 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   // V1.8.25 — Resync aussi pipelineRightContact + selectedCrmContact pour éviter désync
   // panneau droit après refresh (la référence locale pointait sur l'ancien objet contact).
   // Source unique = backend, pas d'état optimiste seul. Idempotent, fail-safe.
+  //
+  // V1.10.4-r10.0.e — Anti-race fix : si une édition locale a eu lieu récemment
+  // (handleCollabUpdateContact a marqué contactsLocalEditRef.current = Date.now()),
+  // on SKIP le refresh global pendant RECENT_EDIT_GUARD_MS. Sinon une cascade
+  // booking-cancel (déclenchée par perdu) appelle updateBooking → ce dernier
+  // déclenche _scheduleGlobalRefresh → GET /api/data/contacts retourne STALE
+  // car le PUT contact n'a pas encore propagé → setContacts(_c) ÉCRASE le perdu
+  // optimistic avec l'ancien stage. Le bug "drag&drop Perdu qui revient" est
+  // dû à cette race. Le délai 5s s'aligne sur le timeout existant
+  // contactsLocalEditRef à L3436 (cleanup 5s post-succès).
+  const RECENT_EDIT_GUARD_MS = 5000;
   const _scheduleGlobalRefresh = async () => {
+    if (Date.now() - contactsLocalEditRef.current < RECENT_EDIT_GUARD_MS) {
+      console.log('[GLOBAL REFRESH] skip — édition locale récente (' + (Date.now() - contactsLocalEditRef.current) + 'ms)');
+      return;
+    }
     try {
       const [_c, _b] = await Promise.all([
         api('/api/data/contacts'),
@@ -3534,8 +3549,12 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       newStage = 'nouveau';
     }
     // ── REGLE: "Perdu" necessite un motif obligatoire (liste ou texte libre) ──
+    // V1.10.4-r10.0.f — release lock AVANT return : la modale rappellera
+    // handlePipelineStageChange une fois le motif choisi, et le lock encore actif
+    // bloquerait le 2e appel (bug Nouveau→Perdu instable).
     if (newStage === 'perdu' && !note) {
       setPerduMotifModal({ contactId, fromNote: '' });
+      delete pipelineActionLockRef.current[contactId];
       return;
     }
     // ── REGLE: "Qualifié" necessite une note explicative ──
@@ -3558,6 +3577,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
           notes: note||'', _bookingMode: true
         });
         setPhoneShowScheduleModal(true);
+        // V1.10.4-r10.0.f — release lock : la modale RDV rappellera handlePipelineStageChange
+        delete pipelineActionLockRef.current[contactId];
         return; // La modale RDV gère le changement de statut après création
       }
     }
@@ -3585,6 +3606,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     if (newStage === 'client_valide' && !contractData) {
       setContractModal({ contactId, note });
       setContractForm({ amount:'', number:'', date:new Date().toISOString().split('T')[0] });
+      // V1.10.4-r10.0.f — release lock : la modale contrat rappellera handlePipelineStageChange
+      delete pipelineActionLockRef.current[contactId];
       return;
     }
     const updates = { pipeline_stage: newStage };
