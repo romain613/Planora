@@ -90,6 +90,7 @@ const CrmTab = () => {
     selectedCrmContact, setSelectedCrmContact,
     collabFicheTab, setCollabFicheTab,
     setRdvPasseModal,
+    setSelectedBooking, // V1.10.4-r11.0.8 Phase 1 UX — clic ligne RDV ouvre BookingDetailModal
     setPhoneShowScheduleModal, setPhoneScheduleForm,
     portalTab, setPortalTab, setPortalTabKey,
     // ── Hotfix audit 2026-04-23 — wire missing symbols ──
@@ -731,8 +732,54 @@ const CrmTab = () => {
                     <span style={{fontSize:9,fontWeight:700,padding:'1px 6px',borderRadius:4,background:_catObj.color+'18',color:_catObj.color}}>{_catObj.label}</span>
                     {_subObj&&<span style={{fontSize:9,fontWeight:600,color:_subObj.color}}>{_subObj.label}</span>}
                   </div>}
-                  {/* RDV countdown inline — live depuis bookings */}
-                  {ct.pipeline_stage==='rdv_programme'&&(()=>{const todayS=new Date().toISOString().split('T')[0];const liveRdv=(bookings||[]).filter(b=>b.contactId===ct.id&&b.status==='confirmed'&&b.date>=todayS).sort((a,b)=>(a.date+a.time).localeCompare(b.date+b.time))[0];const rdvDate=liveRdv?liveRdv.date+(liveRdv.time?'T'+liveRdv.time:''):ct.next_rdv_date;if(!rdvDate)return null;const diff=Math.round((new Date(rdvDate).getTime()-Date.now())/60000);if(diff<0&&diff>-120)return<div style={{fontSize:9,fontWeight:700,color:'#EF4444',marginBottom:4}}>RDV passé il y a {Math.abs(diff)} min</div>;if(diff>=0&&diff<=60)return<div style={{fontSize:9,fontWeight:700,color:'#F59E0B',marginBottom:4}}>RDV dans {diff} min</div>;if(diff>60&&diff<=1440)return<div style={{fontSize:9,fontWeight:600,color:'#0EA5E9',marginBottom:4}}>RDV dans {Math.floor(diff/60)}h{String(diff%60).padStart(2,'0')}</div>;if(diff>1440)return<div style={{fontSize:9,color:T.text3,marginBottom:4}}>RDV le {new Date(rdvDate).toLocaleDateString('fr-FR',{day:'numeric',month:'short'})} {rdvDate.split('T')[1]?.slice(0,5)||''}</div>;return null;})()}
+                  {/* V1.10.4-r11.0.8 Phase 1 UX — Liste jusqu'à 3 RDV + Voir plus accordéon + Reporting par ligne RDV passé */}
+                  {(()=>{
+                    const _ctRdvs = (bookings||[])
+                      .filter(b => b.contactId === ct.id && b.status === 'confirmed')
+                      .sort((a,b) => (a.date+a.time).localeCompare(b.date+b.time));
+                    if (_ctRdvs.length === 0) return null;
+                    const _expanded = (typeof _T !== 'undefined' && _T.crmCardRdvExpanded === ct.id);
+                    const _shown = _expanded ? _ctRdvs : _ctRdvs.slice(0, 3);
+                    const _hasMore = _ctRdvs.length > 3;
+                    const nowMs = Date.now();
+                    return (
+                      <div style={{marginBottom:4,display:'flex',flexDirection:'column',gap:2}}>
+                        {_shown.map(b => {
+                          const rdvMs = new Date(b.date + 'T' + (b.time||'00:00')).getTime();
+                          const isPast = rdvMs < nowMs;
+                          const diffMin = Math.round((rdvMs - nowMs) / 60000);
+                          const tColor = isPast ? '#EF4444' : (diffMin <= 60 ? '#F59E0B' : (diffMin <= 1440 ? '#0EA5E9' : T.text3));
+                          const _dStr = new Date(b.date).toLocaleDateString('fr-FR', {day:'2-digit', month:'2-digit'});
+                          return (
+                            <div key={b.id}
+                              onClick={e => { e.stopPropagation(); if(typeof setSelectedBooking==='function') setSelectedBooking(b); }}
+                              title="Ouvrir le RDV"
+                              style={{display:'flex',alignItems:'center',gap:4,padding:'2px 4px',borderRadius:4,fontSize:10,cursor:'pointer',background:tColor+'10',color:tColor,fontWeight:600,transition:'background .1s'}}
+                              onMouseEnter={e => e.currentTarget.style.background = tColor + '22'}
+                              onMouseLeave={e => e.currentTarget.style.background = tColor + '10'}
+                            >
+                              <I n="calendar" s={9}/>
+                              <span style={{flex:1}}>{_dStr} à {b.time||'--:--'}</span>
+                              {isPast && (
+                                <span
+                                  onClick={ev => { ev.stopPropagation(); if(typeof setRdvPasseModal==='function') setRdvPasseModal({contact:ct, rdvDate:b.date, bookingId:b.id}); }}
+                                  title="Reporting RDV"
+                                  style={{padding:'1px 6px',borderRadius:4,background:'#F97316',color:'#fff',fontSize:9,fontWeight:700,cursor:'pointer'}}
+                                >Reporting</span>
+                              )}
+                            </div>
+                          );
+                        })}
+                        {_hasMore && (
+                          <div
+                            onClick={e => { e.stopPropagation(); if(typeof _T !== 'undefined') { _T.crmCardRdvExpanded = _expanded ? null : ct.id; setPortalTabKey(k=>k+1); } }}
+                            title={_expanded ? 'Réduire' : 'Voir tous les RDV'}
+                            style={{padding:'2px 6px',borderRadius:4,fontSize:9,fontWeight:600,cursor:'pointer',background:T.bg,color:T.accent,textAlign:'center',border:`1px dashed ${T.border}`}}
+                          >{_expanded ? '— Réduire' : `+ Voir plus (${_ctRdvs.length} RDV)`}</div>
+                        )}
+                      </div>
+                    );
+                  })()}
                   {/* RDV passé — badge alerte */}
                   {_isRdvPasse && <div style={{fontSize:9,fontWeight:800,padding:'3px 8px',borderRadius:6,background:'linear-gradient(135deg,#F97316,#EF4444)',color:'#fff',marginBottom:4,display:'flex',alignItems:'center',gap:4,boxShadow:'0 2px 8px #F9731630'}}>
                     <span>⚠️</span> RDV passé — Cliquez pour qualifier
@@ -751,7 +798,7 @@ const CrmTab = () => {
                   {(ct.tags||[]).length>0&&<div style={{display:"flex",gap:3,flexWrap:"wrap",marginBottom:4}}>{(ct.tags||[]).slice(0,3).map(t=><Badge key={String(t)} color="#7C3AED">{String(t)}</Badge>)}</div>}
                   {!ct._linked&&<div onClick={e=>{e.stopPropagation();linkVisitorToContacts(ct);}} style={{marginTop:4,padding:"3px 8px",borderRadius:8,fontSize:10,fontWeight:600,cursor:"pointer",background:T.accent+"12",color:T.accent,textAlign:"center"}}>+ Ajouter au CRM</div>}
                   {ct._linked&&<div style={{display:'flex',flexWrap:'wrap',gap:4,marginTop:2}}>
-                    <div onClick={e=>{e.stopPropagation();setSelectedCrmContact(ct);setCollabFicheTab("notes");}} style={{flex:'1 1 28%',padding:"3px 0",borderRadius:8,fontSize:10,fontWeight:600,cursor:"pointer",background:T.accentBg,color:T.accent,textAlign:"center"}}>Fiche</div>
+                    {/* V1.10.4-r11.0.8 Phase 1 UX — Bouton "Fiche" supprime (doublon : clic carte = ouvre fiche fullscreen) */}
                     {ct.phone&&<div onClick={e=>{e.stopPropagation();if(typeof startVoipCall==='function')startVoipCall(ct.phone,ct);else window.open('tel:'+ct.phone);}} style={{flex:'1 1 28%',padding:"3px 0",borderRadius:8,fontSize:10,fontWeight:600,cursor:"pointer",background:T.bg,color:T.text2,textAlign:"center",border:`1px solid ${T.border}`}}>Appel</div>}
                     <div onClick={e=>{e.stopPropagation();setPhoneScheduleForm({contactId:ct.id,contactName:ct.name,number:ct.phone||'',date:new Date(Date.now()+86400000).toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:(calendars||[])[0]?.id||'',_bookingMode:true});setPhoneShowScheduleModal(true);}} style={{flex:'1 1 28%',padding:"3px 0",borderRadius:8,fontSize:10,fontWeight:600,cursor:"pointer",background:'#F59E0B14',color:'#F59E0B',textAlign:"center",border:'1px solid #F59E0B30'}}><I n="calendar" s={9}/> RDV</div>
                     {ct.email&&<div onClick={e=>{e.stopPropagation();window.open('mailto:'+ct.email);}} style={{flex:'1 1 28%',padding:"3px 0",borderRadius:8,fontSize:10,fontWeight:600,cursor:"pointer",background:T.bg,color:T.text2,textAlign:"center",border:`1px solid ${T.border}`}}>Email</div>}
