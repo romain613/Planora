@@ -349,6 +349,8 @@ try { db.exec("ALTER TABLE collaborators ADD COLUMN secure_ia_words_json TEXT DE
 try { db.exec("ALTER TABLE collaborators ADD COLUMN amd_enabled INTEGER DEFAULT 0"); } catch {}
 try { db.exec("ALTER TABLE collaborators ADD COLUMN voicemail_audio_url TEXT DEFAULT ''"); } catch {}
 try { db.exec("ALTER TABLE collaborators ADD COLUMN voicemail_text TEXT DEFAULT ''"); } catch {}
+// V1.10.4-r11.0.6 — Buffer collaborateur (source de vérité unique, min 5 min système)
+try { db.exec("ALTER TABLE collaborators ADD COLUMN buffer_minutes INTEGER DEFAULT 5"); } catch {}
 // V1.9.1 — Recording rights per collaborator (admin-controlled, granular).
 // Migration Option B (preserve): if voip_settings.recordingEnabled=1 at install time,
 // existing collaborators of that company get callRecordingEnabled=1 (avoid silent regression).

@@ -6,6 +6,7 @@ import { createNotification } from './notifications.js';
 import { checkBookingConflict } from '../services/bookings/checkBookingConflict.js';
 import { applyBookingCreatedSideEffects } from '../services/bookings/applyBookingCreatedSideEffects.js';
 import { validateBookingCalendarOwnership } from '../services/bookings/validateBookingCalendarOwnership.js'; // V3.x.15.B
+import { resolveEffectiveBufferFromDb } from '../helpers/buffer.js'; // V1.10.4-r11.0.6
 
 const router = Router();
 
@@ -290,14 +291,15 @@ router.post('/book', requireAuth, enforceCompany, (req, res) => {
 
     // R1 + R5 — check conflit via helper partagé (source de vérité unique)
     {
-      const _calBuf = finalCalendarId ? db.prepare('SELECT bufferBefore, bufferAfter FROM calendars WHERE id = ?').get(finalCalendarId) : null;
+      // V1.10.4-r11.0.6 — Buffer effectif de l'executor (collab CIBLE qui reçoit le RDV)
+      const _eff = resolveEffectiveBufferFromDb(db, { collaboratorId: executorCollaboratorId, calendarId: finalCalendarId });
       const { conflict, existingBooking } = checkBookingConflict(db, {
         collaboratorId: executorCollaboratorId,
         date,
         startTime: time,
         duration: safeDuration,
-        bufferBefore: _calBuf?.bufferBefore || 0,
-        bufferAfter: _calBuf?.bufferAfter || 0,
+        bufferBefore: _eff.bufferBefore,
+        bufferAfter: _eff.bufferAfter,
       });
       if (conflict) {
         console.log(`[INTER-MEETING CONFLICT] executor=${executorCollaboratorId} date=${date} time=${time} vs existing=${existingBooking.id}@${existingBooking.time}`);

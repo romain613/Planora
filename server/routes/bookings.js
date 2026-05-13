@@ -10,6 +10,7 @@ import { isConnected as outlookIsConnected, createEventOutlook, updateEventOutlo
 import { createFollowUpTask } from '../services/googleTasks.js';
 import { sendChatNotification, formatNewBooking, formatCancelledBooking, formatConfirmedBooking } from '../services/googleChat.js';
 import { checkBookingConflict } from '../services/bookings/checkBookingConflict.js';
+import { resolveEffectiveBufferFromDb } from '../helpers/buffer.js'; // V1.10.4-r11.0.6
 import { applyBookingCreatedSideEffects } from '../services/bookings/applyBookingCreatedSideEffects.js';
 import { validateBookingCalendarOwnership } from '../services/bookings/validateBookingCalendarOwnership.js'; // V3.x.15.A
 import { reassignBooking, cancelBookingTransmission, resumeBookingByReceiver } from '../services/bookings/reassignBooking.js'; // V1.10.4.A
@@ -162,14 +163,15 @@ router.post('/', requireAuth, enforceCompany, requirePermission('bookings.create
     }
     // R1 + R5 — source de vérité unique du check conflit (helper partagé)
     if (b.collaboratorId && b.date && b.time) {
-      const _calBuf = b.calendarId ? db.prepare('SELECT bufferBefore, bufferAfter FROM calendars WHERE id = ?').get(b.calendarId) : null;
+      // V1.10.4-r11.0.6 — Buffer effectif du collaborateur CIBLE (qui reçoit le RDV)
+      const _eff = resolveEffectiveBufferFromDb(db, { collaboratorId: b.collaboratorId, calendarId: b.calendarId });
       const { conflict, existingBooking } = checkBookingConflict(db, {
         collaboratorId: b.collaboratorId,
         date: b.date,
         startTime: b.time,
         duration: b.duration || 30,
-        bufferBefore: _calBuf?.bufferBefore || 0,
-        bufferAfter: _calBuf?.bufferAfter || 0,
+        bufferBefore: _eff.bufferBefore,
+        bufferAfter: _eff.bufferAfter,
       });
       if (conflict) {
         console.log(`[BOOKING CONFLICT] collab=${b.collaboratorId} date=${b.date} time=${b.time} vs existing=${existingBooking.id}@${existingBooking.time}`);
@@ -460,7 +462,8 @@ router.put('/:id', requireAuth, requirePermission('bookings.edit'), (req, res) =
       const newDuration = req.body.duration !== undefined ? req.body.duration : (oldBooking.duration || 30);
       if (newCollabId && newDate && newTime) {
         const _newCalId = req.body.calendarId || oldBooking.calendarId || null;
-        const _calBuf = _newCalId ? db.prepare('SELECT bufferBefore, bufferAfter FROM calendars WHERE id = ?').get(_newCalId) : null;
+        // V1.10.4-r11.0.6 — Buffer effectif du collaborateur CIBLE (qui reçoit le RDV après reschedule)
+        const _eff = resolveEffectiveBufferFromDb(db, { collaboratorId: newCollabId, calendarId: _newCalId });
         const { conflict, existingBooking } = checkBookingConflict(db, {
           collaboratorId: newCollabId,
           date: newDate,
@@ -468,8 +471,8 @@ router.put('/:id', requireAuth, requirePermission('bookings.edit'), (req, res) =
           duration: newDuration,
           excludeBookingId: req.params.id,
           excludeOutlookEventId: oldBooking.outlookEventId || null,  // V3.x.9 — skip miroir du booking courant
-          bufferBefore: _calBuf?.bufferBefore || 0,
-          bufferAfter: _calBuf?.bufferAfter || 0,
+          bufferBefore: _eff.bufferBefore,
+          bufferAfter: _eff.bufferAfter,
         });
         if (conflict) {
           console.log(`[BOOKING-PUT CONFLICT] id=${req.params.id} new=${newCollabId}@${newDate}T${newTime} vs existing=${existingBooking.id}@${existingBooking.time}`);

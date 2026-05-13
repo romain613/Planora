@@ -3120,10 +3120,27 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     }
   };
   // Availability: breaks & buffer
-  const [availBuffer, setAvailBuffer] = useState(() => { try { return parseInt(localStorage.getItem("c360-avail-buffer-"+collab.id))||0; } catch { return 0; } });
+  // V1.10.4-r11.0.6 — buffer_minutes DB est source de vérité (min 5).
+  // Priorité init : collab.buffer_minutes (DB) > localStorage legacy > 5.
+  const [availBuffer, setAvailBuffer] = useState(() => {
+    const dbVal = Number(collab?.buffer_minutes);
+    if (Number.isFinite(dbVal) && dbVal > 0) return dbVal;
+    try { const lsVal = parseInt(localStorage.getItem("c360-avail-buffer-"+collab.id)); if (Number.isFinite(lsVal) && lsVal > 0) return lsVal; } catch {}
+    return 5;
+  });
   const [availMaxPerDay, setAvailMaxPerDay] = useState(() => { try { return parseInt(localStorage.getItem("c360-avail-max-"+collab.id))||0; } catch { return 0; } });
   const [availBreaks, setAvailBreaks] = useState(() => { try { return JSON.parse(localStorage.getItem("c360-avail-breaks-"+collab.id)||"{}"); } catch { return {}; } });
-  const saveAvailBuffer = (v) => { setAvailBuffer(v); localStorage.setItem("c360-avail-buffer-"+collab.id, v); };
+  // V1.10.4-r11.0.6 — saveAvailBuffer persiste en DB (source de vérité unique).
+  // localStorage = cache UX uniquement.
+  const saveAvailBuffer = async (v) => {
+    const n = Math.max(5, Math.min(180, parseInt(v) || 5));
+    setAvailBuffer(n);
+    try { localStorage.setItem("c360-avail-buffer-"+collab.id, n); } catch {}
+    try {
+      const res = await api(`/api/collaborators/${collab.id}/buffer`, { method: 'PUT', body: { bufferMinutes: n } });
+      if (res?.ok) showNotif?.(`Buffer enregistré (${n} min)`, 'success');
+    } catch (e) { showNotif?.('Erreur enregistrement buffer', 'danger'); }
+  };
   const saveAvailMaxPerDay = (v) => { setAvailMaxPerDay(v); localStorage.setItem("c360-avail-max-"+collab.id, v); };
   const saveAvailBreaks = (newBreaks) => { setAvailBreaks(newBreaks); localStorage.setItem("c360-avail-breaks-"+collab.id, JSON.stringify(newBreaks)); };
 

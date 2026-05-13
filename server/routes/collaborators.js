@@ -230,6 +230,31 @@ router.put('/:id/availability', requireAuth, (req, res) => {
   }
 });
 
+// V1.10.4-r11.0.6 — Save buffer_minutes (source de vérité unique buffer collaborateur).
+// PUT /api/collaborators/:id/buffer  Body: { bufferMinutes: number }
+// Min 5 (SYSTEM_MIN_BUFFER_MINUTES), max 180.
+router.put('/:id/buffer', requireAuth, (req, res) => {
+  try {
+    // Ownership : collab modifie son propre buffer (sauf admin/supra)
+    if (!req.auth.isAdmin && !req.auth.isSupra && req.params.id !== req.auth.collaboratorId) {
+      return res.status(403).json({ error: 'Vous ne pouvez modifier que votre propre buffer' });
+    }
+    if (!req.auth.isSupra) {
+      const target = db.prepare('SELECT companyId FROM collaborators WHERE id = ?').get(req.params.id);
+      if (!target) return res.status(404).json({ error: 'Collaborateur introuvable' });
+      if (target.companyId !== req.auth.companyId) return res.status(403).json({ error: 'Accès interdit' });
+    }
+    const raw = req.body?.bufferMinutes;
+    const n = Number.parseInt(raw, 10);
+    if (!Number.isFinite(n)) return res.status(400).json({ error: 'bufferMinutes invalide' });
+    const sanitized = Math.max(5, Math.min(180, n));
+    db.prepare('UPDATE collaborators SET buffer_minutes = ? WHERE id = ?').run(sanitized, req.params.id);
+    res.json({ ok: true, buffer_minutes: sanitized });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // DELETE /api/collaborators/:id
 // Wave D commit 1 — devient un archivage métier par défaut (réversible via /restore).
 // Body optionnel : { targetAdminId, allowUnassigned }

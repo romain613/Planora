@@ -12,6 +12,7 @@ import { createEvent, isConnected } from '../services/googleCalendar.js';
 import { isConnected as outlookIsConnected, createEventOutlook } from '../services/outlookCalendar.js'; // V4.a
 import { checkBookingConflict } from '../services/bookings/checkBookingConflict.js';
 import { validateBookingCalendarOwnership } from '../services/bookings/validateBookingCalendarOwnership.js'; // V3.x.15.A
+import { resolveEffectiveBufferFromDb } from '../helpers/buffer.js'; // V1.10.4-r11.0.6
 
 const router = Router();
 
@@ -214,9 +215,8 @@ function generateSlots(cal, req, res) {
         const slotLuxon = DateTime.fromISO(`${date}T${timeStr}:00`, { zone: collabTz });
         if (slotLuxon.toMillis() - nowMs < minNoticeMs) continue;
 
-        // Check buffer conflicts with existing bookings + Google events + Outlook events
-        const bufferBefore = cal.bufferBefore || 0;
-        const bufferAfter = cal.bufferAfter || 0;
+        // V1.10.4-r11.0.6 — Buffer effectif = MAX(SYSTEM_MIN, collab.buffer_minutes, cal.bufferBefore, cal.bufferAfter)
+        const { bufferBefore, bufferAfter } = resolveEffectiveBufferFromDb(db, { collaboratorId: collabId, calendarId: cal.id });
         const slotStart = m - bufferBefore;
         const slotEnd = m + duration + bufferAfter;
 
@@ -322,13 +322,15 @@ router.post('/book', async (req, res) => {
 
     // R1 + R5 — check conflit booking via helper partagé (source de vérité unique)
     if (collaboratorId) {
+      // V1.10.4-r11.0.6 — Buffer effectif du collaborateur CIBLE (qui reçoit le RDV)
+      const _eff = resolveEffectiveBufferFromDb(db, { collaboratorId, calendarId: cal.id });
       const { conflict, existingBooking } = checkBookingConflict(db, {
         collaboratorId,
         date,
         startTime: time,
         duration: duration || cal.duration || 30,
-        bufferBefore: cal.bufferBefore || 0,
-        bufferAfter: cal.bufferAfter || 0,
+        bufferBefore: _eff.bufferBefore,
+        bufferAfter: _eff.bufferAfter,
       });
       if (conflict) {
         console.log(`[PUBLIC-BOOK CONFLICT] collab=${collaboratorId} date=${date} time=${time} vs existing=${existingBooking.id}@${existingBooking.time}`);

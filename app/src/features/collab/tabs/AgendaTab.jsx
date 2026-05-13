@@ -12,28 +12,32 @@ import { _T } from "../../../shared/state/tabState";
 import { api } from "../../../shared/services/api";
 import { useCollabContext } from "../context/CollabContext";
 
-// V1.10.4-r11.0.5 — Génère les buffer blocks virtuels (bufferBefore + bufferAfter)
-// à partir des bookings + calendrier associé. Buffers purement visuels, non
-// interactifs. Aligne UX avec validation backend r11.0.4 (checkBookingConflict).
-function generateBufferBlocks(bookings, calendars) {
+// V1.10.4-r11.0.6 — Génère les buffer blocks virtuels (bufferBefore + bufferAfter)
+// à partir des bookings + collaborateur CIBLE (qui reçoit/exécute le RDV) + calendrier.
+// effectiveBuffer = MAX(SYSTEM_MIN=5, collab.buffer_minutes, cal.bufferBefore, cal.bufferAfter).
+// Buffers purement visuels, non interactifs. Aligne UX avec backend r11.0.4 / r11.0.6.
+const SYSTEM_MIN_BUFFER_MINUTES_UI = 5;
+function generateBufferBlocks(bookings, calendars, collaborators) {
   const result = [];
   for (const b of (bookings || [])) {
     if (!b || b.status === 'cancelled') continue;
-    const cal = (calendars || []).find(c => c.id === b.calendarId);
-    if (!cal) continue;
-    const bb = Number(cal.bufferBefore) || 0;
-    const ba = Number(cal.bufferAfter) || 0;
-    if (bb <= 0 && ba <= 0) continue;
+    const cal = (calendars || []).find(c => c.id === b.calendarId) || null;
+    // V1.10.4-r11.0.6 — collab cible = qui reçoit le RDV (agendaOwnerId > collaboratorId)
+    const targetCollabId = b.agendaOwnerId || b.meetingCollaboratorId || b.collaboratorId;
+    const targetCollab = (collaborators || []).find(c => c.id === targetCollabId) || null;
+    const collabBuf = Number(targetCollab?.buffer_minutes) || 0;
+    const calBefore = Number(cal?.bufferBefore) || 0;
+    const calAfter = Number(cal?.bufferAfter) || 0;
+    const effective = Math.max(SYSTEM_MIN_BUFFER_MINUTES_UI, collabBuf, calBefore, calAfter);
+    if (effective <= 0) continue;
     const [bH, bM] = String(b.time || '0:0').split(':').map(Number);
     const bMin = (bH || 0) * 60 + (bM || 0);
     const dur = Number(b.duration) || 30;
-    if (bb > 0) {
-      const start = Math.max(0, bMin - bb);
-      result.push({ id: 'bufb-' + b.id, date: b.date, startMin: start, durationMin: bMin - start, label: 'Buffer ' + (bMin - start) + ' min' });
+    const startBefore = Math.max(0, bMin - effective);
+    if (bMin - startBefore > 0) {
+      result.push({ id: 'bufb-' + b.id, date: b.date, startMin: startBefore, durationMin: bMin - startBefore, label: 'Buffer ' + (bMin - startBefore) + ' min' });
     }
-    if (ba > 0) {
-      result.push({ id: 'bufa-' + b.id, date: b.date, startMin: bMin + dur, durationMin: ba, label: 'Buffer ' + ba + ' min' });
-    }
+    result.push({ id: 'bufa-' + b.id, date: b.date, startMin: bMin + dur, durationMin: effective, label: 'Buffer ' + effective + ' min' });
   }
   return result;
 }
@@ -218,18 +222,21 @@ const AgendaTab = () => {
   const _weekBkF = React.useMemo(() => (
     _agFilter === 'all' ? null : _filteredMyBookings.filter(b => weekDates.includes(b.date))
   ), [_agFilter, _filteredMyBookings, weekDates]);
-  // V1.10.4-r11.0.5 — Buffer blocks visuels (Day + Week)
+  // V1.10.4-r11.0.6 — Buffer blocks visuels (Day + Week), buffer du collab cible
+  // (qui reçoit le RDV via agendaOwnerId/collaboratorId). Dans son agenda perso,
+  // la cible = collab connecté → on passe [collab] comme liste minimale.
+  const _collabsForBuffer = React.useMemo(() => collab ? [collab] : [], [collab]);
   const _dayBufferBlocks = React.useMemo(
-    () => generateBufferBlocks(_dayBkF, calendars),
-    [_dayBkF, calendars]
+    () => generateBufferBlocks(_dayBkF, calendars, _collabsForBuffer),
+    [_dayBkF, calendars, _collabsForBuffer]
   );
   const _weekBookingsAll = React.useMemo(
     () => _weekBkF !== null ? _weekBkF : (myBookings || []).filter(b => weekDates.includes(b.date)),
     [_weekBkF, myBookings, weekDates]
   );
   const _weekBufferBlocks = React.useMemo(
-    () => generateBufferBlocks(_weekBookingsAll, calendars),
-    [_weekBookingsAll, calendars]
+    () => generateBufferBlocks(_weekBookingsAll, calendars, _collabsForBuffer),
+    [_weekBookingsAll, calendars, _collabsForBuffer]
   );
 
   return (
