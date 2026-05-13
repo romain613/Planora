@@ -33,7 +33,7 @@ const DEFAULT_STAGE_LABELS = {
   qualifie:       { label: 'Qualifié',       color: '#F59E0B', emoji: '🔥' },
   rdv_programme:  { label: 'RDV programmé',  color: '#2563EB', emoji: '📅' },
   nrp:            { label: 'NRP',            color: '#EF4444', emoji: '❌' },
-  client_valide:  { label: 'Client validé',  color: '#22C55E', emoji: '🟢' },
+  client_valide:  { label: 'Validé',         color: '#22C55E', emoji: '🟢' },
   perdu:          { label: 'Perdu',          color: '#7F1D1D', emoji: '🔴' },
 };
 

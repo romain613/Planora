@@ -455,7 +455,7 @@ const CommercialCockpit = () => {
           const _amt = ct.contract_amount > 0 ? Number(ct.contract_amount).toLocaleString("fr-FR") + " €" : "";
           return (
             <div style={{padding:"5px 8px",borderRadius:8,background:"#22C55E08",border:"1px solid #22C55E25",display:"flex",flexDirection:"column",gap:3}}>
-              <div style={{fontSize:9,fontWeight:700,color:"#22C55E",letterSpacing:0.3,textTransform:"uppercase"}}>✅ Client validé</div>
+              <div style={{fontSize:9,fontWeight:700,color:"#22C55E",letterSpacing:0.3,textTransform:"uppercase"}}>✅ Validé</div>
               {_contractDate && (
                 <div style={{fontSize:11,fontWeight:700,color:T.text}}>Signé le {_fmtDate(_contractDate)}{_amt ? " · " + _amt : ""}</div>
               )}

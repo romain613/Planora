@@ -24,7 +24,7 @@ const DEFAULT_STAGES = [
   { id: 'qualifie',      label: 'Intéressé',      color: '#7C3AED', icon: 'star',          position: 30, isDefault: 1 },
   { id: 'rdv_programme', label: 'RDV Programmé',  color: '#0EA5E9', icon: 'calendar',      position: 40, isDefault: 1 },
   { id: 'nrp',           label: 'NRP',            color: '#EF4444', icon: 'phone-off',     position: 50, isDefault: 1 },
-  { id: 'client_valide', label: 'Client Validé',  color: '#22C55E', icon: 'check-circle',  position: 60, isDefault: 1 },
+  { id: 'client_valide', label: 'Validé',         color: '#22C55E', icon: 'check-circle',  position: 60, isDefault: 1 },
   { id: 'perdu',         label: 'Perdu',          color: '#64748B', icon: 'x-circle',      position: 70, isDefault: 1 },
 ];
 

@@ -323,7 +323,7 @@ const CsvImportModal = () => {
                 <div style={{fontSize:11,color:T2.text2}}>Les contacts importés apparaîtront directement dans cette colonne du pipeline live.</div>
               </div>
               <select value={cim.targetStage||'nouveau'} onChange={e=>setCsvImportModal({...cim,targetStage:e.target.value})} style={{padding:'8px 12px',borderRadius:8,border:'1px solid #2563EB30',background:T2.card,fontSize:13,fontWeight:600,color:'#2563EB',cursor:'pointer',minWidth:160}}>
-                {[{id:'nouveau',label:'Nouveau',color:'#2563EB'},{id:'contacte',label:'En discussion',color:'#F59E0B'},{id:'qualifie',label:'Intéressé',color:'#7C3AED'},{id:'rdv_programme',label:'RDV Programmé',color:'#0EA5E9'},{id:'nrp',label:'NRP',color:'#EF4444'},{id:'client_valide',label:'Client Validé',color:'#22C55E'},{id:'perdu',label:'Perdu',color:'#64748B'},...((pipelineStages)||[]).map(s=>({id:s.id,label:s.label||s.id}))].map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
+                {[{id:'nouveau',label:'Nouveau',color:'#2563EB'},{id:'contacte',label:'En discussion',color:'#F59E0B'},{id:'qualifie',label:'Intéressé',color:'#7C3AED'},{id:'rdv_programme',label:'RDV Programmé',color:'#0EA5E9'},{id:'nrp',label:'NRP',color:'#EF4444'},{id:'client_valide',label:'Validé',color:'#22C55E'},{id:'perdu',label:'Perdu',color:'#64748B'},...((pipelineStages)||[]).map(s=>({id:s.id,label:s.label||s.id}))].map(s=><option key={s.id} value={s.id}>{s.label}</option>)}
               </select>
             </div>
           </div>

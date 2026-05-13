@@ -54,7 +54,7 @@ const BookingDetailModal = () => {
         const cal = calendars.find(c => c.id === b.calendarId);
         const _bContact = b.contactId ? (contacts||[]).find(c => c.id === b.contactId) : (contacts||[]).find(c => c.email && b.visitorEmail && c.email.toLowerCase() === b.visitorEmail.toLowerCase());
         const _bContactBookings = _bContact ? (bookings||[]).filter(bk => bk.contactId === _bContact.id).sort((a,bb) => (bb.date+bb.time).localeCompare(a.date+a.time)) : [];
-        const _bStages = [...(DEFAULT_STAGES||[{id:"nouveau",label:"Nouveau",color:"#2563EB"},{id:"contacte",label:"En discussion",color:"#F59E0B"},{id:"qualifie",label:"Intéressé",color:"#7C3AED"},{id:"rdv_programme",label:"RDV Programmé",color:"#0EA5E9"},{id:"nrp",label:"NRP",color:"#EF4444"},{id:"client_valide",label:"Client Validé",color:"#22C55E"},{id:"perdu",label:"Perdu",color:"#64748B"}]), ...(pipelineStages||[])];
+        const _bStages = [...(DEFAULT_STAGES||[{id:"nouveau",label:"Nouveau",color:"#2563EB"},{id:"contacte",label:"En discussion",color:"#F59E0B"},{id:"qualifie",label:"Intéressé",color:"#7C3AED"},{id:"rdv_programme",label:"RDV Programmé",color:"#0EA5E9"},{id:"nrp",label:"NRP",color:"#EF4444"},{id:"client_valide",label:"Validé",color:"#22C55E"},{id:"perdu",label:"Perdu",color:"#64748B"}]), ...(pipelineStages||[])];
         const _bCurrentStage = _bContact ? _bStages.find(s => s.id === _bContact.pipeline_stage) : null;
         return (
           <div>

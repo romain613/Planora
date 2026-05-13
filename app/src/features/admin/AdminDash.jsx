@@ -1090,7 +1090,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
     { id:"qualifie", label:"Intéressé", color:"#7C3AED", isDefault:1, isCore:false },
     { id:"rdv_programme", label:"RDV Programmé", color:"#0EA5E9", isDefault:1, isCore:true },
     { id:"nrp", label:"NRP", color:"#EF4444", isDefault:1, isCore:true },
-    { id:"client_valide", label:"Client Validé", color:"#22C55E", isDefault:1, isCore:true },
+    { id:"client_valide", label:"Validé",        color:"#22C55E", isDefault:1, isCore:true },
     { id:"perdu", label:"Perdu", color:"#64748B", isDefault:1, isCore:true },
   ];
   const CRM_STAGES = (pipelineStages && (typeof pipelineStages!=='undefined'?pipelineStages:{}).length > 0)
@@ -3749,7 +3749,7 @@ const AdminDash = ({ company, onLogout, onVisitor, onCollabPortal, bookings, set
             const cl = collabs.find(c => c.id === b.collaboratorId);
             const _bContact = b.contactId ? (contacts||[]).find(c => c.id === b.contactId) || ((typeof allContacts!=='undefined'?allContacts:null)||[]).find(c => c.id === b.contactId) : (contacts||[]).find(c => c.email && b.visitorEmail && c.email.toLowerCase() === b.visitorEmail.toLowerCase()) || ((typeof allContacts!=='undefined'?allContacts:null)||[]).find(c => c.email && b.visitorEmail && c.email.toLowerCase() === b.visitorEmail.toLowerCase());
             const _bContactBookings = _bContact ? (bookings||[]).filter(bk => bk.contactId === _bContact.id).sort((a,bb) => (bb.date+bb.time).localeCompare(a.date+a.time)) : [];
-            const _STAGES = [{id:"nouveau",label:"Nouveau",color:"#2563EB"},{id:"contacte",label:"En discussion",color:"#F59E0B"},{id:"qualifie",label:"Intéressé",color:"#7C3AED"},{id:"rdv_programme",label:"RDV Programmé",color:"#0EA5E9"},{id:"nrp",label:"NRP",color:"#EF4444"},{id:"client_valide",label:"Client Validé",color:"#22C55E"},{id:"perdu",label:"Perdu",color:"#64748B"}, ...((typeof pipelineStages!=='undefined'?pipelineStages:null)||[])];
+            const _STAGES = [{id:"nouveau",label:"Nouveau",color:"#2563EB"},{id:"contacte",label:"En discussion",color:"#F59E0B"},{id:"qualifie",label:"Intéressé",color:"#7C3AED"},{id:"rdv_programme",label:"RDV Programmé",color:"#0EA5E9"},{id:"nrp",label:"NRP",color:"#EF4444"},{id:"client_valide",label:"Validé",color:"#22C55E"},{id:"perdu",label:"Perdu",color:"#64748B"}, ...((typeof pipelineStages!=='undefined'?pipelineStages:null)||[])];
             const _bCurrentStage = _bContact ? _STAGES.find(s => s.id === _bContact.pipeline_stage) : null;
             const _updateContact = (id, updates) => { contactsLocalEditRef.current = Date.now(); setContacts(p => p.map(c => c.id === id ? {...c,...updates} : c)); if(typeof selectedCrmContact!=='undefined'&&selectedCrmContact?.id===id) (typeof setSelectedCrmContact==='function'?setSelectedCrmContact:()=>{})(p=>p?{...p,...updates}:p); if((typeof pipelineRightContact!=='undefined'?pipelineRightContact:null)?.id===id) (typeof setPipelineRightContact==='function'?setPipelineRightContact:function(){})(p=>p?{...p,...updates}:p); if(typeof setSelectedContact==='function'){try{setSelectedContact(p=>p?.id===id?{...p,...updates}:p);}catch{}} if(typeof setAllContacts==='function'){try{setAllContacts(p=>(p||[]).map(c=>c.id===id?{...c,...updates}:c));}catch{}} api(`/api/data/contacts/${id}`, { method:"PUT", body:{ ...updates, companyId:company?.id } }); };
             return (

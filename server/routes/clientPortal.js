@@ -62,7 +62,7 @@ router.get('/:token', (req, res) => {
       qualifie: { label: 'Intéressé', color: '#7C3AED' },
       rdv_programme: { label: 'RDV Programmé', color: '#0EA5E9' },
       nrp: { label: 'NRP', color: '#EF4444' },
-      client_valide: { label: 'Client Validé', color: '#22C55E' },
+      client_valide: { label: 'Validé', color: '#22C55E' },
       perdu: { label: 'Perdu', color: '#64748B' },
     };
     let stageInfo = DEFAULT_STAGES[stage];

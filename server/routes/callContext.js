@@ -77,7 +77,7 @@ router.post('/auto-detect', requireAuth, enforceCompany, (req, res) => {
       const contact = db.prepare('SELECT pipeline_stage, tags_json, notes FROM contacts WHERE id = ? AND companyId = ?').get(contactId, safeCompanyId);
       if (contact) {
         const stage = contact.pipeline_stage || 'nouveau';
-        if (['gagne','client'].includes(stage)) { target_type = 'client'; call_origin = direction === 'inbound' ? 'existing_client' : 'follow_up'; }
+        if (['gagne','client','client_valide'].includes(stage)) { target_type = 'client'; call_origin = direction === 'inbound' ? 'existing_client' : 'follow_up'; }
         else if (stage === 'perdu') { target_type = 'old_client'; call_type = 'retention'; }
         else if (stage === 'proposition') { call_type = 'closing'; call_goal = 'close_deal'; }
         else if (stage === 'en_cours') { call_type = 'follow_up'; call_goal = 'qualify_lead'; }

@@ -30,7 +30,7 @@ const ContractModal = () => {
       handlePipelineStageChange(contractModal.contactId, 'client_valide', contractModal.note||'', {amount:0,number:'',date:''});
       setContractModal(null);
     }}>
-      <h2 style={{fontSize:18,fontWeight:800,marginBottom:20,display:'flex',alignItems:'center',gap:8}}><I n="file-check" s={20} style={{color:'#22C55E'}}/> Contrat — Client Validé</h2>
+      <h2 style={{fontSize:18,fontWeight:800,marginBottom:20,display:'flex',alignItems:'center',gap:8}}><I n="file-check" s={20} style={{color:'#22C55E'}}/> Contrat — Validé</h2>
       <div style={{display:'flex',flexDirection:'column',gap:14}}>
         <div>
           <label style={{fontSize:12,fontWeight:600,color:T.text3,marginBottom:4,display:'block'}}>Montant du contrat (€)</label>

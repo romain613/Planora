@@ -43,7 +43,7 @@ export const PIPELINE_LABELS = {
   'contacte': 'Contact établi',
   'rdv_programme': 'RDV programmé',
   'perdu': 'Perdu',
-  'client_valide': 'Gagné'
+  'client_valide': 'Validé'
 };
 
 // V1.7.6 LOT 1 — unified status colors (keys = DB stage ids)

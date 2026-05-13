@@ -36,7 +36,7 @@ export const STAGE_TYPES = [
   { id: 'rdv',           label: 'RDV programmé',  color: '#0EA5E9', icon: 'calendar' },
   { id: 'negociation',   label: 'Négociation',    color: '#F59E0B', icon: 'trending-up' },
   { id: 'signature',     label: 'Signature',      color: '#22C55E', icon: 'check' },
-  { id: 'client',        label: 'Client validé',  color: '#22C55E', icon: 'check-circle' },
+  { id: 'client',        label: 'Validé',         color: '#22C55E', icon: 'check-circle' },
   { id: 'perdu',         label: 'Perdu',          color: '#64748B', icon: 'x-circle' },
   { id: 'nrp',           label: 'NRP',            color: '#EF4444', icon: 'phone-off' },
   { id: 'relance',       label: 'Relance',        color: '#F59E0B', icon: 'alarm-clock' },
@@ -59,7 +59,7 @@ export const TEMPLATE_PRESETS = [
       { id: 'qualifie',      label: 'Intéressé',     color: '#7C3AED', icon: 'star',          position: 30 },
       { id: 'rdv_programme', label: 'RDV Programmé', color: '#0EA5E9', icon: 'calendar',      position: 40 },
       { id: 'nrp',           label: 'NRP',           color: '#EF4444', icon: 'phone-off',     position: 50 },
-      { id: 'client_valide', label: 'Client Validé', color: '#22C55E', icon: 'check-circle',  position: 60 },
+      { id: 'client_valide', label: 'Validé',        color: '#22C55E', icon: 'check-circle',  position: 60 },
       { id: 'perdu',         label: 'Perdu',         color: '#64748B', icon: 'x-circle',      position: 70 },
     ],
   },
@@ -126,8 +126,9 @@ export const STAGES_WARN_COUNT = 12;
 // Garanties métier nécessaires pour les futures "Règles métier" (bientôt) :
 //   - appels       → nouveau / contacté / NRP
 //   - prise de RDV → rdv_programme
+//   - validation   → client_valide (gardé techniquement, label UI "Validé")
 //   - sortie       → perdu
-// Ces 5 colonnes sont :
+// Ces 6 colonnes sont :
 //   - injectées par défaut à la création d'un template (vide ou preset)
 //   - non supprimables depuis l'UI builder
 //   - non renommables (Option A — safe)
@@ -138,6 +139,7 @@ export const SYSTEM_STAGE_IDS = [
   'contacte',
   'rdv_programme',
   'nrp',
+  'client_valide',
   'perdu',
 ];
 
@@ -146,6 +148,7 @@ export const SYSTEM_STAGES_META = {
   contacte:      { label: 'Contacté',       color: '#F59E0B', icon: 'message-circle' },
   rdv_programme: { label: 'RDV programmé',  color: '#0EA5E9', icon: 'calendar' },
   nrp:           { label: 'NRP',            color: '#EF4444', icon: 'phone-off' },
+  client_valide: { label: 'Validé',         color: '#22C55E', icon: 'check-circle' },
   perdu:         { label: 'Perdu',          color: '#64748B', icon: 'x-circle' },
 };
 
@@ -156,7 +159,7 @@ export function isSystemStage(stage) {
 }
 
 // Construit la liste initiale de stages pour un nouveau template :
-//   - Les 5 stages système en tête (dans l'ordre SYSTEM_STAGE_IDS)
+//   - Les 6 stages système en tête (dans l'ordre SYSTEM_STAGE_IDS)
 //   - Puis les stages additionnels du preset (dé-dupliqués par ID)
 // Chaque stage retourné porte son ID, label, couleur, icône, position.
 export function buildInitialStages(presetStages = []) {
