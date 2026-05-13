@@ -38,6 +38,23 @@ const STATUS_META = {
   other:        { label: 'Autre',                short: 'Autre',       color: '#64748B', icon: '⚫' },
 };
 
+// V1.10.4-r10.0.c — Mapping conservateur reporting → pipeline_stage.
+// Auto-move déclenché côté frontend après save reporting réussi, UNIQUEMENT pour
+// les statuts à intention métier non ambiguë. Exclus volontairement :
+//   - cancelled (peut signifier RDV reporté, pas forcément perte → laisser Julie décider)
+//   - reprogrammed (relance R2/R3/R4 : sera traité par r10.2 via retryLevel)
+//   - interested (pas de stage standard équivalent — manuel vers 'Candidat en réflexion')
+//   - follow_up / validated / other / pending (intent neutre, pas de déplacement automatique)
+// Pas de rétro-move : si Julie repasse 'lost' → 'validated', le contact reste où il a été déplacé.
+const REPORTING_TO_STAGE_MAPPING = {
+  lost: 'perdu',
+  no_show: 'nrp',
+  signed: 'client_valide',
+  qualified: 'qualifie',
+  contacted: 'contacte',
+  nrp: 'nrp',
+};
+
 // V1.10.4.I — Labels pipeline_stage par défaut (fallback si PIPELINE_STAGES context absent).
 const DEFAULT_STAGE_LABELS = {
   nouveau:        { label: 'Nouveau',        color: '#94A3B8', emoji: '✨' },
@@ -274,11 +291,52 @@ const RdvReportingTab = () => {
         body: { status: reportStatus, note: trimmedNote }
       });
       if (res?.success) {
-        showNotif && showNotif('Reporting enregistré', 'success');
+        // V1.10.4-r10.0.c — Auto-move pipeline conservateur après save reporting.
+        // Garde-fous (tous obligatoires) :
+        //   1. mappedStage défini pour ce reportingStatus
+        //   2. contact pas ghost (b._contactGhost falsy)
+        //   3. contactId présent
+        //   4. user est receiver owner (agendaOwnerId === collab.id)
+        //   5. stage actuel != stage cible (idempotent — pas de no-op write)
+        //   6. handleCollabUpdateContact disponible
+        // Pas de rétro-move : un reporting → 'validated' ne ramène pas le contact
+        // d'un stage perdu/qualifie/etc vers rdv_programme. Le receveur reste libre
+        // de bouger manuellement.
+        const b = reportingBooking;
+        const mappedStage = REPORTING_TO_STAGE_MAPPING[reportStatus] || null;
+        const canAutoMove = !!(
+          mappedStage
+          && !b._contactGhost
+          && b.contactId
+          && b.agendaOwnerId === collab.id
+          && b.receiverPipelineStage !== mappedStage
+          && typeof handleCollabUpdateContact === 'function'
+        );
+        let autoMoveLabel = '';
+        if (canAutoMove) {
+          try {
+            handleCollabUpdateContact(b.contactId, {
+              pipeline_stage: mappedStage,
+              _source: 'reporting_auto_move',
+              _origin: 'reporting_tab',
+              _reason: `Reporting ${reportStatus} → auto-move pipeline`,
+            });
+            const stageLabel = resolveStageMeta(mappedStage)?.label || mappedStage;
+            autoMoveLabel = ` · Contact → ${stageLabel}`;
+          } catch (autoMoveErr) {
+            // Non-bloquant : l'erreur d'auto-move ne doit pas casser le reporting réussi.
+            console.error('[REPORTING AUTO-MOVE ERR]', autoMoveErr?.message || autoMoveErr);
+          }
+        }
+        showNotif && showNotif('Reporting enregistré' + autoMoveLabel, 'success');
         closeReporting();
-        // Refresh listes (Reçus toujours, Transmis si déjà chargée)
-        fetchReceived();
-        if (sent.length > 0) fetchSent();
+        // Refresh listes (Reçus toujours, Transmis si déjà chargée).
+        // Délai 300ms pour laisser handleCollabUpdateContact propager côté state global
+        // avant que le fetch ne recharge la liste avec le nouveau pipeline_stage.
+        setTimeout(() => {
+          fetchReceived();
+          if (sent.length > 0) fetchSent();
+        }, canAutoMove ? 300 : 0);
       } else {
         const msg = res?.error || 'Erreur lors de l\'enregistrement';
         showNotif && showNotif(msg, 'danger');
