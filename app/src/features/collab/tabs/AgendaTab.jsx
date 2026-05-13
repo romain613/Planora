@@ -12,6 +12,32 @@ import { _T } from "../../../shared/state/tabState";
 import { api } from "../../../shared/services/api";
 import { useCollabContext } from "../context/CollabContext";
 
+// V1.10.4-r11.0.5 — Génère les buffer blocks virtuels (bufferBefore + bufferAfter)
+// à partir des bookings + calendrier associé. Buffers purement visuels, non
+// interactifs. Aligne UX avec validation backend r11.0.4 (checkBookingConflict).
+function generateBufferBlocks(bookings, calendars) {
+  const result = [];
+  for (const b of (bookings || [])) {
+    if (!b || b.status === 'cancelled') continue;
+    const cal = (calendars || []).find(c => c.id === b.calendarId);
+    if (!cal) continue;
+    const bb = Number(cal.bufferBefore) || 0;
+    const ba = Number(cal.bufferAfter) || 0;
+    if (bb <= 0 && ba <= 0) continue;
+    const [bH, bM] = String(b.time || '0:0').split(':').map(Number);
+    const bMin = (bH || 0) * 60 + (bM || 0);
+    const dur = Number(b.duration) || 30;
+    if (bb > 0) {
+      const start = Math.max(0, bMin - bb);
+      result.push({ id: 'bufb-' + b.id, date: b.date, startMin: start, durationMin: bMin - start, label: 'Buffer ' + (bMin - start) + ' min' });
+    }
+    if (ba > 0) {
+      result.push({ id: 'bufa-' + b.id, date: b.date, startMin: bMin + dur, durationMin: ba, label: 'Buffer ' + ba + ' min' });
+    }
+  }
+  return result;
+}
+
 const AgendaTab = () => {
   const {
     collab, company, showNotif,
@@ -192,6 +218,19 @@ const AgendaTab = () => {
   const _weekBkF = React.useMemo(() => (
     _agFilter === 'all' ? null : _filteredMyBookings.filter(b => weekDates.includes(b.date))
   ), [_agFilter, _filteredMyBookings, weekDates]);
+  // V1.10.4-r11.0.5 — Buffer blocks visuels (Day + Week)
+  const _dayBufferBlocks = React.useMemo(
+    () => generateBufferBlocks(_dayBkF, calendars),
+    [_dayBkF, calendars]
+  );
+  const _weekBookingsAll = React.useMemo(
+    () => _weekBkF !== null ? _weekBkF : (myBookings || []).filter(b => weekDates.includes(b.date)),
+    [_weekBkF, myBookings, weekDates]
+  );
+  const _weekBufferBlocks = React.useMemo(
+    () => generateBufferBlocks(_weekBookingsAll, calendars),
+    [_weekBookingsAll, calendars]
+  );
 
   return (
 <div style={{ background:'#F8FAFC', borderRadius:14, padding:'18px 20px', minHeight:'100%' }}>
@@ -467,6 +506,23 @@ const AgendaTab = () => {
                     boxSizing:'border-box',
                   }}
                 >
+                  {/* V1.10.4-r11.0.5 — Buffer blocks visuels (sous les RDV, non interactifs) */}
+                  {_dayBufferBlocks
+                    .filter(buf => buf.date === dayDate && buf.startMin >= slotMin && buf.startMin < slotMin + 30)
+                    .map(buf => {
+                      const offsetPx = Math.round((buf.startMin - slotMin) / 30 * slotH);
+                      const blockH = Math.max(12, Math.round(buf.durationMin / 30 * slotH));
+                      return (
+                        <div key={buf.id} draggable={false} style={{
+                          position:'absolute', top: offsetPx, left:2, width:'calc(100% - 8px)',
+                          height: blockH,
+                          background:'#FCD34D', border:'1px dashed #FBBF24', borderRadius:4,
+                          opacity:0.6, zIndex:0, pointerEvents:'none',
+                          fontSize:10, fontWeight:600, color:'#92400E',
+                          padding:'2px 6px', overflow:'hidden', whiteSpace:'nowrap',
+                        }}>{buf.label}</div>
+                      );
+                    })}
                   {hBookings.map(b => {
                     const cal = calendars.find(c => c.id === b.calendarId);
                     const dur = b.duration || 30;
@@ -619,6 +675,23 @@ const AgendaTab = () => {
                     boxSizing:'border-box',
                   }}
                 >
+                  {/* V1.10.4-r11.0.5 — Buffer blocks visuels Week view (sous les RDV, non interactifs) */}
+                  {_weekBufferBlocks
+                    .filter(buf => buf.date === ds && buf.startMin >= slotMin && buf.startMin < slotMin + 30)
+                    .map(buf => {
+                      const offsetPx = Math.round((buf.startMin - slotMin) / 30 * slotH);
+                      const blockH = Math.max(10, Math.round(buf.durationMin / 30 * slotH));
+                      return (
+                        <div key={buf.id} draggable={false} title={buf.label} style={{
+                          position:'absolute', top: offsetPx, left:2, width:'calc(100% - 4px)',
+                          height: blockH,
+                          background:'#FCD34D', border:'1px dashed #FBBF24', borderRadius:4,
+                          opacity:0.6, zIndex:0, pointerEvents:'none',
+                          fontSize:9, fontWeight:600, color:'#92400E',
+                          padding:'1px 4px', overflow:'hidden', whiteSpace:'nowrap',
+                        }}>{buf.label}</div>
+                      );
+                    })}
                   {cellBookings.filter(b => isStartSlot(b)).map(b => {
                     const dur = b.duration||30;
                     const [bH,bM] = (b.time||'0:0').split(':').map(Number);
