@@ -953,6 +953,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   // server-side avant de faire le <Dial>. Le browser n'a JAMAIS le numéro réel.
   const startVoipCall = async (phoneNumber, contact = null) => {
     const _maskedContact = !!(contact && contact._phoneMasked);
+    // V1.10.4-r11.0.2 — Auto-déplier le panneau droit dès qu'un appel sortant démarre
+    // (couvre les 12 sites qui bypassent startPhoneCall : pastilles, IA, kanban, fiche, etc.)
+    if (phoneRightCollapsed) { setPhoneRightCollapsed(false); try { localStorage.setItem("c360-phone-right-collapsed-"+collab.id,"0"); } catch {} }
     if (!voipDeviceRef.current) {
       showNotif('VoIP non initialisé, appel via téléphone','warning');
       // Fallback tel: link uniquement si contact non masqué (sinon on n'a pas le phone côté browser)
