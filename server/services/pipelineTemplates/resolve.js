@@ -80,6 +80,15 @@ export function resolvePipelineStages(db, { companyId, collaboratorId }) {
     };
   }
 
+  // Injection runtime de client_valide si manquant (snapshots publiés avant r11.0).
+  // Lecture seule : le snapshot stocké en DB n'est pas modifié.
+  if (!stages.some(s => s && s.id === 'client_valide')) {
+    const perduIdx = stages.findIndex(s => s && s.id === 'perdu');
+    const cv = { id: 'client_valide', label: 'Validé', color: '#22C55E', icon: 'check-circle', position: 0, isDefault: 1 };
+    if (perduIdx >= 0) stages.splice(perduIdx, 0, cv); else stages.push(cv);
+    stages = stages.map((s, i) => ({ ...s, position: (i + 1) * 10 }));
+  }
+
   const template = db
     .prepare('SELECT id, name, icon, color FROM pipeline_templates WHERE id = ?')
     .get(snapshot.templateId);

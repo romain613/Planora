@@ -2941,7 +2941,15 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const _pipelineReadOnly = !!_pipeResolved?.resolved?.readOnly;
   const _pipelineTemplateMeta = _pipeResolved?.resolved?.templateMeta || null;
   const PIPELINE_STAGES = (_pipelineMode === 'template' && Array.isArray(_pipeResolved?.resolved?.stages))
-    ? _pipeResolved.resolved.stages.map(s => ({ ...s, isDefault: s.isDefault || 0 }))
+    ? (() => {
+        const resolved = _pipeResolved.resolved.stages.map(s => ({ ...s, isDefault: s.isDefault || 0 }));
+        if (!resolved.some(s => s && s.id === 'client_valide')) {
+          const perduIdx = resolved.findIndex(s => s && s.id === 'perdu');
+          const cv = { id: 'client_valide', label: 'Validé', color: '#22C55E', icon: 'check-circle', isDefault: 1, isCore: true };
+          if (perduIdx >= 0) resolved.splice(perduIdx, 0, cv); else resolved.push(cv);
+        }
+        return resolved;
+      })()
     : [...DEFAULT_STAGES, ...((typeof pipelineStages!=='undefined'?pipelineStages:null)||[]).map(s => ({...s, isDefault:0}))];
 
   // ── Column order: drag & drop reordering with localStorage persistence ──
