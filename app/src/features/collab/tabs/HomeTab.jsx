@@ -32,6 +32,7 @@ const HomeTab = () => {
     calendars,
     company,
     getLeadTemperature,
+    setSelectedBooking, // V1.10.4-r11.0.7 Phase 1 UX — clic RDV du jour ouvre BookingDetailModal
   } = useCollabContext();
 
 const todayISO = new Date().toISOString().split('T')[0];
@@ -739,7 +740,10 @@ return <div style={{padding:'0 4px'}}>
           const isPast=diff<0;
           const isNow=diff>=0&&diff<=30;
           const tColor=isPast?'#EF4444':isNow?'#F59E0B':'#0EA5E9';
-          return <div key={b.id} style={{padding:'12px 16px',borderRadius:14,border:'1px solid '+tColor+'18',background:`linear-gradient(135deg,${tColor}06,transparent)`,display:'flex',alignItems:'center',gap:12,boxShadow:'0 2px 8px '+tColor+'08',transition:'all .2s'}} onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px '+tColor+'15'} onMouseLeave={e=>e.currentTarget.style.boxShadow='0 2px 8px '+tColor+'08'}>
+          return <div key={b.id}
+            onClick={()=>{ if(typeof setSelectedBooking==='function') setSelectedBooking(b); }}
+            title="Ouvrir le RDV"
+            style={{padding:'12px 16px',borderRadius:14,border:'1px solid '+tColor+'18',background:`linear-gradient(135deg,${tColor}06,transparent)`,display:'flex',alignItems:'center',gap:12,boxShadow:'0 2px 8px '+tColor+'08',transition:'all .2s',cursor:'pointer'}} onMouseEnter={e=>e.currentTarget.style.boxShadow='0 4px 16px '+tColor+'15'} onMouseLeave={e=>e.currentTarget.style.boxShadow='0 2px 8px '+tColor+'08'}>
             <div style={{padding:'5px 10px',borderRadius:10,background:tColor+'12',color:tColor,fontSize:14,fontWeight:800,fontFamily:'monospace',minWidth:54,textAlign:'center',border:'1px solid '+tColor+'15'}}>{b.time||'—'}</div>
             <div style={{flex:1}}>
               <div style={{fontSize:13,fontWeight:700,color:T.text}}>{b.visitorName||'RDV'}</div>

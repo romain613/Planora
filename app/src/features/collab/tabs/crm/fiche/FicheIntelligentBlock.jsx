@@ -15,6 +15,7 @@ const FicheIntelligentBlock = ({ ct }) => {
     setPhoneScheduleForm, setPhoneShowScheduleModal,
     handleCollabUpdateContact,
     showNotif,
+    setSelectedBooking, // V1.10.4-r11.0.7 Phase 1 UX — clic prochain RDV ouvre BookingDetailModal
   } = useCollabContext();
 
   if (!ct._linked) return null;
@@ -40,9 +41,15 @@ const FicheIntelligentBlock = ({ ct }) => {
                 {ct.createdAt&&<span style={{padding:'2px 8px',borderRadius:12,fontSize:10,fontWeight:600,background:T.bg,color:T.text3,border:`1px solid ${T.border}`}}>Créé le {new Date(ct.createdAt).toLocaleDateString('fr-FR',{day:'numeric',month:'short',year:'numeric'})}</span>}
                 {daysSinceContact!=null&&<span style={{padding:'2px 8px',borderRadius:12,fontSize:10,fontWeight:600,background:daysSinceContact>=30?'#EF444418':daysSinceContact>=14?'#F59E0B18':'#22C55E18',color:daysSinceContact>=30?'#EF4444':daysSinceContact>=14?'#F59E0B':'#22C55E'}}>{daysSinceContact===0?'Contacté aujourd\'hui':'Dernier contact il y a '+daysSinceContact+'j'}</span>}
               </div>
-              {/* Prochain RDV */}
+              {/* Prochain RDV — V1.10.4-r11.0.7 Phase 1 UX : cliquable → ouvre BookingDetailModal */}
               {nextRdv?(
-                <div style={{padding:'8px 12px',borderRadius:10,background:'linear-gradient(135deg,#0EA5E908,#0EA5E904)',border:'1px solid #0EA5E925',display:'flex',alignItems:'center',gap:8}}>
+                <div
+                  onClick={()=>{ if(typeof setSelectedBooking==='function') setSelectedBooking(nextRdv); }}
+                  title="Ouvrir le RDV"
+                  style={{padding:'8px 12px',borderRadius:10,background:'linear-gradient(135deg,#0EA5E908,#0EA5E904)',border:'1px solid #0EA5E925',display:'flex',alignItems:'center',gap:8,cursor:'pointer',transition:'all .15s'}}
+                  onMouseEnter={e=>{e.currentTarget.style.borderColor='#0EA5E9'; e.currentTarget.style.boxShadow='0 2px 8px #0EA5E930';}}
+                  onMouseLeave={e=>{e.currentTarget.style.borderColor='#0EA5E925'; e.currentTarget.style.boxShadow='none';}}
+                >
                   <I n="calendar" s={14} style={{color:'#0EA5E9',flexShrink:0}}/>
                   <div style={{flex:1}}>
                     <div style={{fontSize:12,fontWeight:700,color:'#0EA5E9'}}>Prochain RDV</div>

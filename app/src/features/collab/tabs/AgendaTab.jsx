@@ -572,6 +572,14 @@ const AgendaTab = () => {
                       }}>
                         <div style={{ fontWeight:600, textDecoration:b.status==="cancelled"?"line-through":"none", overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{(()=>{const _ct=b.contactId?(contacts||[]).find(_c=>_c.id===b.contactId):null; const _xc=_ct?.assignedTo&&Array.isArray(_ct.shared_with)&&_ct.shared_with.length>0; return _xc?<span title="RDV cross-collaborateur">🤝 </span>:null;})()}{b.title || b.visitorName}</div>
                         <div style={{ fontSize:11, opacity:0.9 }}>{b.time} → {endTime} · {dur}min</div>
+                        {/* V1.10.4-r11.0.7 Phase 1 UX — coordonnées + Meet visibles sur RDV card (height >= 56) */}
+                        {blockHeight >= 56 && (b.visitorPhone || b.visitorEmail || b.meetLink) && (
+                          <div style={{ fontSize:10, opacity:0.85, marginTop:2, display:'flex', gap:6, flexWrap:'wrap' }}>
+                            {b.visitorPhone && <span title={b.visitorPhone}><I n="phone" s={9}/> {b.visitorPhone}</span>}
+                            {b.visitorEmail && !b.meetLink && <span title={b.visitorEmail}><I n="mail" s={9}/></span>}
+                            {b.meetLink && <span onClick={e=>{e.stopPropagation(); try{navigator.clipboard.writeText(b.meetLink); showNotif('Lien Meet copié','success');}catch{} }} title="Copier lien Meet" style={{cursor:'pointer'}}><I n="video" s={9}/> Meet</span>}
+                          </div>
+                        )}
                       </div>
                     );
                   })}

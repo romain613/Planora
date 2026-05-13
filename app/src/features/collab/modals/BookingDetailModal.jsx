@@ -149,6 +149,10 @@ const BookingDetailModal = () => {
                   {!rescheduleData && b.status!=="cancelled" && (<Btn onClick={() => setRescheduleData({ date:b.date, time:b.time })}><I n="edit" s={14}/> Replanifier</Btn>)}
                   <Btn disabled={!!actionLoading} onClick={() => { setActionLoading("notify"); showNotif("Rappel envoyé par email + SMS","warning"); sendNotification('reminder', buildNotifyPayload(b, calendars, [collab], company)); setTimeout(()=>setActionLoading(null),600); }}>{actionLoading==="notify" ? <Spinner size={14}/> : <I n="bell" s={14}/>} Notifier</Btn>
                   <Btn onClick={() => { showNotif("Email de rappel envoyé","warning"); sendNotification('reminder', buildNotifyPayload(b, calendars, [collab], company)); }}><I n="mail" s={14}/> Rappel email</Btn>
+                  {/* V1.10.4-r11.0.7 Phase 1 UX — Renvoyer lien RDV (confirmation complète avec Meet/gcal) */}
+                  <Btn onClick={() => { showNotif("Lien RDV renvoyé (email + SMS)","success"); sendNotification('booking-confirmed', buildNotifyPayload(b, calendars, [collab], company)); }}><I n="send" s={14}/> Renvoyer lien RDV</Btn>
+                  {/* V1.10.4-r11.0.7 Phase 1 UX — Copier lien Meet (si présent) */}
+                  {b.meetLink && (<Btn onClick={() => { try { navigator.clipboard.writeText(b.meetLink); showNotif("Lien Meet copié","success"); } catch { showNotif("Erreur copie","danger"); } }}><I n="copy" s={14}/> Copier lien Meet</Btn>)}
                   <Btn onClick={() => window.open(toGoogleCalUrl(b),"_blank")}><I n="calendar" s={14}/> Google Agenda</Btn>
                   <Btn ghost danger onClick={() => { deleteBooking(b.id); setSelectedBooking(null); }}><I n="trash" s={14}/> Supprimer</Btn>
                 </div>
