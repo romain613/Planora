@@ -98,6 +98,7 @@ function processReminders() {
             customReminderSms: booking.customReminderSms || null,
             customReminderWhatsapp: booking.customReminderWhatsapp || null,
             manageToken: booking.manageToken || null,
+            meetLink: booking.meetLink || null,
           };
 
           // Channel flags from the calendar (split: reminder)

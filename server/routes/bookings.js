@@ -511,6 +511,7 @@ router.put('/:id', requireAuth, requirePermission('bookings.edit'), (req, res) =
         collaboratorName: collab?.name || '', companyName: company?.name || 'Calendar360',
         location: cal?.location || '', collaboratorTimezone,
         visitorTimezone: oldBooking.visitorTimezone || collaboratorTimezone,
+        meetLink: oldBooking.meetLink || null,
       };
 
       if (req.body.status === 'confirmed' && oldBooking.status === 'pending') {
