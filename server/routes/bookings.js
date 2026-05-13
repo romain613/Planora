@@ -700,6 +700,11 @@ router.get('/reporting', requireAuth, enforceCompany, (req, res) => {
     // "Contact supprimé" et fallback sur visitorName/Email/Phone (preservés dans bookings).
     // V1.10.4.I — Champs receiverPipelineStage + next_action_label/date + lastActivityAt
     // pour afficher "Statut actuel" et "Prochaine action" sur chaque card reporting.
+    // V1.10.4-r10.0.d — LEFT JOIN pipeline_stages pour exposer le label + color du
+    // stage custom du RECEVEUR. Permet de résoudre "R2" / "FIN car pas qualifié" /
+    // etc. côté frontend même si le viewer (ex: Ilane en pipelineMode=template) n'a
+    // pas ces stages custom dans son PIPELINE_STAGES context. Standards (perdu/nrp/
+    // contacte/etc.) restent NULL dans ps.label → fallback DEFAULT_STAGE_LABELS côté frontend.
     const rows = db.prepare(
       `SELECT b.*,
               ct.id AS _contactExistsId,
@@ -712,10 +717,13 @@ router.get('/reporting', requireAuth, enforceCompany, (req, res) => {
               ct.lastActivityAt AS contactLastActivityAt,
               ct.name AS contactName,
               ct.email AS contactEmail,
-              ct.phone AS contactPhone
+              ct.phone AS contactPhone,
+              ps.label AS receiverPipelineStageLabel,
+              ps.color AS receiverPipelineStageColor
        FROM bookings b
        JOIN calendars c ON b.calendarId = c.id
        LEFT JOIN contacts ct ON b.contactId = ct.id
+       LEFT JOIN pipeline_stages ps ON ps.id = ct.pipeline_stage
        WHERE c.companyId = ?
          AND b.bookingType = 'share_transfer'
          AND b.${targetCol} = ?
@@ -838,6 +846,11 @@ router.get('/transmitted', requireAuth, enforceCompany, (req, res) => {
       params.push(...pipelineStages);
     }
 
+    // V1.10.4-r10.0.d — Ajouts :
+    //   - LEFT JOIN pipeline_stages → expose label + color du stage custom receveur
+    //     pour résolution cross-template (Kanban miroir réel du pipeline du receveur).
+    //   - _contactGhost flag : permet au frontend d'exclure les ghosts du Kanban
+    //     opérationnel tout en gardant la traçabilité en vue Liste/Grille.
     const sql = `
       SELECT b.id, b.calendarId, b.collaboratorId, b.date, b.time, b.duration,
              b.visitorName, b.visitorEmail, b.visitorPhone, b.status, b.title,
@@ -845,21 +858,30 @@ router.get('/transmitted', requireAuth, enforceCompany, (req, res) => {
              b.bookingReportingStatus, b.bookingReportingNote,
              b.bookingReportedBy, b.bookingReportedAt,
              b.googleEventId, b.outlookEventId, b.contactId, b.createdAt,
+             ct.id              AS _contactExistsId,
              ct.pipeline_stage  AS receiverPipelineStage,
              ct.name            AS contactName,
              ct.email           AS contactEmail,
              ct.phone           AS contactPhone,
-             ct.archivedAt      AS contactArchivedAt
+             ct.archivedAt      AS contactArchivedAt,
+             ps.label           AS receiverPipelineStageLabel,
+             ps.color           AS receiverPipelineStageColor
       FROM bookings b
       JOIN calendars c ON b.calendarId = c.id
       LEFT JOIN contacts ct ON b.contactId = ct.id
+      LEFT JOIN pipeline_stages ps ON ps.id = ct.pipeline_stage
       WHERE ${where.join(' AND ')}
       ORDER BY b.date ASC, b.time ASC
       LIMIT ?
     `;
     params.push(limit);
 
-    const rows = db.prepare(sql).all(...params);
+    const rows = db.prepare(sql).all(...params).map(b => {
+      const r = { ...b };
+      r._contactGhost = !r._contactExistsId;
+      delete r._contactExistsId;
+      return r;
+    });
     res.json({ count: rows.length, mode, status, from, to, bookings: rows });
   } catch (err) {
     console.error('[TRANSMITTED ERR]', err.message);

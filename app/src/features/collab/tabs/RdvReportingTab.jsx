@@ -190,8 +190,21 @@ const RdvReportingTab = () => {
   const [submitting, setSubmitting] = useState(false);
 
   // V1.10.4.I — Resolve pipeline stage meta (label, color, emoji) avec fallback default.
-  const resolveStageMeta = useCallback((stageId) => {
+  // V1.10.4-r10.0.d — accepte booking optionnel pour récupérer le label custom résolu
+  // côté backend (receiverPipelineStageLabel). Priorité :
+  //   1. Backend-resolved (cross-template safe — pipelineMode='template' inclus).
+  //   2. DEFAULT_STAGE_LABELS (standards : nouveau / contacte / qualifie / …).
+  //   3. PIPELINE_STAGES context (custom stages connus côté viewer).
+  //   4. Fallback raw ID.
+  const resolveStageMeta = useCallback((stageId, booking) => {
     if (!stageId) return null;
+    if (booking?.receiverPipelineStageLabel) {
+      return {
+        label: booking.receiverPipelineStageLabel,
+        color: booking.receiverPipelineStageColor || '#64748B',
+        emoji: '🏷️',
+      };
+    }
     if (DEFAULT_STAGE_LABELS[stageId]) return DEFAULT_STAGE_LABELS[stageId];
     if (Array.isArray(PIPELINE_STAGES)) {
       const s = PIPELINE_STAGES.find(x => x?.id === stageId);
@@ -375,24 +388,28 @@ const RdvReportingTab = () => {
   const loading = subTab === 'received' ? loadingReceived : loadingSent;
   const onRefresh = subTab === 'received' ? fetchReceived : fetchSent;
 
-  // V1.10.4-r9.4 — Filtre métier : Tous / Confirmés / Perdus (pas "Annulés").
-  // Le booking.status='cancelled' n'est PAS un statut métier : un RDV agenda annulé
-  // peut représenter un lead encore actif (R2, contacté, en réflexion, etc.).
-  // Les vrais "Perdus" sont définis par le pipeline_stage receveur OU par un
-  // bookingReportingStatus signalant une perte (no_show, cancelled au sens reporting).
+  // V1.10.4-r9.4 + r10.0.b/d — Filtre métier 4 pills : Actifs (default) / Tous / Confirmés / Perdus.
+  // Booking.status='cancelled' n'est PAS un statut métier : un RDV agenda annulé peut
+  // représenter un lead encore actif (R2, contacté, en réflexion, etc.).
+  // isPerdu inclut désormais 'lost' (r10.0.b nouveau statut).
+  // isActif (r10.0.d) = NOT ghost AND NOT perdu = vue opérationnelle par défaut.
   const isPerdu = (b) => (
     b.receiverPipelineStage === 'perdu'
+    || b.bookingReportingStatus === 'lost'
     || b.bookingReportingStatus === 'no_show'
     || b.bookingReportingStatus === 'cancelled'
   );
-  const [statusFilter, setStatusFilter] = useState('all');
+  const isActif = (b) => !b._contactGhost && !isPerdu(b);
+  const [statusFilter, setStatusFilter] = useState('actifs');
   const list = rawList.filter(b => {
+    if (statusFilter === 'actifs') return isActif(b);
     if (statusFilter === 'all') return true;
     if (statusFilter === 'confirmed') return b.status === 'confirmed';
     if (statusFilter === 'perdu') return isPerdu(b);
     return true;
   });
   const countByStatus = {
+    actifs: rawList.filter(isActif).length,
     all: rawList.length,
     confirmed: rawList.filter(b => b.status === 'confirmed').length,
     perdu: rawList.filter(isPerdu).length,
@@ -468,17 +485,19 @@ const RdvReportingTab = () => {
         ))}
       </div>
 
-      {/* V1.10.4-r9.4 — Filtre métier client-side : Tous / Confirmés / Perdus.
-          "Annulés" (booking.status='cancelled') retiré comme catégorie principale —
-          il s'agit d'une donnée technique secondaire affichée discrètement sur la
-          ligne via le badge "📅 RDV initial annulé". Le vrai indicateur métier
-          d'un lead perdu = pipeline_stage='perdu' OU reporting no_show/cancelled. */}
+      {/* V1.10.4-r10.0.d — Filtre métier 4 pills : Actifs (default) / Tous / Confirmés / Perdus.
+          Actifs = NOT ghost AND NOT perdu = vue opérationnelle par défaut.
+          Tous = traçabilité complète (préserve r9.2).
+          Perdus = ne polluent plus la vue active mais restent accessibles.
+          "Annulés" (booking.status='cancelled') retiré comme catégorie — donnée
+          technique secondaire affichée discrètement via le badge "📅 RDV initial annulé". */}
       <div style={{ display:'flex', gap:5, marginBottom:16, flexWrap:'wrap', alignItems:'center' }}>
         <span style={{ fontSize:10, fontWeight:700, color:T.text3, textTransform:'uppercase', letterSpacing:0.5, marginRight:4 }}>Filtre :</span>
         {[
-          { id:'all',       label:'Tous',      color:T.text2,  count: countByStatus.all },
+          { id:'actifs',    label:'Actifs',    color:'#2563EB', count: countByStatus.actifs,    hint:'Leads en cours (hors perdus + hors fiches supprimées)' },
+          { id:'all',       label:'Tous',      color:T.text2,   count: countByStatus.all,       hint:'Traçabilité complète (inclut perdus + ghosts)' },
           { id:'confirmed', label:'Confirmés', color:'#22C55E', count: countByStatus.confirmed, hint:'RDV encore programmés (booking.status=confirmed)' },
-          { id:'perdu',     label:'Perdus',    color:'#EF4444', count: countByStatus.perdu,     hint:'Leads marqués perdu (pipeline ou reporting)' },
+          { id:'perdu',     label:'Perdus',    color:'#EF4444', count: countByStatus.perdu,     hint:'Leads marqués perdu (pipeline ou reporting lost/no_show/cancelled)' },
         ].map(f => {
           const isActive = statusFilter === f.id;
           return (
@@ -547,7 +566,7 @@ const RdvReportingTab = () => {
             const reportedAt = b.bookingReportedAt || '';
             // V1.10.4.I — Pipeline stage meta + accordion state
             const isExpanded = expandedId === b.id;
-            const stageMeta = resolveStageMeta(b.receiverPipelineStage);
+            const stageMeta = resolveStageMeta(b.receiverPipelineStage, b);
             const tlEvents = (b.contactId && timelineByContact[b.contactId]) || [];
             const tlLoading = b.contactId && timelineLoading[b.contactId];
             return (

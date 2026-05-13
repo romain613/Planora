@@ -234,7 +234,7 @@ const groupByHourSlot = (bookings, dateIso) => {
 // ── SlotCard : carte compacte d'un RDV dans la grille ────────────────────────
 const SlotCard = ({ b, onClick, resolveStageMeta, collabName, collabColor, compact = false }) => {
   const isCancelled = b.status === 'cancelled';
-  const stageMeta = resolveStageMeta(b.receiverPipelineStage);
+  const stageMeta = resolveStageMeta(b.receiverPipelineStage, b);
   const reportingMeta = REPORTING_STATUS_META[b.bookingReportingStatus || 'pending'] || REPORTING_STATUS_META.pending;
   const receiverColor = collabColor(b.agendaOwnerId);
   const senderColor = collabColor(b.bookedByCollaboratorId);
@@ -461,7 +461,7 @@ const MonthGrid = ({ bookings, refDateIso, onClickBooking, onOverflowClick, onFo
               <div style={{ display:'flex', flexDirection:'column', gap:1 }}>
                 {visible.map(b => {
                   const isCancelled = b.status === 'cancelled';
-                  const stageMeta = resolveStageMeta(b.receiverPipelineStage);
+                  const stageMeta = resolveStageMeta(b.receiverPipelineStage, b);
                   const receiverColor = collabColor(b.agendaOwnerId);
                   const ctName = b.contactName || b.visitorName || '—';
                   const title = `${b.time || ''} — ${ctName}\n${collabName(b.bookedByCollaboratorId)} → ${collabName(b.agendaOwnerId)}${stageMeta ? '\n' + stageMeta.label : ''}${isCancelled ? '\n⚠ ANNULÉ' : ''}`;
@@ -520,10 +520,18 @@ const KANBAN_AXIS_META = {
 };
 
 // Groupe les bookings selon l'axe choisi. Retourne Array<{key, label, color, items}> trié par taille DESC.
+// V1.10.4-r10.0.d — Kanban = vue miroir opérationnelle du pipeline du receveur.
+//   - Ghosts (contacts hard-deleted) FORCÉS exclus : aucune intention opérationnelle.
+//     Traçabilité historique reste accessible en vue Liste/Grille via filtre 'Tous'.
+//   - Sur axis='stage', le label vient en priorité du backend (receiverPipelineStageLabel
+//     via LEFT JOIN pipeline_stages) → résolution cross-template correcte (R2 / FIN /
+//     Candidat en réflexion / "À relancer" custom etc. apparaissent peu importe le
+//     pipelineMode du viewer).
 const groupBookingsByAxis = (bookings, axis, resolvers) => {
   const { collabName, collabColor, resolveStageMeta } = resolvers;
   const groups = new Map();
   for (const b of (bookings || [])) {
+    if (b._contactGhost) continue; // Ghost = jamais dans le Kanban (Q3 arbitrage MH)
     let key, label, color;
     if (axis === 'receiver') {
       key = b.agendaOwnerId || '_unknown';
@@ -536,7 +544,7 @@ const groupBookingsByAxis = (bookings, axis, resolvers) => {
       color = meta.color;
     } else if (axis === 'stage') {
       key = b.receiverPipelineStage || '_unknown';
-      const meta = resolveStageMeta(b.receiverPipelineStage);
+      const meta = resolveStageMeta(b.receiverPipelineStage, b);
       label = meta ? meta.label : (b.receiverPipelineStage || '—');
       color = meta ? meta.color : '#64748B';
     } else if (axis === 'sender') {
@@ -557,15 +565,17 @@ const groupBookingsByAxis = (bookings, axis, resolvers) => {
 
 const KanbanCard = ({ b, onClick, resolveStageMeta, collabName, collabColor }) => {
   const isCancelled = b.status === 'cancelled';
-  const stageMeta = resolveStageMeta(b.receiverPipelineStage);
+  const stageMeta = resolveStageMeta(b.receiverPipelineStage, b);
   const reportingMeta = REPORTING_STATUS_META[b.bookingReportingStatus || 'pending'] || REPORTING_STATUS_META.pending;
   const receiverColor = collabColor(b.agendaOwnerId);
   const senderColor = collabColor(b.bookedByCollaboratorId);
   const ctName = b.contactName || b.visitorName || 'Sans nom';
+  // V1.10.4-r10.0.d — Suppression line-through + opacity sur cancelled : un RDV
+  // agenda annulé n'implique pas une carte illisible (badge discret suffit).
   return (
     <div
       onClick={() => onClick && onClick(b)}
-      title={`${ctName}\n${fmtDateTime(b.date, b.time)}\n${collabName(b.bookedByCollaboratorId)} → ${collabName(b.agendaOwnerId)}${stageMeta ? '\n' + stageMeta.label : ''}${isCancelled ? '\n⚠ ANNULÉ' : ''}`}
+      title={`${ctName}\n${fmtDateTime(b.date, b.time)}\n${collabName(b.bookedByCollaboratorId)} → ${collabName(b.agendaOwnerId)}${stageMeta ? '\n' + stageMeta.label : ''}${isCancelled ? '\n📅 RDV initial annulé' : ''}`}
       style={{
         padding: '8px 10px',
         borderRadius: 8,
@@ -573,14 +583,13 @@ const KanbanCard = ({ b, onClick, resolveStageMeta, collabName, collabColor }) =
         borderLeft: `4px solid ${receiverColor}`,
         border: '1px solid '+T.border,
         cursor: 'pointer',
-        opacity: isCancelled ? 0.6 : 1,
         transition: 'all .15s cubic-bezier(0.4,0,0.2,1)',
         boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
       }}
       onMouseEnter={e => { e.currentTarget.style.boxShadow = '0 2px 6px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
       onMouseLeave={e => { e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.04)'; e.currentTarget.style.transform = 'translateY(0)'; }}
     >
-      <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 4, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', textDecoration: isCancelled ? 'line-through' : 'none' }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.text, marginBottom: 4, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>
         {ctName}
       </div>
       <div style={{ fontSize: 10, color: T.text2, marginBottom: 5, display:'flex', alignItems:'center', gap:4 }}>
@@ -605,8 +614,12 @@ const KanbanCard = ({ b, onClick, resolveStageMeta, collabName, collabColor }) =
         <span style={{ fontSize:9, fontWeight:700, padding:'2px 6px', borderRadius:5, background:reportingMeta.color+'15', border:'1px solid '+reportingMeta.color+'30', color:reportingMeta.color, display:'inline-flex', alignItems:'center', gap:3 }}>
           <span style={{ fontSize:9, lineHeight:1 }}>{reportingMeta.icon}</span> {reportingMeta.short}
         </span>
+        {/* V1.10.4-r10.0.d — RDV initial annulé : badge gris discret (Q4 arbitrage MH).
+            Plus de rouge agressif, plus de line-through/opacity. */}
         {isCancelled && (
-          <span style={{ fontSize:9, fontWeight:800, padding:'2px 6px', borderRadius:5, background:'#EF444415', color:'#EF4444', border:'1px solid #EF444430' }}>🚫 ANNULÉ</span>
+          <span title="Le RDV agenda initial a été annulé. Le lead reste suivi selon son pipeline actuel." style={{ fontSize:9, fontWeight:600, padding:'2px 6px', borderRadius:5, background:T.bg, border:`1px solid ${T.border}`, color:T.text3 }}>
+            📅 RDV initial annulé
+          </span>
         )}
       </div>
     </div>
@@ -753,13 +766,14 @@ const SharedAgendaTab = () => {
   const [receiverIds, setReceiverIds] = useState([]);
   const [reportingStatusFilter, setReportingStatusFilter] = useState([]);
   const [pipelineStageFilter, setPipelineStageFilter] = useState([]);
-  // V1.10.4-r9.6 — Filtre statut métier remplace la case "Inclure annulés" :
-  //   'all'       → toutes les transmissions (défaut — Agenda partagé = traçabilité)
+  // V1.10.4-r10.0.d — Filtre métier élargi à 4 valeurs avec défaut 'actifs' :
+  //   'actifs'    → leads en cours (NOT ghost AND NOT perdu) — vue opérationnelle DÉFAUT
+  //   'all'       → toutes les transmissions (traçabilité r9.6 préservée)
   //   'confirmed' → uniquement booking.status='confirmed'
-  //   'perdu'     → uniquement leads marqués perdu (pipeline OU reporting lost)
-  // Le filtrage 'confirmed' va via backend (status=confirmed). 'all' et 'perdu' vont
-  // via status=all puis filtrage client-side sur isPerdu().
-  const [statusFilter, setStatusFilter] = useState('all');
+  //   'perdu'     → uniquement leads marqués perdu (pipeline OU reporting lost/no_show/cancelled)
+  // Backend reçoit status=confirmed uniquement quand 'confirmed' choisi ; sinon status=all.
+  // Filtrage 'actifs' / 'perdu' = client-side sur rawBookings via isActif / isPerdu.
+  const [statusFilter, setStatusFilter] = useState('actifs');
 
   // Plage date par défaut : J-30 → J+90
   const todayIso = toIso(new Date());
@@ -777,26 +791,36 @@ const SharedAgendaTab = () => {
   const [loading, setLoading] = useState(false);
   const [errMsg, setErrMsg] = useState('');
 
-  // Helper isPerdu (cohérent avec RdvReportingTab r9.4)
+  // Helper isPerdu (cohérent avec RdvReportingTab r9.4 + r10.0.b 'lost').
+  // V1.10.4-r10.0.d — inclut désormais 'lost' (nouveau statut r10.0.b).
   const isPerdu = useCallback((b) => (
     b.receiverPipelineStage === 'perdu'
+    || b.bookingReportingStatus === 'lost'
     || b.bookingReportingStatus === 'no_show'
     || b.bookingReportingStatus === 'cancelled'
   ), []);
 
-  // Liste affichée — filtrage client-side sur 'perdu' uniquement (les autres
-  // filtres sont déjà appliqués côté backend ou via les autres MultiSelect).
+  // V1.10.4-r10.0.d — Helper isActif : NOT ghost AND NOT perdu.
+  // Ghost = traçabilité historique uniquement (jamais opérationnel).
+  // Perdu = sortie définitive du pipeline actif.
+  const isActif = useCallback((b) => (
+    !b._contactGhost && !isPerdu(b)
+  ), [isPerdu]);
+
+  // Liste affichée — filtrage client-side selon statusFilter.
   const bookings = useMemo(() => {
+    if (statusFilter === 'actifs') return rawBookings.filter(isActif);
     if (statusFilter === 'perdu') return rawBookings.filter(isPerdu);
-    return rawBookings;
-  }, [rawBookings, statusFilter, isPerdu]);
+    return rawBookings; // 'all' ou 'confirmed' (backend gère 'confirmed')
+  }, [rawBookings, statusFilter, isActif, isPerdu]);
 
   // Counts par catégorie pour les badges du segmented filter.
   const filterCounts = useMemo(() => ({
+    actifs: rawBookings.filter(isActif).length,
     all: rawBookings.length,
     confirmed: rawBookings.filter(b => b.status === 'confirmed').length,
     perdu: rawBookings.filter(isPerdu).length,
-  }), [rawBookings, isPerdu]);
+  }), [rawBookings, isActif, isPerdu]);
 
   // ── Accordion + timeline state ────────────────────────────────────────────
   const [expandedId, setExpandedId] = useState(null);
@@ -888,8 +912,22 @@ const SharedAgendaTab = () => {
   }, []);
 
   // ── Resolvers ─────────────────────────────────────────────────────────────
-  const resolveStageMeta = useCallback((stageId) => {
+  // V1.10.4-r10.0.d — resolveStageMeta accepte un booking optionnel pour récupérer
+  // le label custom résolu côté backend (receiverPipelineStageLabel). Priorité :
+  //   1. Backend-resolved (cross-template safe — fonctionne même si viewer Ilane
+  //      est en pipelineMode='template' sans les custom stages CapFinances en context).
+  //   2. DEFAULT_STAGE_LABELS (stages standards : nouveau / contacte / qualifie / …).
+  //   3. PIPELINE_STAGES context (custom stages connus côté viewer).
+  //   4. Fallback raw ID (devrait être rarissime après backend resolution).
+  const resolveStageMeta = useCallback((stageId, booking) => {
     if (!stageId) return null;
+    if (booking?.receiverPipelineStageLabel) {
+      return {
+        label: booking.receiverPipelineStageLabel,
+        color: booking.receiverPipelineStageColor || '#64748B',
+        emoji: '🏷️',
+      };
+    }
     if (DEFAULT_STAGE_LABELS[stageId]) return DEFAULT_STAGE_LABELS[stageId];
     if (Array.isArray(PIPELINE_STAGES)) {
       const s = PIPELINE_STAGES.find(x => x?.id === stageId);
@@ -1027,14 +1065,16 @@ const SharedAgendaTab = () => {
             <input type="date" value={dateTo} onChange={e=>setDateTo(e.target.value)} style={{ border:'none', background:'transparent', fontSize:12, fontFamily:'inherit', color:T.text, outline:'none' }}/>
           </div>
 
-          {/* V1.10.4-r9.6 — Filtre métier Tous / Confirmés / Perdus (remplace "Inclure annulés").
-              Default 'all' : Agenda partagé = traçabilité complète des transmissions.
-              Les counts sont calculés sur rawBookings (pré-filtre client-side perdu). */}
+          {/* V1.10.4-r10.0.d — Filtre métier 4 pills : Actifs (default) / Tous / Confirmés / Perdus.
+              Actifs = NOT ghost AND NOT perdu = vue opérationnelle par défaut.
+              Tous = traçabilité complète (préserve la philosophie r9.2).
+              Perdus = ne polluent plus la vue active mais restent accessibles. */}
           <div style={{ display:'inline-flex', gap:4, padding:3, background:T.bg, borderRadius:9, border:'1px solid '+T.border }}>
             {[
-              { id:'all',       label:'Tous',      color:T.text2,  count: filterCounts.all,       hint:'Toutes les transmissions' },
+              { id:'actifs',    label:'Actifs',    color:'#2563EB', count: filterCounts.actifs,    hint:'Leads en cours (hors perdus + hors fiches supprimées)' },
+              { id:'all',       label:'Tous',      color:T.text2,   count: filterCounts.all,       hint:'Traçabilité complète (inclut perdus + ghosts)' },
               { id:'confirmed', label:'Confirmés', color:'#22C55E', count: filterCounts.confirmed, hint:'RDV encore programmés (booking.status=confirmed)' },
-              { id:'perdu',     label:'Perdus',    color:'#EF4444', count: filterCounts.perdu,     hint:'Leads marqués perdu (pipeline ou reporting)' },
+              { id:'perdu',     label:'Perdus',    color:'#EF4444', count: filterCounts.perdu,     hint:'Leads marqués perdu (pipeline ou reporting lost/no_show/cancelled)' },
             ].map(f => {
               const isActive = statusFilter === f.id;
               return (
@@ -1324,7 +1364,7 @@ const SharedAgendaTab = () => {
           {expandedId && (() => {
             const b = bookings.find(x => x.id === expandedId);
             if (!b) return null;
-            const stageMeta = resolveStageMeta(b.receiverPipelineStage);
+            const stageMeta = resolveStageMeta(b.receiverPipelineStage, b);
             const reportingStatus = b.bookingReportingStatus || '';
             const tlEvents = (b.contactId && timelineByContact[b.contactId]) || [];
             const tlLoading = b.contactId && timelineLoading[b.contactId];
@@ -1393,7 +1433,7 @@ const SharedAgendaTab = () => {
                 </div>
                 <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                   {slotOverflowModal.bookings.map(b => {
-                    const stageMeta = resolveStageMeta(b.receiverPipelineStage);
+                    const stageMeta = resolveStageMeta(b.receiverPipelineStage, b);
                     const reportingMeta = REPORTING_STATUS_META[b.bookingReportingStatus || 'pending'] || REPORTING_STATUS_META.pending;
                     const isCancelled = b.status === 'cancelled';
                     return (
@@ -1445,7 +1485,7 @@ const SharedAgendaTab = () => {
           {expandedId && (() => {
             const b = bookings.find(x => x.id === expandedId);
             if (!b) return null;
-            const stageMeta = resolveStageMeta(b.receiverPipelineStage);
+            const stageMeta = resolveStageMeta(b.receiverPipelineStage, b);
             const reportingStatus = b.bookingReportingStatus || '';
             const tlEvents = (b.contactId && timelineByContact[b.contactId]) || [];
             const tlLoading = b.contactId && timelineLoading[b.contactId];
@@ -1505,7 +1545,7 @@ const SharedAgendaTab = () => {
           {bookings.map(b => {
             const isExpanded = expandedId === b.id;
             const isCancelled = b.status === 'cancelled';
-            const stageMeta = resolveStageMeta(b.receiverPipelineStage);
+            const stageMeta = resolveStageMeta(b.receiverPipelineStage, b);
             const reportingStatus = b.bookingReportingStatus || '';
             const senderColor = collabColor(b.bookedByCollaboratorId);
             const receiverColor = collabColor(b.agendaOwnerId);
