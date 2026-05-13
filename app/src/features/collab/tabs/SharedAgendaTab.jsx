@@ -10,14 +10,21 @@ import { api } from "../../../shared/services/api";
 import { useCollabContext } from "../context/CollabContext";
 
 // ── Constantes ──────────────────────────────────────────────────────────────
+// V1.10.4-r10.0.b — élargi à 13 statuts (cohérent avec RdvReportingTab + backend).
 const REPORTING_STATUS_META = {
-  pending:   { short: 'En attente', color: '#F59E0B', icon: '🟡' },
-  validated: { short: 'Validé',     color: '#22C55E', icon: '🟢' },
-  signed:    { short: 'Signé',      color: '#16A34A', icon: '✅' },
-  no_show:   { short: 'No-show',    color: '#EF4444', icon: '🔴' },
-  cancelled: { short: 'Annulé',     color: '#94A3B8', icon: '⚪' },
-  follow_up: { short: 'À suivre',   color: '#0EA5E9', icon: '🔵' },
-  other:     { short: 'Autre',      color: '#64748B', icon: '⚫' },
+  pending:      { short: 'En attente',  color: '#F59E0B', icon: '🟡' },
+  contacted:    { short: 'Contacté',    color: '#2563EB', icon: '📞' },
+  nrp:          { short: 'NRP',         color: '#F97316', icon: '🔕' },
+  interested:   { short: 'Intéressé',   color: '#FB923C', icon: '🔥' },
+  qualified:    { short: 'Qualifié',    color: '#10B981', icon: '⭐' },
+  reprogrammed: { short: 'Reprogrammé', color: '#7C3AED', icon: '🔁' },
+  follow_up:    { short: 'À suivre',    color: '#0EA5E9', icon: '🔵' },
+  validated:    { short: 'Validé',      color: '#22C55E', icon: '🟢' },
+  signed:       { short: 'Signé',       color: '#16A34A', icon: '✅' },
+  no_show:      { short: 'No-show',     color: '#EF4444', icon: '🔴' },
+  lost:         { short: 'Perdu',       color: '#7F1D1D', icon: '⛔' },
+  cancelled:    { short: 'Annulé',      color: '#94A3B8', icon: '⚪' },
+  other:        { short: 'Autre',       color: '#64748B', icon: '⚫' },
 };
 
 const DEFAULT_STAGE_LABELS = {

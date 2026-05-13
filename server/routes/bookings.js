@@ -19,10 +19,35 @@ import { requirePermission } from '../middleware/permissions.js';
 import { createNotification } from './notifications.js';
 
 // ─── V1.10.3 Phase 2 — Reporting Collab RDV ──────────────────────────
-// Enum officiel des statuts (cf. brief MH 2026-04-27)
-const REPORTING_STATUSES = ['pending', 'validated', 'signed', 'no_show', 'cancelled', 'follow_up', 'other'];
-// Statuts qui exigent une note non-vide
-const REPORTING_STATUSES_REQUIRING_NOTE = ['signed', 'cancelled', 'no_show', 'follow_up', 'other'];
+// Enum officiel des statuts (cf. brief MH 2026-04-27).
+// V1.10.4-r10.0.b — élargi avec 6 statuts métier intermédiaires (NRP, Contacté,
+// Intéressé, Reprogrammé, Qualifié, Perdu) pour pilotage fin du suivi commercial.
+// Aucune migration DB (la colonne bookingReportingStatus est TEXT, accepte toute valeur).
+const REPORTING_STATUSES = [
+  'pending',       // En attente (default initial)
+  'contacted',     // Contacté — premier contact établi
+  'nrp',           // NRP — ne répond pas
+  'interested',    // Intéressé — lead chaud
+  'qualified',     // Qualifié — prêt pour étape suivante
+  'reprogrammed',  // Reprogrammé — RDV reporté à autre date
+  'follow_up',     // À suivre — relance prévue
+  'validated',     // RDV validé
+  'signed',        // Signé / closé
+  'no_show',       // No-show — ne s'est pas présenté
+  'lost',          // Perdu — lead définitivement perdu
+  'cancelled',     // Annulé (au sens reporting, pas booking.status)
+  'other',         // Autre — note obligatoire pour préciser
+];
+// Statuts qui exigent une note non-vide (signal métier fort = explication requise).
+const REPORTING_STATUSES_REQUIRING_NOTE = [
+  'signed',
+  'cancelled',
+  'no_show',
+  'follow_up',
+  'other',
+  'lost',          // V1.10.4-r10.0.b — perte requiert raison
+  'reprogrammed',  // V1.10.4-r10.0.b — relance requiert date/contexte
+];
 
 const router = Router();
 

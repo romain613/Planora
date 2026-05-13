@@ -11,18 +11,31 @@ import { api } from "../../../shared/services/api";
 import { useCollabContext } from "../context/CollabContext";
 import SharedAgendaTab from "./SharedAgendaTab"; // V1.10.4.J merge — Agenda partagé en parent-tab
 
-// ── Enum + libellés FR + badges (source : brief MH 2026-04-27) ─────────────
-const REPORTING_STATUSES = ['pending', 'validated', 'signed', 'no_show', 'cancelled', 'follow_up', 'other'];
-const NOTE_REQUIRED_STATUSES = ['signed', 'cancelled', 'no_show', 'follow_up', 'other'];
+// ── Enum + libellés FR + badges ─────────────────────────────────────────────
+// V1.10.4-r10.0.b — élargi à 13 statuts métier (cf. server/routes/bookings.js
+// REPORTING_STATUSES). Ordre de présentation reflète un parcours commercial
+// typique : contact → qualification → résultat → perte/clôture.
+const REPORTING_STATUSES = [
+  'pending', 'contacted', 'nrp', 'interested', 'qualified', 'reprogrammed',
+  'follow_up', 'validated', 'signed', 'no_show', 'lost', 'cancelled', 'other'
+];
+// Statuts nécessitant une note obligatoire (raison/contexte requis).
+const NOTE_REQUIRED_STATUSES = ['signed', 'cancelled', 'no_show', 'follow_up', 'other', 'lost', 'reprogrammed'];
 
 const STATUS_META = {
-  pending:   { label: 'Reporting en attente', short: 'En attente', color: '#F59E0B', icon: '🟡' },
-  validated: { label: 'RDV validé',           short: 'Validé',     color: '#22C55E', icon: '🟢' },
-  signed:    { label: 'Signé',                short: 'Signé',      color: '#16A34A', icon: '✅' },
-  no_show:   { label: 'No-show',              short: 'No-show',    color: '#EF4444', icon: '🔴' },
-  cancelled: { label: 'Annulé',               short: 'Annulé',     color: '#94A3B8', icon: '⚪' },
-  follow_up: { label: 'À suivre',             short: 'À suivre',   color: '#0EA5E9', icon: '🔵' },
-  other:     { label: 'Autre',                short: 'Autre',      color: '#64748B', icon: '⚫' },
+  pending:      { label: 'Reporting en attente', short: 'En attente',  color: '#F59E0B', icon: '🟡' },
+  contacted:    { label: 'Contacté',             short: 'Contacté',    color: '#2563EB', icon: '📞' },
+  nrp:          { label: 'NRP (ne répond pas)',  short: 'NRP',         color: '#F97316', icon: '🔕' },
+  interested:   { label: 'Intéressé',            short: 'Intéressé',   color: '#FB923C', icon: '🔥' },
+  qualified:    { label: 'Qualifié',             short: 'Qualifié',    color: '#10B981', icon: '⭐' },
+  reprogrammed: { label: 'Reprogrammé',          short: 'Reprogrammé', color: '#7C3AED', icon: '🔁' },
+  follow_up:    { label: 'À suivre',             short: 'À suivre',    color: '#0EA5E9', icon: '🔵' },
+  validated:    { label: 'RDV validé',           short: 'Validé',      color: '#22C55E', icon: '🟢' },
+  signed:       { label: 'Signé',                short: 'Signé',       color: '#16A34A', icon: '✅' },
+  no_show:      { label: 'No-show',              short: 'No-show',     color: '#EF4444', icon: '🔴' },
+  lost:         { label: 'Perdu',                short: 'Perdu',       color: '#7F1D1D', icon: '⛔' },
+  cancelled:    { label: 'Annulé',               short: 'Annulé',      color: '#94A3B8', icon: '⚪' },
+  other:        { label: 'Autre',                short: 'Autre',       color: '#64748B', icon: '⚫' },
 };
 
 // V1.10.4.I — Labels pipeline_stage par défaut (fallback si PIPELINE_STAGES context absent).
