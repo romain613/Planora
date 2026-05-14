@@ -31,21 +31,30 @@ export function useCollabActivity() {
 
   return useMemo(() => {
     const today = new Date().toISOString().split("T")[0];
+    const nowMs = Date.now();
+    const oneHourAgo = nowMs - 3600000;
     const mine = (Array.isArray(contacts) ? contacts : []).filter((c) => c && c.assignedTo === collab?.id);
     const myIds = new Set(mine.map((c) => c.id));
 
     // Init 24 bins
     const bins = new Array(24).fill(null).map((_, h) => ({ hour: h, positive: 0, negative: 0, count: 0 }));
 
+    // V1.10.4-r11.0.24.b — track recent count (last 60min) pour delta "+X actions depuis 1h"
+    let recentCount = 0;
+    let lastActivityMs = 0;
+
     const addToBin = (timestamp, weight) => {
       if (!timestamp || typeof timestamp !== "string" || !timestamp.startsWith(today)) return;
       try {
         const d = new Date(timestamp);
+        const ms = d.getTime();
         const h = d.getHours();
         if (h < 0 || h >= 24 || isNaN(h)) return;
         if (weight > 0) bins[h].positive += weight;
         else if (weight < 0) bins[h].negative += Math.abs(weight);
         bins[h].count += 1;
+        if (ms > oneHourAgo) recentCount += 1;
+        if (ms > lastActivityMs) lastActivityMs = ms;
       } catch {}
     };
 
@@ -89,6 +98,9 @@ export function useCollabActivity() {
 
     const currentHour = new Date().getHours();
 
-    return { bins, maxBin: maxAmp, totalCount, currentHour };
+    // V1.10.4-r11.0.24.b — minutes depuis derniere activite (pour "Aucune activite recente")
+    const minutesSinceLastActivity = lastActivityMs > 0 ? Math.floor((nowMs - lastActivityMs) / 60000) : null;
+
+    return { bins, maxBin: maxAmp, totalCount, currentHour, recentCount, minutesSinceLastActivity };
   }, [contacts, bookings, voipCallLogs, appConversations, collab?.id]);
 }

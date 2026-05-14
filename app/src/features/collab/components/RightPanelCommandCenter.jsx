@@ -14,7 +14,7 @@
 //
 // Chaque element cliquable. Pas de cascade emails/SMS depuis ce composant.
 
-import React, { useMemo, useState } from "react";
+import React, { useMemo, useState, useRef, useEffect } from "react";
 import { T } from "../../../theme";
 import { I } from "../../../shared/ui";
 import { useCollabContext } from "../context/CollabContext";
@@ -30,6 +30,20 @@ const RightPanelCommandCenter = () => {
   const [pastRdvExpanded, setPastRdvExpanded] = useState(false);
   // V1.10.4-r11.0.24 — sparkline activite 24h (memoized, partage source unique)
   const activity = useCollabActivity();
+  // V1.10.4-r11.0.24.b — micro pulse glow quand totalCount augmente (nouvelle activite)
+  const [pulse, setPulse] = useState(false);
+  const prevTotalRef = useRef(activity.totalCount);
+  useEffect(() => {
+    if (activity.totalCount > prevTotalRef.current) {
+      setPulse(true);
+      const t = setTimeout(() => setPulse(false), 500);
+      prevTotalRef.current = activity.totalCount;
+      return () => clearTimeout(t);
+    }
+    if (activity.totalCount !== prevTotalRef.current) {
+      prevTotalRef.current = activity.totalCount;
+    }
+  }, [activity.totalCount]);
   const ctx = useCollabContext() || {};
   const {
     contacts,
@@ -288,12 +302,27 @@ const RightPanelCommandCenter = () => {
             }}
           />
         </div>
-        <div style={{ display: "flex", gap: 8, fontSize: 9, color: T.text3, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 8, fontSize: 9, color: T.text3, flexWrap: "wrap", alignItems: "center" }}>
           {data.todayCalls > 0 && <span><strong style={{ color: T.text2 }}>{data.todayCalls}</strong> appels</span>}
           {data.todaySmsOut > 0 && <span><strong style={{ color: T.text2 }}>{data.todaySmsOut}</strong> SMS</span>}
           {data.todayBkCreated > 0 && <span><strong style={{ color: T.text2 }}>{data.todayBkCreated}</strong> RDV</span>}
           {data.todayContracts > 0 && <span><strong style={{ color: "#22C55E" }}>{data.todayContracts}</strong> contrats ✓</span>}
           {data.todayCalls + data.todaySmsOut + data.todayBkCreated + data.todayContracts === 0 && <span style={{ fontStyle: "italic" }}>Démarre la journée 🚀</span>}
+          {/* V1.10.4-r11.0.24.b — Micro badge activite dominante (max 1, seuil 3 actions + >50%) */}
+          {(() => {
+            const _tot = data.todayCalls + data.todaySmsOut + data.todayBkCreated;
+            if (_tot < 3) return null;
+            let _b = null;
+            if (data.todayCalls > _tot * 0.5) _b = { icon: "phone", label: "Appels dominants", color: "#22C55E" };
+            else if (data.todaySmsOut > _tot * 0.5) _b = { icon: "message-circle", label: "Forte activité SMS", color: "#0EA5E9" };
+            else if (data.todayBkCreated > _tot * 0.5) _b = { icon: "calendar", label: "Journée RDV", color: "#F59E0B" };
+            if (!_b) return null;
+            return (
+              <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 3, fontSize: 9, fontWeight: 700, color: _b.color, background: _b.color + "14", border: `1px solid ${_b.color}25`, borderRadius: 5, padding: "2px 6px" }}>
+                <I n={_b.icon} s={10} /> {_b.label}
+              </span>
+            );
+          })()}
         </div>
         {/* V1.10.4-r11.0.24 — Sparkline activite 24h sous la jauge (ultra-discret, hover tooltip) */}
         <EnergySparkline
@@ -301,7 +330,18 @@ const RightPanelCommandCenter = () => {
           maxBin={activity.maxBin}
           currentHour={activity.currentHour}
           color={data.energyColor}
+          pulse={pulse}
         />
+        {/* V1.10.4-r11.0.24.b — Delta activite ultra discret (10px opacity 0.7) */}
+        <div style={{ marginTop: 4, fontSize: 9, color: T.text3, opacity: 0.75, fontWeight: 500, textAlign: "center", letterSpacing: 0.2 }}>
+          {(() => {
+            if (activity.recentCount > 0) return `+${activity.recentCount} action${activity.recentCount > 1 ? "s" : ""} depuis 1h`;
+            if (activity.minutesSinceLastActivity == null) return "Aucune activité aujourd'hui";
+            if (activity.minutesSinceLastActivity < 60) return "Aucune activité depuis " + activity.minutesSinceLastActivity + " min";
+            const _h = Math.floor(activity.minutesSinceLastActivity / 60);
+            return "Aucune activité depuis " + _h + "h";
+          })()}
+        </div>
       </div>
 
       {/* 2. Notifications LIVE */}

@@ -17,7 +17,7 @@ const SVG_W = 240;
 const SVG_H = 24;
 const BAR_W = SVG_W / 24;
 
-const EnergySparkline = memo(function EnergySparkline({ bins, maxBin, currentHour, color }) {
+const EnergySparkline = memo(function EnergySparkline({ bins, maxBin, currentHour, color, pulse }) {
   const [hover, setHover] = useState(null);
 
   if (!Array.isArray(bins) || bins.length !== 24) return null;
@@ -26,7 +26,17 @@ const EnergySparkline = memo(function EnergySparkline({ bins, maxBin, currentHou
   const negColor = "#EF4444";
 
   return (
-    <div style={{ position: "relative", width: "100%", marginTop: 6 }}>
+    <div
+      style={{
+        position: "relative",
+        width: "100%",
+        marginTop: 6,
+        borderRadius: 4,
+        // V1.10.4-r11.0.24.b — micro pulse glow 500ms quand nouvelle activite detectee
+        boxShadow: pulse ? `0 0 10px ${baseColor}55, 0 0 4px ${baseColor}30` : "0 0 0 transparent",
+        transition: "box-shadow 350ms ease-out",
+      }}
+    >
       <svg
         viewBox={`0 0 ${SVG_W} ${SVG_H}`}
         preserveAspectRatio="none"
