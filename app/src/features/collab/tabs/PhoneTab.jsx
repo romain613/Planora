@@ -147,6 +147,16 @@ const PhoneTab = () => {
   _defaultLiveConfig, _tempColor, _tempEmoji, _tempLabel, addToBlacklist, autoDialerNext, calendars, CALL_TAGS, collabChatMessages, collabChatOnline, collabNotesTimerRef, collabsProp, contactAnalysesHistory, contactFieldDefs, contactsLocalEditRef, cScoreColor, cScoreLabel, fetchCallTranscript, generateCallAnalysis, getLeadTemperature, handleCollabDeleteContact, handleCollabUpdateContact, handleColumnDragStart, handleColumnDrop, handlePipelineStageChange, iaHubCollapse, isAdminView, perduMotifModal, PHONE_MODULES, pipelinePopupContact, pipelinePopupHistory, pipelineRightContact, postCallResultModal, rdvPasseModal, removeFromBlacklist, removeScheduledCall, saveCallRecording, savePhoneCallRating, savePhoneCallTag, saveScriptsDual, scanImageModal, setPerduMotifModal, setPipelinePopupContact, setPipelineRightTab, setPostCallResultModal, setScanImageModal, setV7TransferModal, setV7TransferTarget, smsCredits, startAutoDialer, toggleModule, togglePhoneFav, v7FollowersMap,
   } = ctx;
 
+  // V1.10.4-r11.0.13 — Fallback safe : tabs 'script'/'forms' retires du nav panel droit.
+  // Si state legacy encore actif (mount + localStorage anciens) -> reset visuel vers 'fiche'.
+  // Les blocs de rendu phoneRightTab==='script'|'forms' restent en place (logique conservee),
+  // mais ne s'afficheront plus une fois le state normalise.
+  useEffect(() => {
+    if (phoneRightTab === 'script' || phoneRightTab === 'forms') {
+      if (typeof setPhoneRightTab === 'function') setPhoneRightTab('fiche');
+    }
+  }, [phoneRightTab]);
+
   // V1.8.22.3 — Toggle visibilité ID contact dans footer panneau droit
   const [showContactId, setShowContactId] = useState(false);
 
@@ -1726,8 +1736,11 @@ if (n === ph) matched.set(c.id, c);
       <div style={{display:'flex',borderBottom:'1px solid '+T.border,flexShrink:0}}>
 {/* V1.10.4-r11.0.9 UX — Onglet 'SMS' supprime de tabs nav (doublon avec bouton SMS header).
     Contenu SMS L3128+ reste rendu via setPhoneRightTab('sms') declenche par bouton header L1688. */}
-{/* V1.10.4-r11.0.12 — Onglet 'Appels' fusionne dans 'Activite'. Le contenu (renomme 'Historique') s'affiche desormais en tete de l'onglet Activite (cf. bloc phoneRightTab==='flux' || phoneRightTab==='appels' ci-dessous). */}
-{[{id:'fiche',icon:'user',label:'Info'},{id:'script',icon:'file-text',label:'Script'},{id:'flux',icon:'activity',label:'Activite'},{id:'forms',icon:'clipboard',label:'Forms'},{id:'ia',icon:'cpu',label:'IA Copilot'}].map(t=>(
+{/* V1.10.4-r11.0.13 — Tabs 'Script' et 'Forms' retires du nav panel droit (Phase 1 frontend only).
+    Blocs de rendu phoneRightTab==='script'|'forms' CONSERVES en place pour compatibilite/state interne.
+    Fallback safe : si state legacy 'script'|'forms' encore actif, useEffect ci-dessus reset vers 'fiche'.
+    Apercu compact des interaction-templates + call-forms a remplir affiche dans l'onglet Info (apres 'Formulaires remplis'). */}
+{[{id:'fiche',icon:'user',label:'Info'},{id:'flux',icon:'activity',label:'Activite'},{id:'ia',icon:'cpu',label:'IA Copilot'}].map(t=>(
 <div key={t.id} onClick={()=>(typeof setPhoneRightTab==='function'?setPhoneRightTab:function(){})(t.id)} style={{flex:1,padding:'7px 0',textAlign:'center',cursor:'pointer',fontSize:9,fontWeight:phoneRightTab===t.id?700:500,color:phoneRightTab===t.id?T.accent:T.text3,borderBottom:phoneRightTab===t.id?'2px solid '+T.accent:'2px solid transparent',display:'flex',flexDirection:'column',alignItems:'center',gap:1,transition:'all .12s'}}>
   <I n={t.icon} s={12}/>{t.label}
 </div>
@@ -2147,6 +2160,70 @@ if (n === ph) matched.set(c.id, c);
       })}
     </div>;
   })()}
+  {/* V1.10.4-r11.0.13 — Apercu compact Scripts & Checklists (interaction-templates).
+      Phase 1 frontend only : lazy fetch via cache singleton _T.itpCache, pas de modif backend.
+      Affiche max 3 templates type=script|checklist. Si vide -> aucun bloc affiche. */}
+  {(()=>{
+    if (typeof _T === 'undefined') return null;
+    if (!_T.itpCache && !_T.itpLoading) {
+      _T.itpLoading = true;
+      api('/api/interaction-templates').then(d => {
+        _T.itpCache = Array.isArray(d) ? d : [];
+        _T.itpLoading = false;
+        setPhoneRightAccordion(p => ({...p, _itpRefresh: Date.now()}));
+      }).catch(() => { _T.itpCache = []; _T.itpLoading = false; });
+    }
+    const templates = _T.itpCache || [];
+    const previews = templates.filter(t => t && (t.type === 'script' || t.type === 'checklist')).slice(0, 3);
+    if (!previews.length) return null;
+    return <div style={{marginTop:10}}>
+      <div style={{fontSize:10,fontWeight:700,color:T.text3,marginBottom:6,display:'flex',alignItems:'center',gap:4}}>
+        <I n="file-text" s={10}/> Scripts & Checklists
+      </div>
+      {previews.map(t => (
+        <div key={t.id} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 8px',borderRadius:8,marginBottom:4,background:T.bg,border:'1px solid '+T.border}}>
+          <I n={t.type === 'checklist' ? 'check-square' : 'file-text'} s={11} style={{color:t.type === 'checklist' ? '#22C55E' : '#7C3AED',flexShrink:0}}/>
+          <div style={{flex:1,fontSize:11,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title || 'Sans titre'}</div>
+          <span style={{fontSize:8,fontWeight:700,padding:'2px 6px',borderRadius:4,background:t.type === 'checklist' ? '#22C55E15' : '#7C3AED15',color:t.type === 'checklist' ? '#22C55E' : '#7C3AED'}}>{t.type === 'checklist' ? 'Checklist' : 'Script'}</span>
+        </div>
+      ))}
+    </div>;
+  })()}
+
+  {/* V1.10.4-r11.0.13 — Apercu compact Formulaires a remplir (call-forms admin assignes non encore repondus).
+      Filtre callFormResponses pour ne montrer que les forms NON encore remplis pour ce contact.
+      Max 3. Si vide -> aucun bloc affiche. */}
+  {(()=>{
+    const allForms = ((typeof collabCallForms !== 'undefined' ? collabCallForms : null) || []);
+    const responses = ((typeof callFormResponses !== 'undefined' ? callFormResponses : null) || []).filter(r => r && (r.contactId || r.contact_id) === ct.id);
+    const respondedFormIds = new Set(responses.map(r => r.formId || r.form_id).filter(Boolean));
+    const toFill = allForms.filter(f => f && !respondedFormIds.has(f.id)).slice(0, 3);
+    if (!toFill.length) return null;
+    return <div style={{marginTop:10}}>
+      <div style={{fontSize:10,fontWeight:700,color:T.text3,marginBottom:6,display:'flex',alignItems:'center',gap:4}}>
+        <I n="clipboard" s={10}/> Formulaires a remplir
+      </div>
+      {toFill.map(f => {
+        const fields = (() => {
+          const candidates = [f.fields_json, f.fields, f.questions];
+          for (const raw of candidates) {
+            if (!raw) continue;
+            try { const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw; if (Array.isArray(parsed)) return parsed; } catch {}
+          }
+          return [];
+        })();
+        return (
+          <div key={f.id} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 8px',borderRadius:8,marginBottom:4,background:T.bg,border:'1px solid '+T.border}}>
+            <I n="clipboard" s={11} style={{color:'#F59E0B',flexShrink:0}}/>
+            <div style={{flex:1,fontSize:11,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{f.name || f.title || 'Formulaire'}</div>
+            {fields.length > 0 && <span style={{fontSize:8,color:T.text3}}>{fields.length} champ{fields.length>1?'s':''}</span>}
+            <span style={{fontSize:8,fontWeight:700,padding:'2px 6px',borderRadius:4,background:'#F59E0B15',color:'#F59E0B'}}>a remplir</span>
+          </div>
+        );
+      })}
+    </div>;
+  })()}
+
   {/* Custom Fields — supprimé ici car déjà dans bloc coordonnées */}
 
   {/* Bloc Notes — sans titre */}
