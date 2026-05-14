@@ -273,8 +273,8 @@ const AgendaTab = () => {
   return (
 <div style={{ background:'#F8FAFC', borderRadius:14, padding:'18px 20px', minHeight:'100%' }}>
 <div>
-  {/* V1.10.4-r11.0.22 — Barre nav rapide transversale (Pipeline / Agenda / CRM / Campagnes / SMS / Scripts / Stats) */}
-  <div style={{ marginBottom: 14 }}>
+  {/* V1.10.4-r11.0.22.b — Barre nav rapide centree horizontalement (cohesion avec PhoneTab Pipeline Live) */}
+  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
     <QuickModuleNav />
   </div>
   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>

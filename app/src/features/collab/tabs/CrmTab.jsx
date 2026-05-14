@@ -141,8 +141,8 @@ const CrmTab = () => {
   return (
     <>
 <div>
-  {/* V1.10.4-r11.0.22 — Barre nav rapide transversale (Pipeline / Agenda / CRM / Campagnes / SMS / Scripts / Stats) */}
-  <div style={{ marginBottom: 12 }}>
+  {/* V1.10.4-r11.0.22.b — Barre nav rapide centree horizontalement (cohesion avec PhoneTab Pipeline Live) */}
+  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 12 }}>
     <QuickModuleNav />
   </div>
   {/* Header with Export/Import/Nouveau */}
