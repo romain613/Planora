@@ -12,6 +12,7 @@ import { _T } from "../../../shared/state/tabState";
 import { pushAction as _undoPush } from "../../../shared/state/undoStack"; // V1.10.4-r11.0.20 Phase B Agenda
 import { api } from "../../../shared/services/api";
 import { useCollabContext } from "../context/CollabContext";
+import QuickModuleNav from "../components/QuickModuleNav"; // V1.10.4-r11.0.22 nav rapide transversale
 
 // V1.10.4-r11.0.6 — Génère les buffer blocks virtuels (bufferBefore + bufferAfter)
 // à partir des bookings + collaborateur CIBLE (qui reçoit/exécute le RDV) + calendrier.
@@ -272,6 +273,10 @@ const AgendaTab = () => {
   return (
 <div style={{ background:'#F8FAFC', borderRadius:14, padding:'18px 20px', minHeight:'100%' }}>
 <div>
+  {/* V1.10.4-r11.0.22 — Barre nav rapide transversale (Pipeline / Agenda / CRM / Campagnes / SMS / Scripts / Stats) */}
+  <div style={{ marginBottom: 14 }}>
+    <QuickModuleNav />
+  </div>
   <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
     <div>
       <h1 style={{ fontSize:22, fontWeight:700, letterSpacing:-0.5, marginBottom:4 }}>{collab?.name ? `Agenda de ${collab.name.split(' ')[0]}` : 'Mon Agenda'}</h1>

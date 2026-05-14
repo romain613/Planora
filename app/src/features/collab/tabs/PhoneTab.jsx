@@ -22,6 +22,7 @@ import { useCollabContext } from "../context/CollabContext";
 import { FicheDocsPanelScreen } from "../screens"; // hotfix 2026-04-23 — Phase 14b missed import propagation
 import FicheInteractionTemplates from "./crm/fiche/FicheInteractionTemplates"; // V1.10.4-r11.0.15 — apercu compact reutilisable
 import RightPanelCommandCenter from "../components/RightPanelCommandCenter"; // V1.10.4-r11.0.21 Phase 1 empty state
+import QuickModuleNav from "../components/QuickModuleNav"; // V1.10.4-r11.0.22 nav rapide transversale
 import { isContactInSuiviForCollab, getContactSuiviRole, getReceiverIdForSentTransfer, getActiveSentTransferBooking } from "../../../shared/utils/suivi";
 // V1.14.1.x — modale hard delete pour contacts archivés trouvés via fallback Hub SMS
 import HardDeleteContactModal from "../modals/HardDeleteContactModal";
@@ -397,89 +398,8 @@ const PhoneTab = () => {
       })()}
     </div>
 
-    {/* ── CENTER: Navigation icon buttons (draggable reorder) ── */}
-    {(()=>{
-      const _totalUnreadSMS = ((typeof appConversations!=='undefined'?appConversations:null)||[]).reduce((s,c)=>s+((c.lastEventType||'').includes('sms')?(c.unreadCount||0):0),0);
-      const PHONE_TOOLBAR_ITEMS = [
-        {id:'pipeline',icon:'trello',label:'Pipeline',badge:null},
-        {id:'campaigns',icon:'zap',label:'Campagnes',badge:(typeof phoneCampaigns!=='undefined'?phoneCampaigns:{}).length||null,badgeColor:'#F59E0B'},
-        {id:'sms',icon:'message-circle',label:'SMS',badge:_totalUnreadSMS||null,badgeColor:'#0EA5E9'},
-        {id:'scripts',icon:'file-text',label:'Scripts',badge:null},
-        {id:'stats',icon:'bar-chart-2',label:'Stats',badge:null},
-        ...(collab.ai_copilot_enabled ? [{id:'copilot',icon:'cpu',label:'Copilot IA',badge:null,gradient:true}] : []),
-      ];
-      const sorted = (typeof phoneToolbarOrder!=='undefined'?phoneToolbarOrder:null)
-        ? (typeof phoneToolbarOrder!=='undefined'?phoneToolbarOrder:{}).map(id=>PHONE_TOOLBAR_ITEMS.find(t=>t.id===id)).filter(Boolean).concat(PHONE_TOOLBAR_ITEMS.filter(t=>!(typeof phoneToolbarOrder!=='undefined'?phoneToolbarOrder:{}).includes(t.id)))
-        : PHONE_TOOLBAR_ITEMS;
-      const onDragStart=(idx)=>setPhoneToolbarDragIdx(idx);
-      const onDragEnd=()=>{setPhoneToolbarDragIdx(null);setPhoneToolbarDragOverIdx(null);};
-      const onDragOver=(e,idx)=>{e.preventDefault();setPhoneToolbarDragOverIdx(idx);};
-      const onDrop=(e,idx)=>{
-        e.preventDefault();
-        if(phoneToolbarDragIdx===null||phoneToolbarDragIdx===idx){(typeof setPhoneToolbarDragIdx==='function'?setPhoneToolbarDragIdx:function(){})(null);setPhoneToolbarDragOverIdx(null);return;}
-        const arr=[...sorted];const[item]=arr.splice((typeof phoneToolbarDragIdx!=='undefined'?phoneToolbarDragIdx:null),1);arr.splice(idx,0,item);
-        const newOrder=arr.map(t=>t.id);setPhoneToolbarOrder(newOrder);
-        try{localStorage.setItem("c360-phone-toolbar-order-"+collab.id,JSON.stringify(newOrder));}catch(e){}
-        setPhoneToolbarDragIdx(null);setPhoneToolbarDragOverIdx(null);
-      };
-      return (
-    <div style={{display:'flex',gap:2,alignItems:'center',background:T.bg,borderRadius:12,padding:'3px 4px',border:`1px solid ${T.border}`}}>
-      {sorted.map((nav,idx)=>(
-        <div key={nav.id}
-          draggable
-          onDragStart={()=>onDragStart(idx)}
-          onDragEnd={onDragEnd}
-          onDragOver={e=>onDragOver(e,idx)}
-          onDrop={e=>onDrop(e,idx)}
-          onClick={()=>{
-            setPhoneSubTab(prev => prev === nav.id ? 'conversations' : nav.id);
-            if(nav.id === 'copilot' && !(typeof phoneCopilotTabLoaded!=='undefined'?phoneCopilotTabLoaded:null)){
-              setPhoneCopilotTabLoaded(true);
-              const cf = collab.role !== 'admin' ? `&collaboratorId=${collab.id}` : '';
-              Promise.all([
-                api(`/api/ai-copilot/stats?companyId=${company.id}${cf}`),
-                api(`/api/ai-copilot/analyses?companyId=${company.id}${cf}&limit=20`),
-                api(`/api/ai-copilot/coaching/${collab.id}`),
-                api(`/api/ai-copilot/objections?companyId=${company.id}`)
-              ]).then(([s,a,c,o])=>setPhoneCopilotTabData(p=>({...p,stats:s,analyses:a||[],coaching:c,objections:o,loading:false})))
-                .catch(()=>setPhoneCopilotTabData(p=>({...p,loading:false})));
-            }
-          }}
-          title={nav.label}
-          style={{
-            position:'relative',display:'flex',alignItems:'center',justifyContent:'center',gap:5,
-            padding:'7px 12px',borderRadius:9,cursor:'grab',
-            background: (typeof phoneSubTab!=='undefined'?phoneSubTab:null) === nav.id
-              ? (nav.gradient ? 'linear-gradient(135deg,#7C3AED,#2563EB)' : T.accentBg)
-              : 'transparent',
-            color: (typeof phoneSubTab!=='undefined'?phoneSubTab:null) === nav.id
-              ? (nav.gradient ? '#fff' : T.accent)
-              : T.text3,
-            fontWeight: (typeof phoneSubTab!=='undefined'?phoneSubTab:null) === nav.id ? 700 : 500,
-            fontSize:11,transition:'all .15s',
-            boxShadow: (typeof phoneSubTab!=='undefined'?phoneSubTab:null) === nav.id && nav.gradient ? '0 2px 8px rgba(124,58,237,0.3)' : 'none',
-            opacity: (typeof phoneToolbarDragIdx!=='undefined'?phoneToolbarDragIdx:null) === idx ? 0.4 : 1,
-            borderLeft: (typeof phoneToolbarDragOverIdx!=='undefined'?phoneToolbarDragOverIdx:null) === idx && (typeof phoneToolbarDragIdx!=='undefined'?phoneToolbarDragIdx:null) !== null ? `2px solid ${T.accent}` : '2px solid transparent',
-          }}
-          onMouseEnter={e=>{if((typeof phoneSubTab!=='undefined'?phoneSubTab:null) !== nav.id && (typeof phoneToolbarDragIdx!=='undefined'?phoneToolbarDragIdx:null)===null) e.currentTarget.style.background = T.surface;}}
-          onMouseLeave={e=>{if((typeof phoneSubTab!=='undefined'?phoneSubTab:null) !== nav.id) e.currentTarget.style.background = 'transparent';}}
-        >
-          <I n={nav.icon} s={15}/>
-          <span style={{display:(typeof phoneSubTab!=='undefined'?phoneSubTab:null) === nav.id ? 'inline' : 'none',fontSize:11,fontWeight:700}}>{nav.label}</span>
-          {nav.badge > 0 && (
-            <span style={{
-              position:'absolute',top:2,right:2,
-              width:14,height:14,borderRadius:7,
-              background:nav.badgeColor || T.accent,color:'#fff',
-              fontSize:8,fontWeight:800,
-              display:'flex',alignItems:'center',justifyContent:'center',
-              boxShadow:`0 1px 4px ${(nav.badgeColor || T.accent)}40`,
-            }}>{nav.badge > 9 ? '9+' : nav.badge}</span>
-          )}
-        </div>
-      ))}
-    </div>);
-    })()}
+    {/* V1.10.4-r11.0.22 — Navigation rapide transversale unifiee (Pipeline / Agenda / CRM / Campagnes / SMS / Scripts / Stats). */}
+    <QuickModuleNav />
 
     {/* ── RIGHT: Credits, DND, Recording, Line selector ── */}
     <div style={{display:'flex',gap:8,alignItems:'center',flexShrink:0}}>

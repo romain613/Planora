@@ -17,6 +17,7 @@ import { sendNotification, buildNotifyPayload } from "../../../shared/utils/noti
 import { api } from "../../../shared/services/api";
 import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";
+import QuickModuleNav from "../components/QuickModuleNav"; // V1.10.4-r11.0.22 nav rapide transversale
 import FicheReportingBlock from "./crm/fiche/FicheReportingBlock";
 import InteractionTemplatesPanel from "../../interactions/InteractionTemplatesPanel.jsx";
 import ContactInfoEnriched from "../../contacts/ContactInfoEnriched.jsx";
@@ -140,6 +141,10 @@ const CrmTab = () => {
   return (
     <>
 <div>
+  {/* V1.10.4-r11.0.22 — Barre nav rapide transversale (Pipeline / Agenda / CRM / Campagnes / SMS / Scripts / Stats) */}
+  <div style={{ marginBottom: 12 }}>
+    <QuickModuleNav />
+  </div>
   {/* Header with Export/Import/Nouveau */}
   <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:8}}>
     <h1 style={{fontSize:22,fontWeight:700,letterSpacing:-0.5}}>Contacts CRM</h1>
