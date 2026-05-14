@@ -24,6 +24,8 @@ import { api } from "../../../shared/services/api";
 const RightPanelCommandCenter = () => {
   // V1.10.4-r11.0.23.c — expand/collapse pour "Prochains RDV" (4 par défaut → tous)
   const [nextRdvExpanded, setNextRdvExpanded] = useState(false);
+  // V1.10.4-r11.0.23.d — expand/collapse pour "RDV passés à statuer" (3 par défaut → tous)
+  const [pastRdvExpanded, setPastRdvExpanded] = useState(false);
   const ctx = useCollabContext() || {};
   const {
     contacts,
@@ -109,6 +111,7 @@ const RightPanelCommandCenter = () => {
       .sort((a, z) => (a.date + (a.time || "")).localeCompare(z.date + (z.time || "")));
 
     // 6. RDV passes a statuer (date+time < now, status='confirmed', contact still rdv_programme)
+    // V1.10.4-r11.0.23.d : liste complète (tri du + recent au + ancien), slice fait dans render.
     const pastUnstatus = bks
       .filter((b) => b && b.contactId && myIds.has(b.contactId) && b.status === "confirmed")
       .filter((b) => {
@@ -117,8 +120,7 @@ const RightPanelCommandCenter = () => {
         const ct = all.find((c) => c.id === b.contactId);
         return ct && ct.pipeline_stage === "rdv_programme";
       })
-      .sort((a, z) => (z.date + (z.time || "")).localeCompare(a.date + (a.time || "")))
-      .slice(0, 5);
+      .sort((a, z) => (z.date + (z.time || "")).localeCompare(a.date + (a.time || "")));
 
     return { energyScore, energyPct, energyColor, energyLabel, todayCalls, todayBkCreated, todayContracts, todaySmsOut, notifs, smsFlux, recentBack, nextBookings, pastUnstatus };
   }, [contacts, bookings, voipCallLogs, appConversations, notifList, collab?.id]);
@@ -517,13 +519,37 @@ const RightPanelCommandCenter = () => {
         )}
       </div>
 
-      {/* 6. RDV passes a statuer (conditional : count > 0 ouvert par defaut) */}
+      {/* 6. RDV passes a statuer — V1.10.4-r11.0.23.d : 3 par defaut, expand → tous avec scroll */}
       {data.pastUnstatus.length > 0 && (
         <div style={{ ...sectionStyle, borderColor: "#F59E0B40", background: "#F59E0B06" }}>
           <div style={{ ...sectionTitleStyle, color: "#F59E0B" }}>
-            ⚠ {data.pastUnstatus.length} RDV à statuer
+            <span>⚠ {data.pastUnstatus.length} RDV à statuer</span>
+            {data.pastUnstatus.length > 3 && (
+              <span
+                onClick={(e) => { e.stopPropagation(); setPastRdvExpanded((v) => !v); }}
+                title={pastRdvExpanded ? "Réduire" : `Voir tous (${data.pastUnstatus.length})`}
+                aria-label={pastRdvExpanded ? "Réduire la liste" : "Voir tous les RDV à statuer"}
+                style={{
+                  marginLeft: "auto",
+                  width: 18, height: 18,
+                  borderRadius: 5,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: "pointer",
+                  fontSize: 12, fontWeight: 700,
+                  color: "#F59E0B", background: "#F59E0B14",
+                  border: "1px solid #F59E0B30",
+                  transition: "all .12s",
+                  lineHeight: 1,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "#F59E0B28"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "#F59E0B14"; }}
+              >
+                {pastRdvExpanded ? "−" : "+"}
+              </span>
+            )}
           </div>
-          {data.pastUnstatus.slice(0, 3).map((b) => {
+          <div style={pastRdvExpanded ? { maxHeight: 280, overflowY: "auto" } : undefined}>
+          {(pastRdvExpanded ? data.pastUnstatus : data.pastUnstatus.slice(0, 3)).map((b) => {
             const ct = (contacts || []).find((c) => c.id === b.contactId);
             const name = ct?.name || b.visitorName || b.contactName || "RDV";
             return (
@@ -554,11 +580,10 @@ const RightPanelCommandCenter = () => {
               </div>
             );
           })}
-          {data.pastUnstatus.length > 3 && (
-            <div style={{ fontSize: 9, color: "#F59E0B", fontWeight: 600, textAlign: "center", padding: 4 }}>
-              + {data.pastUnstatus.length - 3} autre{data.pastUnstatus.length - 3 > 1 ? "s" : ""}…
-            </div>
+          {pastRdvExpanded && data.pastUnstatus.length > 3 && (
+            <div onClick={() => setPastRdvExpanded(false)} style={{ textAlign: "center", padding: 6, fontSize: 9, fontWeight: 600, color: "#F59E0B", cursor: "pointer" }}>− Réduire</div>
           )}
+          </div>
         </div>
       )}
 
