@@ -458,6 +458,8 @@ export default function InteractionTemplatesPanel({ T, I, Btn, Modal, contact, c
   const [filterType, setFilterType] = useState(''); // ''|script|questionnaire|checklist
   const [editor, setEditor] = useState(null); // {mode:'create'|'edit', type, template?}
   const [filling, setFilling] = useState(null); // {template, response}
+  // V1.10.4-r11.0.15 — Modal confirmation Archive/Delete (Phase 3)
+  const [deleteConfirm, setDeleteConfirm] = useState(null); // {template, responseCount}
 
   const reload = async () => {
     setLoading(true);
@@ -489,11 +491,29 @@ export default function InteractionTemplatesPanel({ T, I, Btn, Modal, contact, c
     setFilling({ template: { ...template, content: template.content }, response });
   };
 
-  const deleteTemplate = async (t) => {
-    if (!confirm(`Supprimer "${t.title}" ?`)) return;
+  // V1.10.4-r11.0.15 — ouvre modal de confirmation Archive/Delete au lieu de confirm() brut.
+  // Le backend gere deja la logique smart : si responses existent -> soft delete (active=0),
+  // sinon hard delete. Le modal explique a l'utilisateur ce qui va se passer.
+  const deleteTemplate = (t) => {
+    const responseCount = (responses || []).filter(r => (r.templateId || r.template_id) === t.id).length;
+    setDeleteConfirm({ template: t, responseCount });
+  };
+
+  // Action finale du modal : appel DELETE backend (smart-routing).
+  const confirmDeleteTemplate = async () => {
+    if (!deleteConfirm?.template) return;
+    const t = deleteConfirm.template;
     const res = await api(`/api/interaction-templates/${t.id}`, { method: 'DELETE' });
-    if (res?.error) { pushNotification('Erreur', res.error, 'error'); return; }
-    pushNotification('OK', `Modèle supprimé (${res.mode})`, 'success');
+    if (res?.error) {
+      pushNotification('Erreur', res.error, 'error');
+      setDeleteConfirm(null);
+      return;
+    }
+    const msg = res.mode === 'soft'
+      ? `Modèle archivé (responses conservées)`
+      : `Modèle supprimé définitivement`;
+    pushNotification('OK', msg, 'success');
+    setDeleteConfirm(null);
     reload();
   };
 
@@ -609,6 +629,43 @@ export default function InteractionTemplatesPanel({ T, I, Btn, Modal, contact, c
       )}
 
       {editor && <TemplateEditor T={T} I={I} Btn={Btn} Modal={Modal} mode={editor.mode} type={editor.type} template={editor.template} isAdmin={isAdmin} onClose={()=>setEditor(null)} onSaved={reload} pushNotification={pushNotification}/>}
+
+      {/* V1.10.4-r11.0.15 — Modal confirmation Archive/Delete (Phase 3) */}
+      {deleteConfirm && (
+        <Modal open={true} onClose={()=>setDeleteConfirm(null)} title="Supprimer ou archiver ce modèle ?" width={520}>
+          <div style={{padding:'4px 4px 8px', fontSize:13, color:T.text, lineHeight:1.5}}>
+            <div style={{marginBottom:14}}>
+              Modèle : <strong>{deleteConfirm.template.title || 'Sans titre'}</strong>
+              <span style={{marginLeft:8, fontSize:11, color:T.text3}}>({TYPE_LABELS[deleteConfirm.template.type] || deleteConfirm.template.type})</span>
+            </div>
+            {deleteConfirm.responseCount > 0 ? (
+              <div style={{padding:'12px 14px', borderRadius:10, background:'#F59E0B12', border:'1px solid #F59E0B40', marginBottom:14, display:'flex', alignItems:'flex-start', gap:10}}>
+                <span style={{color:'#F59E0B', fontSize:16, flexShrink:0, marginTop:1}}>⚠</span>
+                <div style={{fontSize:12, color:T.text2}}>
+                  <strong>{deleteConfirm.responseCount} réponse{deleteConfirm.responseCount>1?'s':''}</strong> existe{deleteConfirm.responseCount>1?'nt':''} pour ce modèle.
+                  L'action sera convertie automatiquement en <strong>archivage</strong> (active=0). Le modèle disparaîtra de toutes les fiches, mais les réponses seront <strong>conservées</strong>.
+                </div>
+              </div>
+            ) : (
+              <div style={{padding:'12px 14px', borderRadius:10, background:T.bg, border:'1px solid '+T.border, marginBottom:14, fontSize:12, color:T.text2}}>
+                Aucune réponse n'existe encore pour ce modèle. La suppression sera <strong>définitive</strong> (hard delete).
+              </div>
+            )}
+            <div style={{display:'flex', gap:8, justifyContent:'flex-end', marginTop:8}}>
+              <Btn onClick={()=>setDeleteConfirm(null)} style={{fontSize:12, padding:'8px 14px'}}>Annuler</Btn>
+              {deleteConfirm.responseCount > 0 ? (
+                <Btn primary onClick={confirmDeleteTemplate} style={{fontSize:12, padding:'8px 14px', background:'#F59E0B', borderColor:'#F59E0B'}}>
+                  <I n="archive" s={12}/> Archiver (recommandé)
+                </Btn>
+              ) : (
+                <Btn primary onClick={confirmDeleteTemplate} style={{fontSize:12, padding:'8px 14px', background:'#EF4444', borderColor:'#EF4444'}}>
+                  <I n="trash-2" s={12}/> Supprimer définitivement
+                </Btn>
+              )}
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

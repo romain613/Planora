@@ -40,6 +40,7 @@ import FicheVoipSection from "./FicheVoipSection";
 import FicheEspaceClient from "./FicheEspaceClient";
 import FicheStatusHistory from "./FicheStatusHistory";
 import FicheShare from "./FicheShare";
+import FicheInteractionTemplates from "./FicheInteractionTemplates"; // V1.10.4-r11.0.15
 
 const FicheContactModal = () => {
   const ctx = useCollabContext();
@@ -107,6 +108,7 @@ const FicheContactModal = () => {
     setRdvPasseModal,
     setPhoneShowScheduleModal, setPhoneScheduleForm,
     portalTab, setPortalTab, setPortalTabKey,
+    setPhoneSubTab, // V1.10.4-r11.0.15 — pour ouvrir hub Scripts top-bar depuis FicheInteractionTemplates
     CRM_STD_COLS,
     appMyPhoneNumbers,
     calendars,
@@ -318,6 +320,16 @@ const FicheContactModal = () => {
 
                 {/* V4: Debug mode — Historique des statuts */}
                 <FicheStatusHistory ct={ct} />
+
+                {/* V1.10.4-r11.0.15 — Apercu compact Scripts/Checklists/Formulaires applicables au contact */}
+                <FicheInteractionTemplates
+                  contact={ct}
+                  setPhoneSubTab={setPhoneSubTab}
+                  setPortalTab={setPortalTab}
+                  setPipelineRightContact={setPipelineRightContact}
+                  setSelectedCrmContact={setSelectedCrmContact}
+                  setCollabFicheTab={setCollabFicheTab}
+                />
 
                 {/* Accordéon Résumé IA — CRM fiche */}
                 <FicheAiAnalyses ct={ct} />

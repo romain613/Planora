@@ -30,6 +30,7 @@ import { displayPhone } from "../../../shared/utils/phone";
 import { fmtDate } from "../../../shared/utils/dates";
 import { sendNotification, buildNotifyPayload } from "../../../shared/utils/notifications";
 import { useCollabContext } from "../context/CollabContext";
+import FicheInteractionTemplates from "../tabs/crm/fiche/FicheInteractionTemplates"; // V1.10.4-r11.0.15
 
 const BookingDetailModal = () => {
   const {
@@ -45,6 +46,8 @@ const BookingDetailModal = () => {
     startVoipCall,
     cScoreColor,
     showNotif,
+    // V1.10.4-r11.0.15 — pour ouvrir hub Scripts depuis FicheInteractionTemplates
+    setPhoneSubTab, setPortalTab, setPipelineRightContact,
   } = useCollabContext();
 
   return (
@@ -215,6 +218,16 @@ const BookingDetailModal = () => {
                     ))}
                   </div>
                 </div>
+
+                {/* V1.10.4-r11.0.15 — Apercu compact Scripts/Checklists/Formulaires applicables au contact */}
+                <FicheInteractionTemplates
+                  contact={_bContact}
+                  setPhoneSubTab={setPhoneSubTab}
+                  setPortalTab={setPortalTab}
+                  setPipelineRightContact={setPipelineRightContact}
+                  setSelectedBooking={setSelectedBooking}
+                  setBookingDetailTab={setBookingDetailTab}
+                />
 
                 {/* Quick actions */}
                 <div style={{ display:"flex", flexWrap:"wrap", gap:8, paddingTop:16, borderTop:`1px solid ${T.border}` }}>

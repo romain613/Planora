@@ -20,6 +20,7 @@ import ContactInfoEnriched from "../../contacts/ContactInfoEnriched.jsx";
 import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";
 import { FicheDocsPanelScreen } from "../screens"; // hotfix 2026-04-23 — Phase 14b missed import propagation
+import FicheInteractionTemplates from "./crm/fiche/FicheInteractionTemplates"; // V1.10.4-r11.0.15 — apercu compact reutilisable
 import { isContactInSuiviForCollab, getContactSuiviRole, getReceiverIdForSentTransfer, getActiveSentTransferBooking } from "../../../shared/utils/suivi";
 // V1.14.1.x — modale hard delete pour contacts archivés trouvés via fallback Hub SMS
 import HardDeleteContactModal from "../modals/HardDeleteContactModal";
@@ -2160,35 +2161,15 @@ if (n === ph) matched.set(c.id, c);
       })}
     </div>;
   })()}
-  {/* V1.10.4-r11.0.13 — Apercu compact Scripts & Checklists (interaction-templates).
-      Phase 1 frontend only : lazy fetch via cache singleton _T.itpCache, pas de modif backend.
-      Affiche max 3 templates type=script|checklist. Si vide -> aucun bloc affiche. */}
-  {(()=>{
-    if (typeof _T === 'undefined') return null;
-    if (!_T.itpCache && !_T.itpLoading) {
-      _T.itpLoading = true;
-      api('/api/interaction-templates').then(d => {
-        _T.itpCache = Array.isArray(d) ? d : [];
-        _T.itpLoading = false;
-        setPhoneRightAccordion(p => ({...p, _itpRefresh: Date.now()}));
-      }).catch(() => { _T.itpCache = []; _T.itpLoading = false; });
-    }
-    const templates = _T.itpCache || [];
-    const previews = templates.filter(t => t && (t.type === 'script' || t.type === 'checklist')).slice(0, 3);
-    if (!previews.length) return null;
-    return <div style={{marginTop:10}}>
-      <div style={{fontSize:10,fontWeight:700,color:T.text3,marginBottom:6,display:'flex',alignItems:'center',gap:4}}>
-        <I n="file-text" s={10}/> Scripts & Checklists
-      </div>
-      {previews.map(t => (
-        <div key={t.id} style={{display:'flex',alignItems:'center',gap:6,padding:'6px 8px',borderRadius:8,marginBottom:4,background:T.bg,border:'1px solid '+T.border}}>
-          <I n={t.type === 'checklist' ? 'check-square' : 'file-text'} s={11} style={{color:t.type === 'checklist' ? '#22C55E' : '#7C3AED',flexShrink:0}}/>
-          <div style={{flex:1,fontSize:11,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title || 'Sans titre'}</div>
-          <span style={{fontSize:8,fontWeight:700,padding:'2px 6px',borderRadius:4,background:t.type === 'checklist' ? '#22C55E15' : '#7C3AED15',color:t.type === 'checklist' ? '#22C55E' : '#7C3AED'}}>{t.type === 'checklist' ? 'Checklist' : 'Script'}</span>
-        </div>
-      ))}
-    </div>;
-  })()}
+  {/* V1.10.4-r11.0.15 — Apercu unifie Scripts/Checklists/Formulaires (interaction-templates).
+      Composant reutilisable FicheInteractionTemplates.
+      Regle de visibilite : active=1 && (showByDefault=1 || responseExistsForContact).
+      Tri showByDefault DESC, updatedAt DESC. Max 3. Cache TTL 60s. */}
+  <FicheInteractionTemplates
+    contact={ct}
+    setPhoneSubTab={setPhoneSubTab}
+    setPipelineRightContact={setPipelineRightContact}
+  />
 
   {/* V1.10.4-r11.0.13 — Apercu compact Formulaires a remplir (call-forms admin assignes non encore repondus).
       Filtre callFormResponses pour ne montrer que les forms NON encore remplis pour ce contact.
@@ -7236,8 +7217,17 @@ return (
   const _ctOpen = (typeof pipelineRightContact !== 'undefined' ? pipelineRightContact : null);
   const _callId = (typeof phoneActiveCall !== 'undefined' && phoneActiveCall) ? (phoneActiveCall.id || '') : '';
   const _pushNotif = (title, detail, type) => {
-    // Invalidation cache Info preview r11.0.13 a chaque action InteractionTemplatesPanel
-    if (typeof _T !== 'undefined') { _T.itpCache = null; }
+    // V1.10.4-r11.0.15 — Invalidation cache Info preview (templates + responses)
+    // a chaque action InteractionTemplatesPanel (create/edit/delete/archive/duplicate/toggle-default)
+    if (typeof _T !== 'undefined') {
+      _T.itpCache = null;
+      _T.itpCacheAt = 0;
+      // Invalide aussi responses cache du contact ouvert (si filling a change le statut)
+      if (_ctOpen?.id && _T.itpRespCache) {
+        delete _T.itpRespCache[_ctOpen.id];
+        if (_T.itpRespCacheAt) delete _T.itpRespCacheAt[_ctOpen.id];
+      }
+    }
     if (typeof showNotif === 'function') showNotif(detail || title, type === 'error' ? 'danger' : type);
   };
   return (
