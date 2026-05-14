@@ -106,7 +106,11 @@ const buildKpiDef = (kpiId, PIPELINE_STAGES) => {
 };
 
 const SmartFooterBar = ({ navCollapsed = false }) => {
-  const { collab, contacts, bookings, PIPELINE_STAGES, setShowIaWidget } = useCollabContext();
+  const {
+    collab, contacts, bookings, PIPELINE_STAGES, setShowIaWidget,
+    // V1.10.4-r11.0.10 — badge "Prochain RDV" cliquable → ouvre panneau droit Pipeline Live avec fiche contact
+    setPipelineRightContact, setPortalTab, setPhoneSubTab, setPhoneRightTab, setPhoneRightCollapsed,
+  } = useCollabContext();
   const [backendStats, setBackendStats] = useState({ callsToday: 0 });
   const [kpiList, setKpiList] = useState(() => loadKpiList(collab?.id));
   const [showAddMenu, setShowAddMenu] = useState(false);
@@ -166,7 +170,7 @@ const SmartFooterBar = ({ navCollapsed = false }) => {
       .filter(b => b && b.status === 'confirmed' && b.collaboratorId === collab.id && b.date && b.time)
       .map(b => {
         const ts = new Date(b.date + 'T' + b.time + ':00').getTime();
-        return { id: b.id, time: b.time, visitorName: b.visitorName || '', _ts: ts, _diffMin: Math.round((ts - now) / 60000) };
+        return { id: b.id, time: b.time, visitorName: b.visitorName || '', contactId: b.contactId || null, _ts: ts, _diffMin: Math.round((ts - now) / 60000) };
       })
       .filter(b => b._diffMin > -30 && b._diffMin <= 120)
       .sort((a, b) => a._ts - b._ts);
@@ -330,9 +334,31 @@ const SmartFooterBar = ({ navCollapsed = false }) => {
         const isUrgent = m >= 0 && m <= 5;
         const color = isPast ? '#EF4444' : isUrgent ? '#F59E0B' : '#0EA5E9';
         const tail = isPast ? `Passé ${Math.abs(m)}min` : (m === 0 ? 'MAINTENANT' : `${m}min`);
+        // V1.10.4-r11.0.10 — Badge cliquable : ouvre panneau droit Pipeline Live avec fiche contact.
+        // Resolution contact : 1) booking.contactId, 2) fallback match par nom (visitorName <-> contact.name) si contactId absent.
+        const ct = (() => {
+          if (nextRdv.contactId) {
+            const found = (contacts || []).find(c => c && c.id === nextRdv.contactId);
+            if (found) return found;
+          }
+          if (nextRdv.visitorName) {
+            const vn = nextRdv.visitorName.trim().toLowerCase();
+            const found = (contacts || []).find(c => c && (c.name || '').trim().toLowerCase() === vn);
+            if (found) return found;
+          }
+          return null;
+        })();
+        const openFiche = () => {
+          if (ct && typeof setPipelineRightContact === 'function') setPipelineRightContact(ct);
+          if (typeof setPhoneRightTab === 'function') setPhoneRightTab('fiche');
+          if (typeof setPhoneSubTab === 'function') setPhoneSubTab('pipeline');
+          if (typeof setPhoneRightCollapsed === 'function') setPhoneRightCollapsed(false);
+          if (typeof setPortalTab === 'function') setPortalTab('phone');
+        };
         return (
           <div
-            title={`Prochain RDV : ${nextRdv.time} — ${nextRdv.visitorName}`}
+            onClick={openFiche}
+            title={ct ? `Ouvrir la fiche : ${nextRdv.visitorName}` : `Prochain RDV : ${nextRdv.time} — ${nextRdv.visitorName}`}
             style={{
               display: 'flex',
               alignItems: 'center',
@@ -341,10 +367,13 @@ const SmartFooterBar = ({ navCollapsed = false }) => {
               borderRadius: 10,
               background: color + '12',
               border: '1px solid ' + color + '25',
-              cursor: 'default',
+              cursor: 'pointer',
               minWidth: 0,
               maxWidth: 260,
+              transition: 'all .15s',
             }}
+            onMouseEnter={e => { e.currentTarget.style.background = color + '22'; e.currentTarget.style.borderColor = color + '55'; e.currentTarget.style.transform = 'translateY(-1px)'; }}
+            onMouseLeave={e => { e.currentTarget.style.background = color + '12'; e.currentTarget.style.borderColor = color + '25'; e.currentTarget.style.transform = 'translateY(0)'; }}
           >
             <I n="bell" s={13} style={{ color, flexShrink: 0 }} />
             <span style={{ fontSize: 13, fontWeight: 800, color, lineHeight: 1, flexShrink: 0 }}>{nextRdv.time}</span>

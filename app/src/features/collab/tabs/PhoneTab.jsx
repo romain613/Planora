@@ -232,8 +232,9 @@ const PhoneTab = () => {
         const myBookings = (bookings||[]).filter(b=>b.collaboratorId===collab.id&&b.status!=='cancelled');
         const myGCal = (googleEventsProp||[]).filter(ge=>ge.collaboratorId===collab.id);
         const allEvents = [
-          ...myBookings.map(b=>{const _ct=b.contactId?(contacts||[]).find(c=>c.id===b.contactId):null;return{title:_ct?.name||b.visitorName||b.service||'RDV',time:new Date(b.date+(b.time?'T'+b.time:'')),src:'booking'};}),
-          ...myGCal.map(ge=>({title:ge.summary||ge.title||'Evenement',time:new Date(ge.start||ge.startDate),src:'google'}))
+          // V1.10.4-r11.0.11 — on garde le contact (_ct) et la visitorName pour permettre au badge d'ouvrir la fiche au clic
+          ...myBookings.map(b=>{const _ct=b.contactId?(contacts||[]).find(c=>c.id===b.contactId):null;return{title:_ct?.name||b.visitorName||b.service||'RDV',time:new Date(b.date+(b.time?'T'+b.time:'')),src:'booking',contact:_ct||null,visitorName:b.visitorName||''};}),
+          ...myGCal.map(ge=>({title:ge.summary||ge.title||'Evenement',time:new Date(ge.start||ge.startDate),src:'google',contact:null,visitorName:''}))
         ].filter(e=>e.time.getTime()>nowMs).sort((a,b)=>a.time-b.time);
         const nextRdv = allEvents[0];
         let rdvCountdown = '';
@@ -342,16 +343,41 @@ const PhoneTab = () => {
               {goalMet && hasReward && <div style={{position:'absolute',top:-4,right:-4,width:14,height:14,borderRadius:7,background:'#F59E0B',display:'flex',alignItems:'center',justifyContent:'center',fontSize:8,boxShadow:'0 1px 4px #F59E0B40'}}>🎁</div>}
             </div>;
           })()}
-          {/* Prochain RDV */}
-          {nextRdv && (
-            <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:5,padding:'5px 10px',borderRadius:10,background:'#0EA5E90A',border:'1px solid #0EA5E918'}}>
-              <I n={nextRdv.src==='google'?'calendar':'calendar-check'} s={12} style={{color:'#0EA5E9'}}/>
-              <div style={{textAlign:'center'}}>
-                <div style={{fontSize:10,fontWeight:700,color:'#0EA5E9',lineHeight:1.2}}>{rdvTime} {rdvIsToday?'Aujourd\'hui':'· '+rdvDateStr} — {rdvTitle}</div>
-                <div style={{fontSize:9,color:'#0EA5E9',fontWeight:600,lineHeight:1,marginTop:2}}>{rdvCountdown}{nextRdv.src==='google'?' (GCal)':''}</div>
+          {/* Prochain RDV — V1.10.4-r11.0.11 : badge cliquable → ouvre panneau droit Pipeline Live avec fiche contact.
+              Fallback resolution si pas de contact direct (event Google sans contact lié) : match par nom (visitorName <-> contact.name). */}
+          {nextRdv && (()=>{
+            const _ctTarget = nextRdv.contact || (()=>{
+              const vn = (nextRdv.visitorName||nextRdv.title||'').trim().toLowerCase();
+              if(!vn) return null;
+              return (contacts||[]).find(c=>c&&(c.name||'').trim().toLowerCase()===vn) || null;
+            })();
+            const _clickable = !!_ctTarget;
+            const _openFiche = ()=>{
+              if(!_ctTarget) return;
+              setPipelineRightContact(_ctTarget);
+              if(typeof setPhoneRightTab==='function') setPhoneRightTab('fiche');
+              if(typeof setPhoneSubTab==='function') setPhoneSubTab('pipeline');
+              if(phoneRightCollapsed && typeof setPhoneRightCollapsed==='function'){
+                setPhoneRightCollapsed(false);
+                try{localStorage.setItem('c360-phone-right-collapsed-'+collab.id,'0');}catch{}
+              }
+            };
+            return (
+              <div
+                onClick={_clickable?_openFiche:undefined}
+                title={_clickable?'Ouvrir la fiche '+(rdvTitle||''):'Prochain RDV — '+(rdvTitle||'')}
+                style={{display:'flex',alignItems:'center',justifyContent:'center',gap:5,padding:'5px 10px',borderRadius:10,background:'#0EA5E90A',border:'1px solid #0EA5E918',cursor:_clickable?'pointer':'default',transition:'all .15s'}}
+                onMouseEnter={_clickable?(e=>{e.currentTarget.style.background='#0EA5E918';e.currentTarget.style.borderColor='#0EA5E940';e.currentTarget.style.transform='translateY(-1px)';}):undefined}
+                onMouseLeave={_clickable?(e=>{e.currentTarget.style.background='#0EA5E90A';e.currentTarget.style.borderColor='#0EA5E918';e.currentTarget.style.transform='translateY(0)';}):undefined}
+              >
+                <I n={nextRdv.src==='google'?'calendar':'calendar-check'} s={12} style={{color:'#0EA5E9'}}/>
+                <div style={{textAlign:'center'}}>
+                  <div style={{fontSize:10,fontWeight:700,color:'#0EA5E9',lineHeight:1.2}}>{rdvTime} {rdvIsToday?'Aujourd\'hui':'· '+rdvDateStr} — {rdvTitle}</div>
+                  <div style={{fontSize:9,color:'#0EA5E9',fontWeight:600,lineHeight:1,marginTop:2}}>{rdvCountdown}{nextRdv.src==='google'?' (GCal)':''}</div>
+                </div>
               </div>
-            </div>
-          )}
+            );
+          })()}
         </>}{/* fin _statsOpen */}
         </>;
       })()}
@@ -1681,12 +1707,11 @@ if (n === ph) matched.set(c.id, c);
   <I n="x" s={14}/>
 </div>
 </div>
-{/* Quick actions — V1.10.4-r11.0.9 UX : padding/fontSize/icon legerement enrichis pour lisibilite */}
+{/* Quick actions — V1.10.4-r11.0.10 UX : bouton "Pipeline" supprime (doublon contextuel — panel deja dans le pipeline). Logique pipeline preservee partout ailleurs. */}
 <div style={{display:'flex',gap:5,marginTop:10}}>
 {[
   {icon:'phone',color:'#22C55E',tip:'Appeler',action:()=>startPhoneCall(ctNum||ct.phone||ct.mobile,ct.id)},
   {icon:'message-square',color:'#0EA5E9',tip:'SMS',action:()=>{prefillKeypad(ctNum||ct.phone||ct.mobile||'', { skipNav: true });setPhoneRightTab('sms');}},
-  {icon:'layout-grid',color:'#7C3AED',tip:'Pipeline',action:()=>{setPhoneSubTab('pipeline');}},
   {icon:'users',color:'#8B5CF6',tip:'Transférer',action:()=>{setV7TransferModal({contact:ct,fromPhonePipeline:true});setV7TransferTarget('');}},
   {icon:'calendar-plus',color:'#F59E0B',tip:'RDV',action:()=>{if(ct.id){setPhoneScheduleForm({contactId:ct.id,contactName:ct.name,number:ct.phone||ctNum||'',date:new Date(Date.now()+86400000).toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:getCollaboratorDefaultCalendarId(calendars,collab.id),_bookingMode:true});setPhoneShowScheduleModal(true);}else{showNotif('Creez le contact avant de programmer un RDV','info');}}},
 ].map((a,i)=>(
