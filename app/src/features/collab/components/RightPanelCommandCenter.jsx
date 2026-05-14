@@ -20,12 +20,16 @@ import { I } from "../../../shared/ui";
 import { useCollabContext } from "../context/CollabContext";
 import { _T } from "../../../shared/state/tabState";
 import { api } from "../../../shared/services/api";
+import { useCollabActivity } from "../hooks/useCollabActivity"; // V1.10.4-r11.0.24 sparkline data
+import EnergySparkline from "./EnergySparkline"; // V1.10.4-r11.0.24 sparkline 24h SVG
 
 const RightPanelCommandCenter = () => {
   // V1.10.4-r11.0.23.c — expand/collapse pour "Prochains RDV" (4 par défaut → tous)
   const [nextRdvExpanded, setNextRdvExpanded] = useState(false);
   // V1.10.4-r11.0.23.d — expand/collapse pour "RDV passés à statuer" (3 par défaut → tous)
   const [pastRdvExpanded, setPastRdvExpanded] = useState(false);
+  // V1.10.4-r11.0.24 — sparkline activite 24h (memoized, partage source unique)
+  const activity = useCollabActivity();
   const ctx = useCollabContext() || {};
   const {
     contacts,
@@ -291,6 +295,13 @@ const RightPanelCommandCenter = () => {
           {data.todayContracts > 0 && <span><strong style={{ color: "#22C55E" }}>{data.todayContracts}</strong> contrats ✓</span>}
           {data.todayCalls + data.todaySmsOut + data.todayBkCreated + data.todayContracts === 0 && <span style={{ fontStyle: "italic" }}>Démarre la journée 🚀</span>}
         </div>
+        {/* V1.10.4-r11.0.24 — Sparkline activite 24h sous la jauge (ultra-discret, hover tooltip) */}
+        <EnergySparkline
+          bins={activity.bins}
+          maxBin={activity.maxBin}
+          currentHour={activity.currentHour}
+          color={data.energyColor}
+        />
       </div>
 
       {/* 2. Notifications LIVE */}
