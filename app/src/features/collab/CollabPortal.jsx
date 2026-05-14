@@ -130,8 +130,21 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const [rescheduleData, setRescheduleData] = useState(null);
   const [bookingDetailTab, setBookingDetailTab] = useState('rdv'); // 'rdv' | 'contact' | 'notes'
   const [bookingContactNotes, setBookingContactNotes] = useState('');
-  const [viewMode, _setViewMode] = useState(() => { try { return localStorage.getItem("c360-viewMode") || "week"; } catch { return "week"; } });
-  const setViewMode = (v) => { const val = typeof v === "function" ? v(viewMode) : v; _setViewMode(val); localStorage.setItem("c360-viewMode", val); };
+  // V1.10.4-r11.0.22.c — One-time reset to "week" default (UX MH 2026-05-14).
+  // Apres reset, la memoire normale s'applique : la prochaine selection est persistee.
+  const [viewMode, _setViewMode] = useState(() => {
+    try {
+      const RESET_FLAG = "c360-viewMode-reset-v1110-22c";
+      const resetDone = localStorage.getItem(RESET_FLAG);
+      if (!resetDone) {
+        localStorage.setItem("c360-viewMode", "week");
+        localStorage.setItem(RESET_FLAG, "1");
+        return "week";
+      }
+      return localStorage.getItem("c360-viewMode") || "week";
+    } catch { return "week"; }
+  });
+  const setViewMode = (v) => { const val = typeof v === "function" ? v(viewMode) : v; _setViewMode(val); try { localStorage.setItem("c360-viewMode", val); } catch {} };
   const [selectedDay, setSelectedDay] = useState(null);
   const agendaScrolledRef = useRef(false);
   const [monthOffset, setMonthOffset] = useState(0);
