@@ -9,6 +9,7 @@ import { sendNotification, buildNotifyPayload } from "../../../shared/utils/noti
 // V3.x.13 — Default calendar must match active collaborator, not first company calendar
 import { getCollaboratorDefaultCalendarId } from "../../../shared/utils/calendars";
 import { _T } from "../../../shared/state/tabState";
+import { pushAction as _undoPush } from "../../../shared/state/undoStack"; // V1.10.4-r11.0.20 Phase B Agenda
 import { api } from "../../../shared/services/api";
 import { useCollabContext } from "../context/CollabContext";
 
@@ -114,6 +115,20 @@ const AgendaTab = () => {
     // créait un flicker (ancien créneau persistant). Fix : forcer setBookings ici avec date+time
     // mis à jour AVANT le helper, pour garantir un déplacement visuel instantané et stable.
     // Le rollback est géré par updateBooking (CollabPortal) si le PUT échoue.
+    // V1.10.4-r11.0.20 Phase B Agenda — Snapshot from-date/time AVANT mutation pour undo.
+    const _fromDate = _bk.date;
+    const _fromTime = _bk.time;
+    const _bkLabelName = (_bk.contactName || _bk.visitorName || 'RDV').toString().trim();
+    const _moveBookingTo = (toDate, toTime) => {
+      if (typeof setBookings === 'function') {
+        setBookings(prev => (prev || []).map(b => b && b.id === bkId
+          ? { ...b, date: toDate, time: toTime }
+          : b));
+      }
+      if (typeof updateBooking === 'function') {
+        updateBooking(bkId, { date: toDate, time: toTime });
+      }
+    };
     if (typeof setBookings === 'function') {
       setBookings(prev => (prev || []).map(b => b && b.id === bkId
         ? { ...b, date: targetDate, time: targetTime }
@@ -123,6 +138,21 @@ const AgendaTab = () => {
       updateBooking(bkId, { date: targetDate, time: targetTime });
       if (typeof showNotif === 'function') showNotif(`RDV déplacé au ${targetDate} ${targetTime}`, 'success');
     }
+    // V1.10.4-r11.0.20 Phase B Agenda SAFE — Push action undo apres le drag.
+    // Scope strict : drag pur dans grille agenda (date+time only). Aucun envoi notification
+    // automatique dans ce handler -> safe pour undo/redo (pas d'emails clients dupliques).
+    // Modal reschedule (CollabPortal) avec sendNotification('rescheduled') reste non-undoable.
+    try {
+      _undoPush({
+        type: 'agenda.booking.move',
+        entityId: bkId,
+        label: `Agenda ${_bkLabelName} : ${_fromDate} ${_fromTime} → ${targetDate} ${targetTime}`,
+        apply: () => _moveBookingTo(targetDate, targetTime),
+        revert: () => _moveBookingTo(_fromDate, _fromTime),
+        _prevSnapshot: { date: _fromDate, time: _fromTime },
+        _nextUpdates: { date: targetDate, time: targetTime },
+      });
+    } catch (e) { /* eslint-disable-next-line */ console.warn('[AgendaTab _handleBkDrop] undoStack push failed', e); }
     // Phase3 refresh fix — Refetch /api/init après ~400ms pour aligner googleEvents + outlookEvents
     // avec le cache backend (mis à jour côté services/*Calendar.js après PATCH Graph). Délai laisse
     // le PUT booking et le PATCH externe terminer. Silencieux (pas de toast). Try/catch non-bloquant.
