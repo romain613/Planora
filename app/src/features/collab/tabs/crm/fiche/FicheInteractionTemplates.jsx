@@ -1,29 +1,34 @@
-// FicheInteractionTemplates — V1.10.4-r11.0.15
-// Aperçu compact unifié des interaction-templates (Scripts / Formulaires / Checklists)
+// FicheInteractionTemplates — V1.10.4-r11.0.15.c
+// Aperçu unifié + utilisation inline des interaction-templates (Scripts / Formulaires / Checklists)
 // applicables à un contact, partagé entre :
 //   - PhoneTab.jsx — onglet Info panel droit Pipeline Live
 //   - BookingDetailModal — onglet Contact
 //   - FicheContactModal — section Notes
 //
+// V1.10.4-r11.0.15.c : passage de click→redirect-hub à accordion+ResponseFiller inline.
+// L'utilisateur peut désormais répondre/cocher/suivre DIRECTEMENT depuis la fiche Info,
+// sans quitter la vue. Le hub Scripts top-bar reste pour configuration/création/gestion.
+//
 // Règle de visibilité (Phase 1 frontend only, sans backend ciblage) :
-//   template.active === 1
+//   template.active (truthy : 1/true/"1"/undefined⇒actif par défaut)
 //   ET (
-//     template.showByDefault === 1
-//     OU responseExistsForContact (le contact a déjà une interaction-response)
+//     template.showByDefault truthy (camelCase ou snake_case)
+//     OU responseExistsForContact
 //   )
 //
 // Tri : showByDefault DESC, puis updatedAt DESC
 // Limite : max=3 par défaut, configurable via prop
 //
-// Cache TTL : 60s via _T.itpCache (templates) + _T.itpRespCache (responses par contact)
-// Invalidation manuelle via _T.itpCache=null déclenchable depuis le hub Scripts top-bar
-// (wrapper pushNotification dans PhoneTab L7240).
+// Cache TTL : 60s via _T.itpCache (templates) + _T.itpRespCache (responses par contact).
+// Invalidation auto après autosave/complete pour rafraîchir badge.
 
 import React, { useState } from "react";
 import { T } from "../../../../../theme";
-import { I } from "../../../../../shared/ui";
+import { I, Btn, Modal } from "../../../../../shared/ui";
 import { api } from "../../../../../shared/services/api";
 import { _T } from "../../../../../shared/state/tabState";
+import { useCollabContext } from "../../../context/CollabContext";
+import { ResponseFiller } from "../../../../interactions/InteractionTemplatesPanel";
 
 const CACHE_TTL_MS = 60_000;
 
@@ -83,8 +88,18 @@ function fetchResponsesIfStale(contactId, onLoaded) {
   return _T.itpRespCache[contactId] || [];
 }
 
+// Parse content_json en content si nécessaire (backend peut renvoyer l'un ou l'autre).
+function _normalizeContent(t) {
+  if (t.content && typeof t.content === 'object') return t.content;
+  if (t.content_json) {
+    try { return typeof t.content_json === 'string' ? JSON.parse(t.content_json) : t.content_json; } catch { return {}; }
+  }
+  return {};
+}
+
 const FicheInteractionTemplates = ({
   contact,
+  // Props legacy conservés pour compatibilité — non utilisés depuis r11.0.15.c (plus de redirect hub)
   setPhoneSubTab,
   setPortalTab,
   setPipelineRightContact,
@@ -95,8 +110,12 @@ const FicheInteractionTemplates = ({
   max = 3,
   title = 'Scripts · Checklists · Formulaires',
 }) => {
+  const { collab, showNotif } = useCollabContext();
   const [, setTick] = useState(0);
   const _rerender = () => setTick(t => t + 1);
+  // V1.10.4-r11.0.15.c — accordéon par template (id => bool override). Sans override,
+  // le défaut est : ouvert pour notStarted/inProgress, fermé pour completed.
+  const [expandedOverride, setExpandedOverride] = useState({});
 
   const templates = fetchTemplatesIfStale(_rerender);
   const responses = contact?.id ? fetchResponsesIfStale(contact.id, _rerender) : [];
@@ -108,17 +127,14 @@ const FicheInteractionTemplates = ({
     if (tid) respByTpl.set(tid, r);
   });
 
-  // V1.10.4-r11.0.15.b — Filtre ROBUSTE aux variations de format :
-  // - active : 1 / true / "1" / absent (undefined => actif par defaut, coherent schema DEFAULT 1)
-  // - showByDefault : 1 / true / "1" / camelCase OU snake_case (show_by_default)
+  // Filtre robuste aux variations de format (r11.0.15.b)
   const _truthy = (v) => v === 1 || v === true || v === '1';
   const _isActive = (t) => {
-    if (t.active === undefined || t.active === null) return true; // absent => actif
+    if (t.active === undefined || t.active === null) return true;
     return _truthy(t.active);
   };
   const _isShowByDefault = (t) => _truthy(t.showByDefault) || _truthy(t.show_by_default);
 
-  // Filtre + tri + limite
   const items = (templates || [])
     .filter(t => {
       if (!t || !_isActive(t)) return false;
@@ -128,7 +144,7 @@ const FicheInteractionTemplates = ({
       const r = respByTpl.get(t.id);
       let status = 'notStarted';
       if (r) status = (r.status === 'completed') ? 'completed' : 'inProgress';
-      return { ...t, _status: status, _hasResponse: !!r, _showByDefault: _isShowByDefault(t) };
+      return { ...t, _status: status, _hasResponse: !!r, _showByDefault: _isShowByDefault(t), _response: r || null };
     })
     .sort((a, b) => {
       const ad = a._showByDefault ? 1 : 0;
@@ -140,18 +156,32 @@ const FicheInteractionTemplates = ({
 
   if (!items.length) return null;
 
-  // Navigation vers le hub Scripts top-bar avec contexte contact si possible
-  const openHub = () => {
-    // 1. Si on est dans une modal (BookingDetailModal ou FicheContactModal), la fermer
-    if (typeof setSelectedBooking === 'function') setSelectedBooking(null);
-    if (typeof setBookingDetailTab === 'function') setBookingDetailTab('rdv');
-    if (typeof setSelectedCrmContact === 'function') setSelectedCrmContact(null);
-    if (typeof setCollabFicheTab === 'function') setCollabFicheTab('notes');
-    // 2. Forcer le contact ciblé pour le hub (banner "POUR CE CONTACT")
-    if (typeof setPipelineRightContact === 'function' && contact?.id) setPipelineRightContact(contact);
-    // 3. Naviguer vers Pipeline Live + hub Scripts
-    if (typeof setPortalTab === 'function') setPortalTab('phone');
-    if (typeof setPhoneSubTab === 'function') setPhoneSubTab('scripts');
+  const isOpen = (tplId, status) => {
+    if (Object.prototype.hasOwnProperty.call(expandedOverride, tplId)) return expandedOverride[tplId];
+    return status !== 'completed'; // ouvert par défaut sauf complété
+  };
+  const toggle = (tplId, status) => {
+    const cur = isOpen(tplId, status);
+    setExpandedOverride(prev => ({ ...prev, [tplId]: !cur }));
+  };
+
+  // Invalide cache responses-by-contact après autosave/complete pour refresh badge.
+  const invalidateRespCache = () => {
+    if (_T.itpRespCacheAt && contact?.id) {
+      _T.itpRespCacheAt[contact.id] = 0;
+    }
+  };
+  const handleSaved = () => {
+    invalidateRespCache();
+    _rerender();
+  };
+  const handleCompleted = () => {
+    invalidateRespCache();
+    _rerender();
+  };
+  // pushNotification wrapper utilise par ResponseFiller inline.
+  const _pushNotif = (titleStr, detail, type) => {
+    if (typeof showNotif === 'function') showNotif(detail || titleStr, type === 'error' ? 'danger' : type);
   };
 
   return (
@@ -163,20 +193,45 @@ const FicheInteractionTemplates = ({
       {items.map(t => {
         const meta = TYPE_META[t.type] || TYPE_META.script;
         const status = STATUS_META[t._status] || STATUS_META.notStarted;
+        const open = isOpen(t.id, t._status);
         return (
           <div
             key={t.id}
-            onClick={openHub}
-            title={'Ouvrir dans Scripts — ' + (t.title || '')}
-            style={{display:'flex',alignItems:'center',gap:6,padding:'6px 8px',borderRadius:8,marginBottom:4,background:T.bg,border:'1px solid '+T.border,cursor:'pointer',transition:'all .15s'}}
-            onMouseEnter={e=>{e.currentTarget.style.borderColor = meta.color + '55'; e.currentTarget.style.background = meta.color + '08';}}
-            onMouseLeave={e=>{e.currentTarget.style.borderColor = T.border; e.currentTarget.style.background = T.bg;}}
+            style={{marginBottom:6,borderRadius:8,border:'1px solid '+T.border,overflow:'hidden',background:T.bg,transition:'border-color .15s'}}
           >
-            <I n={meta.icon} s={11} style={{color:meta.color,flexShrink:0}}/>
-            <div style={{flex:1,minWidth:0,fontSize:11,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title || 'Sans titre'}</div>
-            {t._showByDefault && <span title="Global — affiché sur toutes les fiches" style={{fontSize:7,fontWeight:700,padding:'1px 5px',borderRadius:3,background:'#64748B12',color:'#64748B',border:'1px solid #64748B25',flexShrink:0,letterSpacing:0.3}}>GLOBAL</span>}
-            {t._hasResponse && <span title="Réponse existante pour ce contact" style={{fontSize:7,fontWeight:700,padding:'1px 5px',borderRadius:3,background:meta.color+'15',color:meta.color,flexShrink:0,letterSpacing:0.3}}>REPONSE</span>}
-            <span style={{fontSize:8,fontWeight:700,padding:'2px 6px',borderRadius:4,background:status.bg,color:status.color,flexShrink:0}}>{status.label}</span>
+            {/* Header accordéon — toujours visible */}
+            <div
+              onClick={() => toggle(t.id, t._status)}
+              title={open ? 'Replier' : 'Déplier'}
+              style={{display:'flex',alignItems:'center',gap:6,padding:'7px 9px',cursor:'pointer',transition:'all .12s'}}
+              onMouseEnter={e=>{ e.currentTarget.style.background = meta.color + '08'; }}
+              onMouseLeave={e=>{ e.currentTarget.style.background = 'transparent'; }}
+            >
+              <I n={open ? 'chevron-down' : 'chevron-right'} s={10} style={{color:T.text3,flexShrink:0}}/>
+              <I n={meta.icon} s={11} style={{color:meta.color,flexShrink:0}}/>
+              <div style={{flex:1,minWidth:0,fontSize:11,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title || 'Sans titre'}</div>
+              {t._showByDefault && <span title="Global — affiché sur toutes les fiches" style={{fontSize:7,fontWeight:700,padding:'1px 5px',borderRadius:3,background:'#64748B12',color:'#64748B',border:'1px solid #64748B25',flexShrink:0,letterSpacing:0.3}}>GLOBAL</span>}
+              {t._hasResponse && <span title="Réponse existante pour ce contact" style={{fontSize:7,fontWeight:700,padding:'1px 5px',borderRadius:3,background:meta.color+'15',color:meta.color,flexShrink:0,letterSpacing:0.3}}>REPONSE</span>}
+              <span style={{fontSize:8,fontWeight:700,padding:'2px 6px',borderRadius:4,background:status.bg,color:status.color,flexShrink:0}}>{status.label}</span>
+            </div>
+
+            {/* Contenu accordéon — render ResponseFiller inline si déplié */}
+            {open && contact?.id && (
+              <div style={{borderTop:'1px solid '+T.border, padding:'8px 10px', background:T.card}}>
+                <ResponseFiller
+                  inline={true}
+                  T={T} I={I} Btn={Btn} Modal={Modal}
+                  template={{ ...t, content: _normalizeContent(t) }}
+                  response={t._response}
+                  contactId={contact.id}
+                  collaboratorId={collab?.id || ''}
+                  onSaved={handleSaved}
+                  onCompleted={handleCompleted}
+                  onClose={() => toggle(t.id, t._status)}
+                  pushNotification={_pushNotif}
+                />
+              </div>
+            )}
           </div>
         );
       })}

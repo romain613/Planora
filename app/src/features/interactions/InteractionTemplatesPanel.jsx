@@ -264,7 +264,10 @@ function ResponseSummary({ T, template, answers }) {
 }
 
 // ─── ResponseFiller — saisie réponse avec autosave 800ms ──────────────
-function ResponseFiller({ T, I, Btn, template, response, contactId, onSaved, onClose, onCompleted, pushNotification }) {
+// V1.10.4-r11.0.15.c — Export ResponseFiller pour reutilisation inline dans FicheInteractionTemplates.
+// Le prop `inline=true` masque le header interne (titre + statut + close X) — utilise quand le parent
+// fournit deja un header (accordeon dans la fiche Info). onSaved fire apres chaque autosave reussi.
+export function ResponseFiller({ T, I, Btn, template, response, contactId, onSaved, onClose, onCompleted, pushNotification, inline = false }) {
   const [answers, setAnswers] = useState(() => response?.answers || {});
   const [responseId, setResponseId] = useState(response?.id || null);
   const [saving, setSaving] = useState(false);
@@ -289,7 +292,12 @@ function ResponseFiller({ T, I, Btn, template, response, contactId, onSaved, onC
       setSaving(true);
       try {
         const res = await api(`/api/interaction-responses/${responseId}`, { method: 'PUT', body: { answers } });
-        if (!res?.error) setSavedAt(new Date());
+        if (!res?.error) {
+          setSavedAt(new Date());
+          // V1.10.4-r11.0.15.c — fire onSaved pour permettre au parent (FicheInteractionTemplates)
+          // d'invalider son cache responses-by-contact et refresh badge.
+          if (typeof onSaved === 'function') onSaved({ responseId, answers });
+        }
       } catch {} finally { setSaving(false); }
     }, 800);
     return () => debounceRef.current && clearTimeout(debounceRef.current);
@@ -316,13 +324,21 @@ function ResponseFiller({ T, I, Btn, template, response, contactId, onSaved, onC
 
   return (
     <div style={{display:'flex',flexDirection:'column',gap:14,fontSize:13}}>
-      <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 14px',background:T.bg,borderRadius:10,border:`1px solid ${T.border}`}}>
-        <div>
-          <div style={{fontSize:14,fontWeight:700,color:T.text}}>{template.title}</div>
-          <div style={{fontSize:11,color:T.text3,marginTop:2}}>{TYPE_LABELS[template.type]} · {status === 'completed' ? '✓ terminé' : 'en cours'} {saving && '· saving…'} {savedAt && !saving && '· enregistré'}</div>
+      {/* V1.10.4-r11.0.15.c — header masque si inline=true (parent fournit deja titre+statut) */}
+      {!inline && (
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',padding:'12px 14px',background:T.bg,borderRadius:10,border:`1px solid ${T.border}`}}>
+          <div>
+            <div style={{fontSize:14,fontWeight:700,color:T.text}}>{template.title}</div>
+            <div style={{fontSize:11,color:T.text3,marginTop:2}}>{TYPE_LABELS[template.type]} · {status === 'completed' ? '✓ terminé' : 'en cours'} {saving && '· saving…'} {savedAt && !saving && '· enregistré'}</div>
+          </div>
+          <Btn onClick={onClose} style={{fontSize:12}}><I n="x" s={13}/></Btn>
         </div>
-        <Btn onClick={onClose} style={{fontSize:12}}><I n="x" s={13}/></Btn>
-      </div>
+      )}
+      {inline && (saving || savedAt) && (
+        <div style={{fontSize:10,color:T.text3,textAlign:'right',padding:'0 4px'}}>
+          {saving ? '· saving…' : (savedAt ? '· enregistré' : '')}
+        </div>
+      )}
 
       <ResponseSummary T={T} template={template} answers={answers}/>
 
