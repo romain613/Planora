@@ -7215,8 +7215,8 @@ return (
   <I n="file-text" s={20} style={{color:'#fff'}}/>
 </div>
 <div>
-  <div style={{fontSize:18,fontWeight:800,color:'#fff'}}>Scripts d'appel</div>
-  <div style={{fontSize:12,color:'#ffffffaa'}}>{(typeof phoneCallScripts!=='undefined'?phoneCallScripts:{}).length} scripts disponibles</div>
+  <div style={{fontSize:18,fontWeight:800,color:'#fff'}}>Scripts · Formulaires · Checklists</div>
+  <div style={{fontSize:12,color:'#ffffffaa'}}>V1.10.4-r11.0.14 — centre de gestion complet</div>
 </div>
 </div>
 <div onClick={()=>setPhoneSubTab('pipeline')} style={{width:36,height:36,borderRadius:10,background:'rgba(255,255,255,0.15)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',transition:'background .15s'}} onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.3)'} onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.15)'}>
@@ -7226,6 +7226,56 @@ return (
 
       {/* Body */}
       <div style={{flex:1,overflow:'auto',padding:24}}>
+
+{/* V1.10.4-r11.0.14 — Section 1 : Modeles d'interaction (Scripts/Formulaires/Checklists unifies).
+    Integre InteractionTemplatesPanel comme section principale du module Scripts top-bar.
+    Si pipelineRightContact ouvert -> contact passe au panel pour permettre filling responses.
+    Sinon -> gestion templates seule (creation/edition libre, fill desactive cote panel L470).
+    pushNotification wrapper invalide _T.itpCache pour rafraichir l'apercu Info r11.0.13. */}
+{(()=>{
+  const _ctOpen = (typeof pipelineRightContact !== 'undefined' ? pipelineRightContact : null);
+  const _callId = (typeof phoneActiveCall !== 'undefined' && phoneActiveCall) ? (phoneActiveCall.id || '') : '';
+  const _pushNotif = (title, detail, type) => {
+    // Invalidation cache Info preview r11.0.13 a chaque action InteractionTemplatesPanel
+    if (typeof _T !== 'undefined') { _T.itpCache = null; }
+    if (typeof showNotif === 'function') showNotif(detail || title, type === 'error' ? 'danger' : type);
+  };
+  return (
+    <div style={{marginBottom:24}}>
+      {/* Banner contexte si contact ouvert */}
+      {_ctOpen && _ctOpen.id && (
+        <div style={{padding:'10px 14px',borderRadius:10,background:'linear-gradient(135deg,#7C3AED08,#2563EB06)',border:'1px solid #7C3AED25',marginBottom:14,display:'flex',alignItems:'center',gap:10}}>
+          <div style={{width:32,height:32,borderRadius:10,background:'#7C3AED18',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>
+            <I n="user" s={14} style={{color:'#7C3AED'}}/>
+          </div>
+          <div style={{flex:1}}>
+            <div style={{fontSize:11,fontWeight:700,color:'#7C3AED',letterSpacing:0.3}}>POUR CE CONTACT</div>
+            <div style={{fontSize:13,fontWeight:700,color:T.text}}>{_ctOpen.name || 'Contact'}</div>
+            <div style={{fontSize:10,color:T.text3}}>Modeles, reponses et checklist appliques a cette fiche</div>
+          </div>
+        </div>
+      )}
+      <InteractionTemplatesPanel
+        T={T} I={I} Btn={Btn} Modal={Modal}
+        contact={_ctOpen}
+        callLogId={_callId}
+        role={collab?.role || ''}
+        collaboratorId={collab?.id || ''}
+        pushNotification={_pushNotif}
+      />
+    </div>
+  );
+})()}
+
+{/* V1.10.4-r11.0.14 — Section 2 : Scripts simples (legacy) demote en accordion ferme par defaut.
+    Logique phoneCallScripts + saveScriptsDual + bouton "Generer IA" + "Nouveau script" CONSERVES intacts.
+    Wrapping <details> visuel uniquement, aucune modif de logique. */}
+<details style={{marginTop:8,borderTop:'1px solid '+T.border,paddingTop:16}}>
+<summary style={{cursor:'pointer',fontSize:13,fontWeight:700,color:T.text2,padding:'8px 10px',background:T.bg,borderRadius:8,border:'1px solid '+T.border,userSelect:'none',listStyle:'revert',display:'flex',alignItems:'center',gap:8}}>
+  <I n="file-text" s={14} style={{color:T.text3}}/>
+  Scripts simples (legacy) — {(typeof phoneCallScripts!=='undefined'?phoneCallScripts:{}).length||0} script{((typeof phoneCallScripts!=='undefined'?phoneCallScripts:{}).length||0)>1?'s':''}
+</summary>
+<div style={{paddingTop:16}}>
 {/* Action buttons */}
 <div style={{display:'flex',justifyContent:'flex-end',gap:8,marginBottom:20}}>
 {collab.ai_copilot_enabled && (
@@ -7310,6 +7360,8 @@ return (
   <div style={{fontSize:13}}>Créez votre premier script d'appel ou générez-en un avec l'IA</div>
 </div>
 )}
+</div>
+</details>
       </div>
     </div>
   </div>
