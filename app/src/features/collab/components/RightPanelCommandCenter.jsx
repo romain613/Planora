@@ -88,14 +88,24 @@ const RightPanelCommandCenter = () => {
       .sort((a, b) => (b.lastActivityAt || "").localeCompare(a.lastActivityAt || ""))
       .slice(0, 3);
 
-    // 4. Dernieres pastilles touchees (r11.0.16 contactHistoryBack)
-    const hist = (_T.contactHistoryBack || []).slice(-3).reverse();
-    const recentBack = hist
+    // 4. Derniers contacts ouverts — V1.10.4-r11.0.23.d FIX ordre :
+    // Inclure _T.contactHistoryCurrent en TÊTE (dernier ouvert) + back reversed,
+    // filtrer entries kind='booking' (booking.id n'est pas un contactId), dedupe par id.
+    const _histCur = _T.contactHistoryCurrent;
+    const _histBack = _T.contactHistoryBack || [];
+    const _mergedHist = [];
+    if (_histCur && _histCur.kind !== "booking" && _histCur.id) _mergedHist.push(_histCur);
+    for (let i = _histBack.length - 1; i >= 0; i--) {
+      const h = _histBack[i];
+      if (!h || !h.id || h.kind === "booking") continue;
+      if (_mergedHist.some((x) => x.id === h.id)) continue; // dedupe
+      _mergedHist.push(h);
+    }
+    const recentBack = _mergedHist
+      .slice(0, 3)
       .map((h) => {
-        if (!h || !h.id) return null;
         const ct = all.find((c) => c.id === h.id);
         if (ct) return ct;
-        // Fallback minimal contact si pas trouve dans contacts (deja archive ou autre)
         return h.payload ? { id: h.id, name: h.payload.name || h.payload.visitorName || "Contact", pipeline_stage: h.payload.pipeline_stage || "nouveau" } : null;
       })
       .filter(Boolean);
@@ -252,7 +262,7 @@ const RightPanelCommandCenter = () => {
 
   // ── Render ──
   return (
-    <div style={{ flex: 1, overflow: "auto", padding: "10px 10px", display: "flex", flexDirection: "column" }}>
+    <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "10px 10px 20px", display: "flex", flexDirection: "column" }}>
 
       {/* 1. Jauge energie du jour */}
       <div style={sectionStyle}>
@@ -450,7 +460,7 @@ const RightPanelCommandCenter = () => {
       {/* 5. Prochains RDV — V1.10.4-r11.0.23.c : 4 par defaut, expand → tous avec scroll */}
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>
-          📅 Prochains RDV
+          📅 Prochains RDV {data.nextBookings.length > 0 && <span style={{ fontWeight: 600, color: T.text2 }}>({data.nextBookings.length})</span>}
           {data.nextBookings.length > 4 && (
             <span
               onClick={(e) => { e.stopPropagation(); setNextRdvExpanded((v) => !v); }}
@@ -576,7 +586,7 @@ const RightPanelCommandCenter = () => {
                   <div style={{ fontSize: 10, fontWeight: 700, color: "#F59E0B" }}>{fmtBkTime(b)}</div>
                   <div style={{ fontSize: 11, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
                 </div>
-                <span style={{ fontSize: 9, fontWeight: 700, color: "#F59E0B" }}>Ouvrir →</span>
+                <span style={{ fontSize: 9, fontWeight: 700, color: "#F59E0B" }}>Statuer →</span>
               </div>
             );
           })}
