@@ -42,7 +42,9 @@ function TemplateEditor({ T, I, Btn, Modal, mode, type, template, isAdmin, onClo
     scope: template.scope || 'personal',
     showByDefault: !!template.showByDefault,
     content: template.content || emptyContent(template.type || type),
-  } : { title: '', description: '', scope: 'personal', showByDefault: false, content: emptyContent(type) });
+  } : { title: '', description: '', scope: 'personal', showByDefault: true, content: emptyContent(type) });
+  // V1.10.4-r11.0.15.b — Defaut showByDefault=true a la creation (resout bug "template cree invisible
+  // sur les fiches"). Si l'utilisateur veut un template prive non-global, il decoche la checkbox.
   const [saving, setSaving] = useState(false);
   const effectiveType = template?.type || type;
 

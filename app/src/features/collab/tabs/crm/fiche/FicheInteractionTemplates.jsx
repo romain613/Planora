@@ -108,21 +108,31 @@ const FicheInteractionTemplates = ({
     if (tid) respByTpl.set(tid, r);
   });
 
+  // V1.10.4-r11.0.15.b — Filtre ROBUSTE aux variations de format :
+  // - active : 1 / true / "1" / absent (undefined => actif par defaut, coherent schema DEFAULT 1)
+  // - showByDefault : 1 / true / "1" / camelCase OU snake_case (show_by_default)
+  const _truthy = (v) => v === 1 || v === true || v === '1';
+  const _isActive = (t) => {
+    if (t.active === undefined || t.active === null) return true; // absent => actif
+    return _truthy(t.active);
+  };
+  const _isShowByDefault = (t) => _truthy(t.showByDefault) || _truthy(t.show_by_default);
+
   // Filtre + tri + limite
   const items = (templates || [])
     .filter(t => {
-      if (!t || t.active !== 1) return false;
-      return t.showByDefault === 1 || respByTpl.has(t.id);
+      if (!t || !_isActive(t)) return false;
+      return _isShowByDefault(t) || respByTpl.has(t.id);
     })
     .map(t => {
       const r = respByTpl.get(t.id);
       let status = 'notStarted';
       if (r) status = (r.status === 'completed') ? 'completed' : 'inProgress';
-      return { ...t, _status: status, _hasResponse: !!r };
+      return { ...t, _status: status, _hasResponse: !!r, _showByDefault: _isShowByDefault(t) };
     })
     .sort((a, b) => {
-      const ad = a.showByDefault ? 1 : 0;
-      const bd = b.showByDefault ? 1 : 0;
+      const ad = a._showByDefault ? 1 : 0;
+      const bd = b._showByDefault ? 1 : 0;
       if (ad !== bd) return bd - ad;
       return (b.updatedAt || '').localeCompare(a.updatedAt || '');
     })
@@ -164,7 +174,7 @@ const FicheInteractionTemplates = ({
           >
             <I n={meta.icon} s={11} style={{color:meta.color,flexShrink:0}}/>
             <div style={{flex:1,minWidth:0,fontSize:11,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title || 'Sans titre'}</div>
-            {t.showByDefault === 1 && <span title="Global — affiché sur toutes les fiches" style={{fontSize:7,fontWeight:700,padding:'1px 5px',borderRadius:3,background:'#64748B12',color:'#64748B',border:'1px solid #64748B25',flexShrink:0,letterSpacing:0.3}}>GLOBAL</span>}
+            {t._showByDefault && <span title="Global — affiché sur toutes les fiches" style={{fontSize:7,fontWeight:700,padding:'1px 5px',borderRadius:3,background:'#64748B12',color:'#64748B',border:'1px solid #64748B25',flexShrink:0,letterSpacing:0.3}}>GLOBAL</span>}
             {t._hasResponse && <span title="Réponse existante pour ce contact" style={{fontSize:7,fontWeight:700,padding:'1px 5px',borderRadius:3,background:meta.color+'15',color:meta.color,flexShrink:0,letterSpacing:0.3}}>REPONSE</span>}
             <span style={{fontSize:8,fontWeight:700,padding:'2px 6px',borderRadius:4,background:status.bg,color:status.color,flexShrink:0}}>{status.label}</span>
           </div>

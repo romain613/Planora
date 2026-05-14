@@ -7197,7 +7197,7 @@ return (
 </div>
 <div>
   <div style={{fontSize:18,fontWeight:800,color:'#fff'}}>Scripts · Formulaires · Checklists</div>
-  <div style={{fontSize:12,color:'#ffffffaa'}}>V1.10.4-r11.0.14 — centre de gestion complet</div>
+  <div style={{fontSize:12,color:'#ffffffaa'}}>V1.10.4-r11.0.15.b — centre de gestion complet</div>
 </div>
 </div>
 <div onClick={()=>setPhoneSubTab('pipeline')} style={{width:36,height:36,borderRadius:10,background:'rgba(255,255,255,0.15)',display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',transition:'background .15s'}} onMouseEnter={e=>e.currentTarget.style.background='rgba(255,255,255,0.3)'} onMouseLeave={e=>e.currentTarget.style.background='rgba(255,255,255,0.15)'}>
