@@ -4194,6 +4194,84 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     setCollabChatShowContactPicker(false);
   };
 
+  // V1.10.4-r11.0.16 — Historique navigation contact (back/forward type navigateur)
+  // Stockage dans _T (singleton tab-scoped, isolation par onglet navigateur).
+  // Entry: { kind: 'pipeline'|'crm'|'booking', id, payload }.
+  // Anti-doublon : push uniquement si {kind,id} differe du current.
+  // Wrap des 3 setters dans <CollabProvider value> ci-dessous pour intercepter
+  // les ouvertures venant des consommateurs context (PhoneTab/CrmTab/HomeTab/AgendaTab/modals).
+  const [_navHistoryTick, _setNavHistoryTick] = useState(0);
+  const _pushContactHistoryEntry = (kind, id, payload) => {
+    if (!id) return;
+    if (!_T.contactHistoryBack) _T.contactHistoryBack = [];
+    if (!_T.contactHistoryForward) _T.contactHistoryForward = [];
+    const cur = _T.contactHistoryCurrent;
+    if (cur && cur.kind === kind && cur.id === id) return; // anti-doublon
+    if (cur) {
+      _T.contactHistoryBack.push(cur);
+      if (_T.contactHistoryBack.length > 50) _T.contactHistoryBack.shift();
+    }
+    _T.contactHistoryForward = [];
+    _T.contactHistoryCurrent = { kind, id, payload };
+    _setNavHistoryTick(t => t + 1);
+  };
+  const _restoreContactEntry = (entry) => {
+    if (!entry) return;
+    if (entry.kind === 'pipeline') setPipelineRightContact(entry.payload);
+    else if (entry.kind === 'crm') setSelectedCrmContact(entry.payload);
+    else if (entry.kind === 'booking') setSelectedBooking(entry.payload);
+  };
+  const goContactBack = () => {
+    const back = _T.contactHistoryBack || [];
+    if (!back.length) return;
+    if (_T.contactHistoryCurrent) {
+      _T.contactHistoryForward = _T.contactHistoryForward || [];
+      _T.contactHistoryForward.push(_T.contactHistoryCurrent);
+    }
+    const prev = back.pop();
+    _T.contactHistoryCurrent = prev;
+    _restoreContactEntry(prev);
+    _setNavHistoryTick(t => t + 1);
+  };
+  const goContactForward = () => {
+    const fwd = _T.contactHistoryForward || [];
+    if (!fwd.length) return;
+    if (_T.contactHistoryCurrent) {
+      _T.contactHistoryBack = _T.contactHistoryBack || [];
+      _T.contactHistoryBack.push(_T.contactHistoryCurrent);
+    }
+    const next = fwd.pop();
+    _T.contactHistoryCurrent = next;
+    _restoreContactEntry(next);
+    _setNavHistoryTick(t => t + 1);
+  };
+  // Wrappers : pass-through pour null/function, push history pour objets avec id
+  const wrappedSetPipelineRightContact = (next) => {
+    if (next != null && typeof next !== 'function' && next.id) {
+      _pushContactHistoryEntry('pipeline', next.id, next);
+    }
+    setPipelineRightContact(next);
+  };
+  const wrappedSetSelectedCrmContact = (next) => {
+    if (next != null && typeof next !== 'function' && next.id) {
+      _pushContactHistoryEntry('crm', next.id, next);
+    }
+    setSelectedCrmContact(next);
+  };
+  const wrappedSetSelectedBooking = (next) => {
+    if (next != null && typeof next !== 'function' && next.id) {
+      _pushContactHistoryEntry('booking', next.id, next);
+    }
+    setSelectedBooking(next);
+  };
+  const contactHistoryCanBack = (_T.contactHistoryBack || []).length > 0;
+  const contactHistoryCanForward = (_T.contactHistoryForward || []).length > 0;
+  // Noms preview pour tooltips (← Contact precedent : X / → Contact suivant : Y)
+  const _navPrev = (_T.contactHistoryBack || [])[((_T.contactHistoryBack || []).length - 1)];
+  const _navNext = (_T.contactHistoryForward || [])[((_T.contactHistoryForward || []).length - 1)];
+  const contactHistoryPrevLabel = _navPrev?.payload?.name || _navPrev?.payload?.visitorName || '';
+  const contactHistoryNextLabel = _navNext?.payload?.name || _navNext?.payload?.visitorName || '';
+
   const portalNav = [
     { id:"home", icon:"layout-dashboard", label:"Aujourd'hui" },
     ...(((typeof voipConfigured!=='undefined'?voipConfigured:null) || collab.sms_enabled) ? [{ id:"phone", icon:"zap", label:"Pipeline Live" }] : []),
@@ -4553,6 +4631,17 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
 
       // ── AST audit 2026-04-23 (v7) — complete phantom elimination via @babel/parser ──
       CALL_TAGS, PHONE_MODULES, ZOOM_LEVELS, _defaultLiveConfig, addToBlacklist, autoDialerNext, basePreset, collabContactTags, collabPaginatedContacts, collabsProp, dayBookings, dayDate, exportICS, fetchCallTranscript, generateCallAnalysis, googleConnected, gridTheme, hours, isAdminView, isAvailableSlot, monthMonth, monthYear, myGoogleEvents, myOutlookEvents, outlookConnected, outlookLoading, perduMotifModal, postCallResultModal, removeFromBlacklist, removeScheduledCall, saveCallRecording, savePhoneCallRating, savePhoneCallTag, saveScriptsDual, setPerduMotifModal, setPostCallResultModal, startAutoDialer, syncGoogle, syncAllExternal, today, toggleModule, togglePhoneFav, weekDates,
+
+      // V1.10.4-r11.0.16 — Override des 3 setters fiche contact avec wrappers historique navigation.
+      // L'ordre object literal : later wins, donc les wrappers ci-dessous remplacent les setters
+      // shorthand declares plus haut (setPipelineRightContact L4563, setSelectedCrmContact L4567,
+      // setSelectedBooking L4539). Helpers + booleans exposes pour boutons UI ← →.
+      setPipelineRightContact: wrappedSetPipelineRightContact,
+      setSelectedCrmContact: wrappedSetSelectedCrmContact,
+      setSelectedBooking: wrappedSetSelectedBooking,
+      goContactBack, goContactForward,
+      contactHistoryCanBack, contactHistoryCanForward,
+      contactHistoryPrevLabel, contactHistoryNextLabel,
 
     }}>
     <div style={{ display:"flex", minHeight:"100vh", background:T.bg, fontFamily:"'Onest','Outfit',system-ui,sans-serif", color:T.text }}>

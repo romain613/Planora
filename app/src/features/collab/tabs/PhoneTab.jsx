@@ -33,6 +33,8 @@ const PhoneTab = () => {
   const ctx = useCollabContext();
   const {
     collab, company, contacts, bookings, collabs, showNotif,
+    // V1.10.4-r11.0.16 — Historique navigation contact
+    goContactBack, goContactForward, contactHistoryCanBack, contactHistoryCanForward, contactHistoryPrevLabel, contactHistoryNextLabel,
     portalTab, setPortalTab, setPortalTabKey,
     selectedCrmContact, setSelectedCrmContact,
     setCollabFicheTab, setRdvPasseModal,
@@ -1714,7 +1716,24 @@ if (n === ph) matched.set(c.id, c);
     {nrpFollowups.length>0 && <span style={{fontSize:9,fontWeight:800,color:'#fff',padding:'2px 7px',borderRadius:6,background:'#EF4444',marginLeft:4}}>NRP x{nrpFollowups.length}</span>}
   </div>
 </div>
-<div onClick={()=>{setPipelineRightContact(null);setPhoneCallDetailId(null);}} style={{width:24,height:24,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:T.text3}}>
+{/* V1.10.4-r11.0.16 — Boutons historique navigation (← back / → forward) type navigateur. */}
+<div style={{display:'flex',alignItems:'center',gap:2}}>
+  <div onClick={()=>{ if(typeof goContactBack==='function' && contactHistoryCanBack) goContactBack(); }}
+       title={contactHistoryCanBack ? ('Contact precedent' + (contactHistoryPrevLabel ? ' : '+contactHistoryPrevLabel : '')) : 'Aucun contact precedent'}
+       style={{width:22,height:22,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',cursor:contactHistoryCanBack?'pointer':'not-allowed',opacity:contactHistoryCanBack?0.85:0.3,color:T.text3,transition:'all .15s'}}
+       onMouseEnter={e=>{ if(contactHistoryCanBack){e.currentTarget.style.opacity='1'; e.currentTarget.style.background=T.bg;} }}
+       onMouseLeave={e=>{ if(contactHistoryCanBack){e.currentTarget.style.opacity='0.85'; e.currentTarget.style.background='transparent';} }}>
+    <I n="chevron-left" s={14}/>
+  </div>
+  <div onClick={()=>{ if(typeof goContactForward==='function' && contactHistoryCanForward) goContactForward(); }}
+       title={contactHistoryCanForward ? ('Contact suivant' + (contactHistoryNextLabel ? ' : '+contactHistoryNextLabel : '')) : 'Aucun contact suivant'}
+       style={{width:22,height:22,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',cursor:contactHistoryCanForward?'pointer':'not-allowed',opacity:contactHistoryCanForward?0.85:0.3,color:T.text3,transition:'all .15s'}}
+       onMouseEnter={e=>{ if(contactHistoryCanForward){e.currentTarget.style.opacity='1'; e.currentTarget.style.background=T.bg;} }}
+       onMouseLeave={e=>{ if(contactHistoryCanForward){e.currentTarget.style.opacity='0.85'; e.currentTarget.style.background='transparent';} }}>
+    <I n="chevron-right" s={14}/>
+  </div>
+</div>
+<div onClick={()=>{setPipelineRightContact(null);setPhoneCallDetailId(null);}} title="Fermer" style={{width:24,height:24,borderRadius:6,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',color:T.text3}}>
   <I n="x" s={14}/>
 </div>
 </div>

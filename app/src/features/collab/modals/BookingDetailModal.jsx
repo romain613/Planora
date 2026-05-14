@@ -48,6 +48,8 @@ const BookingDetailModal = () => {
     showNotif,
     // V1.10.4-r11.0.15 — pour ouvrir hub Scripts depuis FicheInteractionTemplates
     setPhoneSubTab, setPortalTab, setPipelineRightContact,
+    // V1.10.4-r11.0.16 — Historique navigation contact
+    goContactBack, goContactForward, contactHistoryCanBack, contactHistoryCanForward, contactHistoryPrevLabel, contactHistoryNextLabel,
   } = useCollabContext();
 
   return (
@@ -70,6 +72,23 @@ const BookingDetailModal = () => {
                   <span style={{ fontSize:12, color:T.text3 }}>{cal?.name||''}</span>
                   {_bContact && <span style={{ fontSize:10, padding:"1px 6px", borderRadius:6, background:(_bCurrentStage?.color||T.text3)+"14", color:_bCurrentStage?.color||T.text3, fontWeight:600 }}>{_bCurrentStage?.label||_bContact.pipeline_stage||''}</span>}
                   {_bContact?._score !== undefined && <span style={{ fontSize:10, fontWeight:700, color:cScoreColor(_bContact._score) }}>Score {_bContact._score}</span>}
+                </div>
+              </div>
+              {/* V1.10.4-r11.0.16 — Boutons historique navigation contact (← back / → forward) */}
+              <div style={{display:'flex',alignItems:'center',gap:2,marginRight:4}}>
+                <div onClick={()=>{ if(typeof goContactBack==='function' && contactHistoryCanBack) goContactBack(); }}
+                     title={contactHistoryCanBack ? ('Contact précédent' + (contactHistoryPrevLabel ? ' : '+contactHistoryPrevLabel : '')) : 'Aucun contact précédent'}
+                     style={{width:26,height:26,borderRadius:7,display:'flex',alignItems:'center',justifyContent:'center',cursor:contactHistoryCanBack?'pointer':'not-allowed',opacity:contactHistoryCanBack?0.85:0.3,color:T.text3,transition:'all .15s',border:'1px solid '+T.border}}
+                     onMouseEnter={e=>{ if(contactHistoryCanBack){e.currentTarget.style.opacity='1'; e.currentTarget.style.background=T.bg;} }}
+                     onMouseLeave={e=>{ if(contactHistoryCanBack){e.currentTarget.style.opacity='0.85'; e.currentTarget.style.background='transparent';} }}>
+                  <I n="chevron-left" s={14}/>
+                </div>
+                <div onClick={()=>{ if(typeof goContactForward==='function' && contactHistoryCanForward) goContactForward(); }}
+                     title={contactHistoryCanForward ? ('Contact suivant' + (contactHistoryNextLabel ? ' : '+contactHistoryNextLabel : '')) : 'Aucun contact suivant'}
+                     style={{width:26,height:26,borderRadius:7,display:'flex',alignItems:'center',justifyContent:'center',cursor:contactHistoryCanForward?'pointer':'not-allowed',opacity:contactHistoryCanForward?0.85:0.3,color:T.text3,transition:'all .15s',border:'1px solid '+T.border}}
+                     onMouseEnter={e=>{ if(contactHistoryCanForward){e.currentTarget.style.opacity='1'; e.currentTarget.style.background=T.bg;} }}
+                     onMouseLeave={e=>{ if(contactHistoryCanForward){e.currentTarget.style.opacity='0.85'; e.currentTarget.style.background='transparent';} }}>
+                  <I n="chevron-right" s={14}/>
                 </div>
               </div>
               <Badge color={b.status==="confirmed"?T.success:b.status==="pending"?T.warning:T.danger}>{b.status==="confirmed"?"Confirmé":b.status==="pending"?"En attente":"Annulé"}</Badge>

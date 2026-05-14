@@ -16,6 +16,8 @@ const FicheHeader = ({ ct, stg, sc }) => {
     editingContact, setEditingContact,
     setSelectedCrmContact, setCollabFicheTab,
     pipelineRightContact, setPipelineRightContact,
+    // V1.10.4-r11.0.16 — Historique navigation contact
+    goContactBack, goContactForward, contactHistoryCanBack, contactHistoryCanForward, contactHistoryPrevLabel, contactHistoryNextLabel,
   } = useCollabContext();
 
   return (
@@ -60,6 +62,23 @@ const FicheHeader = ({ ct, stg, sc }) => {
       </div>
       <div style={{display:"flex",gap:12,alignItems:"center"}}>
         <div style={{textAlign:"center"}}><div style={{fontSize:28,fontWeight:800,color:T.accent}}>{(bookings||[]).filter(b=>b.contactId===ct.id&&b.status!=='cancelled'&&(b.collaboratorId===collab.id)).length||(ct.totalBookings||0)}</div><div style={{fontSize:10,color:T.text3}}>RDV</div></div>
+        {/* V1.10.4-r11.0.16 — Boutons historique navigation contact (← back / → forward) */}
+        <div style={{display:'flex',alignItems:'center',gap:2}}>
+          <div onClick={()=>{ if(typeof goContactBack==='function' && contactHistoryCanBack) goContactBack(); }}
+               title={contactHistoryCanBack ? ('Contact précédent' + (contactHistoryPrevLabel ? ' : '+contactHistoryPrevLabel : '')) : 'Aucun contact précédent'}
+               style={{padding:6,borderRadius:8,cursor:contactHistoryCanBack?'pointer':'not-allowed',opacity:contactHistoryCanBack?0.85:0.3,background:T.bg,transition:'all .15s'}}
+               onMouseEnter={e=>{ if(contactHistoryCanBack){e.currentTarget.style.opacity='1'; e.currentTarget.style.background=T.accentBg;} }}
+               onMouseLeave={e=>{ if(contactHistoryCanBack){e.currentTarget.style.opacity='0.85'; e.currentTarget.style.background=T.bg;} }}>
+            <I n="chevron-left" s={16}/>
+          </div>
+          <div onClick={()=>{ if(typeof goContactForward==='function' && contactHistoryCanForward) goContactForward(); }}
+               title={contactHistoryCanForward ? ('Contact suivant' + (contactHistoryNextLabel ? ' : '+contactHistoryNextLabel : '')) : 'Aucun contact suivant'}
+               style={{padding:6,borderRadius:8,cursor:contactHistoryCanForward?'pointer':'not-allowed',opacity:contactHistoryCanForward?0.85:0.3,background:T.bg,transition:'all .15s'}}
+               onMouseEnter={e=>{ if(contactHistoryCanForward){e.currentTarget.style.opacity='1'; e.currentTarget.style.background=T.accentBg;} }}
+               onMouseLeave={e=>{ if(contactHistoryCanForward){e.currentTarget.style.opacity='0.85'; e.currentTarget.style.background=T.bg;} }}>
+            <I n="chevron-right" s={16}/>
+          </div>
+        </div>
         {ct._linked&&<div onClick={()=>(typeof setEditingContact==='function'?setEditingContact:function(){})(editingContact===ct.id?null:ct.id)} style={{cursor:"pointer",padding:6,borderRadius:8,background:editingContact===ct.id?T.accentBg:T.bg}}><I n="edit-2" s={16} style={{color:editingContact===ct.id?T.accent:T.text3}}/></div>}
         <div onClick={()=>{setSelectedCrmContact(null);setCollabFicheTab("notes");setEditingContact(null);}} style={{cursor:"pointer",padding:6,borderRadius:8,background:T.bg}}><I n="x" s={18}/></div>
       </div>
