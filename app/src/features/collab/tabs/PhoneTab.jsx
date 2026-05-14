@@ -1726,7 +1726,8 @@ if (n === ph) matched.set(c.id, c);
       <div style={{display:'flex',borderBottom:'1px solid '+T.border,flexShrink:0}}>
 {/* V1.10.4-r11.0.9 UX — Onglet 'SMS' supprime de tabs nav (doublon avec bouton SMS header).
     Contenu SMS L3128+ reste rendu via setPhoneRightTab('sms') declenche par bouton header L1688. */}
-{[{id:'fiche',icon:'user',label:'Info'},{id:'script',icon:'file-text',label:'Script'},{id:'appels',icon:'phone',label:'Appels'},{id:'flux',icon:'activity',label:'Activite'},{id:'forms',icon:'clipboard',label:'Forms'},{id:'ia',icon:'cpu',label:'IA Copilot'}].map(t=>(
+{/* V1.10.4-r11.0.12 — Onglet 'Appels' fusionne dans 'Activite'. Le contenu (renomme 'Historique') s'affiche desormais en tete de l'onglet Activite (cf. bloc phoneRightTab==='flux' || phoneRightTab==='appels' ci-dessous). */}
+{[{id:'fiche',icon:'user',label:'Info'},{id:'script',icon:'file-text',label:'Script'},{id:'flux',icon:'activity',label:'Activite'},{id:'forms',icon:'clipboard',label:'Forms'},{id:'ia',icon:'cpu',label:'IA Copilot'}].map(t=>(
 <div key={t.id} onClick={()=>(typeof setPhoneRightTab==='function'?setPhoneRightTab:function(){})(t.id)} style={{flex:1,padding:'7px 0',textAlign:'center',cursor:'pointer',fontSize:9,fontWeight:phoneRightTab===t.id?700:500,color:phoneRightTab===t.id?T.accent:T.text3,borderBottom:phoneRightTab===t.id?'2px solid '+T.accent:'2px solid transparent',display:'flex',flexDirection:'column',alignItems:'center',gap:1,transition:'all .12s'}}>
   <I n={t.icon} s={12}/>{t.label}
 </div>
@@ -2348,9 +2349,16 @@ if (n === ph) matched.set(c.id, c);
 </div>
 )}
 
-{/* ══ APPELS tab — call history grouped by date + SMS + recordings ══ */}
-{phoneRightTab==='appels' && (
-<div>
+{/* ══ HISTORIQUE section (V1.10.4-r11.0.12 — ex-onglet 'Appels' fusionne dans 'Activite').
+       Rendu en tete de l'onglet Activite. Garde l'ancien id 'appels' en match pour fallback (state momentane). ══ */}
+{(phoneRightTab==='flux' || phoneRightTab==='appels') && (
+<div style={{marginBottom:14,paddingBottom:12,borderBottom:'1px solid '+T.border}}>
+  {/* Section header — Historique */}
+  <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:8}}>
+    <I n="clock" s={12} style={{color:'#2563EB'}}/>
+    <span style={{fontSize:11,fontWeight:700,color:T.text}}>Historique</span>
+    <span style={{fontSize:9,color:T.text3,marginLeft:'auto'}}>{callsForNumber.length} appel{callsForNumber.length>1?'s':''}</span>
+  </div>
   {/* Redirect banner vers IA Copilot */}
   <div onClick={()=>setPhoneRightTab('ia')} style={{padding:12,borderRadius:10,background:'linear-gradient(135deg,#7C3AED08,#2563EB06)',border:'1px solid #7C3AED20',cursor:'pointer',marginBottom:10,display:'flex',alignItems:'center',gap:8,transition:'all .15s'}} onMouseEnter={e=>e.currentTarget.style.borderColor='#7C3AED50'} onMouseLeave={e=>e.currentTarget.style.borderColor='#7C3AED20'}>
     <I n="cpu" s={18} style={{color:'#7C3AED'}}/>
