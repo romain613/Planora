@@ -1,4 +1,4 @@
-// FicheInteractionTemplates — V1.10.4-r11.0.15.c
+// FicheInteractionTemplates — V1.10.4-r11.0.15.d
 // Aperçu unifié + utilisation inline des interaction-templates (Scripts / Formulaires / Checklists)
 // applicables à un contact, partagé entre :
 //   - PhoneTab.jsx — onglet Info panel droit Pipeline Live
@@ -6,8 +6,9 @@
 //   - FicheContactModal — section Notes
 //
 // V1.10.4-r11.0.15.c : passage de click→redirect-hub à accordion+ResponseFiller inline.
-// L'utilisateur peut désormais répondre/cocher/suivre DIRECTEMENT depuis la fiche Info,
-// sans quitter la vue. Le hub Scripts top-bar reste pour configuration/création/gestion.
+// V1.10.4-r11.0.15.d : résumé compact pour completed (counts checklist / preview answers
+// formulaire / extrait notes script). Click "Terminer" force la fermeture de l'accordéon.
+// User clique sur le résumé compact pour rouvrir et modifier.
 //
 // Règle de visibilité (Phase 1 frontend only, sans backend ciblage) :
 //   template.active (truthy : 1/true/"1"/undefined⇒actif par défaut)
@@ -97,6 +98,89 @@ function _normalizeContent(t) {
   return {};
 }
 
+// V1.10.4-r11.0.15.d — Résumé compact pour templates completed (accordéon fermé par défaut).
+// Affiche counts/preview courts au lieu des questions completes. Click sur le header rouvre
+// l'accordéon pour modification.
+function CompactSummary({ T, template, response }) {
+  const content = template.content || {};
+  const answers = (response && response.answers) || {};
+
+  if (template.type === 'checklist') {
+    const items = content.items || [];
+    let validated = 0, refused = 0, neutral = 0;
+    items.forEach(it => {
+      const v = answers[it.id] || 'neutral';
+      if (v === 'validated') validated++;
+      else if (v === 'refused') refused++;
+      else neutral++;
+    });
+    if (items.length === 0) return null;
+    return (
+      <div style={{padding:'8px 12px', fontSize:11, color:T.text2, display:'flex', gap:10, flexWrap:'wrap', borderTop:'1px solid '+T.border, background:T.bg}}>
+        {validated > 0 && <span style={{color:'#10B981', fontWeight:600}}>✅ {validated} validé{validated>1?'s':''}</span>}
+        {refused > 0 && <span style={{color:'#EF4444', fontWeight:600}}>❌ {refused} refusé{refused>1?'s':''}</span>}
+        {neutral > 0 && <span style={{color:T.text3, fontWeight:600}}>⚪ {neutral} neutre{neutral>1?'s':''}</span>}
+        <span style={{marginLeft:'auto', fontSize:10, color:T.text3, fontStyle:'italic'}}>Cliquer pour modifier</span>
+      </div>
+    );
+  }
+
+  if (template.type === 'questionnaire') {
+    const fields = content.fields || [];
+    const filled = fields.filter(f => {
+      const v = answers[f.id];
+      return v !== undefined && v !== '' && v !== null && !(Array.isArray(v) && v.length === 0);
+    });
+    if (filled.length === 0) {
+      return (
+        <div style={{padding:'8px 12px', fontSize:11, color:T.text3, fontStyle:'italic', borderTop:'1px solid '+T.border, background:T.bg, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
+          <span>Formulaire complété (aucune réponse renseignée)</span>
+          <span style={{fontSize:10, color:T.text3, fontStyle:'italic'}}>Cliquer pour modifier</span>
+        </div>
+      );
+    }
+    const preview = filled.slice(0, 2).map(f => {
+      const v = answers[f.id];
+      let valStr;
+      if (Array.isArray(v)) valStr = v.join(', ');
+      else if (v === 'yes') valStr = 'Oui';
+      else if (v === 'no') valStr = 'Non';
+      else valStr = String(v);
+      if (valStr.length > 50) valStr = valStr.slice(0, 50) + '…';
+      return { label: f.label, valStr };
+    });
+    return (
+      <div style={{padding:'8px 12px', fontSize:11, color:T.text2, borderTop:'1px solid '+T.border, background:T.bg}}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4}}>
+          <span style={{fontWeight:600, color:'#10B981'}}>Formulaire complété · {filled.length} réponse{filled.length>1?'s':''}</span>
+          <span style={{fontSize:10, color:T.text3, fontStyle:'italic'}}>Cliquer pour modifier</span>
+        </div>
+        {preview.map((p, i) => (
+          <div key={i} style={{fontSize:10, color:T.text3, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
+            <span style={{fontWeight:600}}>{p.label}</span> : {p.valStr}
+          </div>
+        ))}
+        {filled.length > 2 && <div style={{fontSize:9, color:T.text3, marginTop:2, fontStyle:'italic'}}>+ {filled.length - 2} autre{filled.length - 2 > 1 ? 's' : ''}…</div>}
+      </div>
+    );
+  }
+
+  if (template.type === 'script') {
+    const notes = (answers.notes || '').trim();
+    return (
+      <div style={{padding:'8px 12px', fontSize:11, color:T.text2, borderTop:'1px solid '+T.border, background:T.bg}}>
+        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:notes ? 4 : 0}}>
+          <span style={{fontWeight:600, color:'#10B981'}}>Script consulté{notes ? ' · notes enregistrées' : ''}</span>
+          <span style={{fontSize:10, color:T.text3, fontStyle:'italic'}}>Cliquer pour modifier</span>
+        </div>
+        {notes && <div style={{fontSize:10, color:T.text3, marginTop:2, fontStyle:'italic', lineHeight:1.4}}>{notes.length > 120 ? notes.slice(0, 120) + '…' : notes}</div>}
+      </div>
+    );
+  }
+
+  return null;
+}
+
 const FicheInteractionTemplates = ({
   contact,
   // Props legacy conservés pour compatibilité — non utilisés depuis r11.0.15.c (plus de redirect hub)
@@ -175,8 +259,12 @@ const FicheInteractionTemplates = ({
     invalidateRespCache();
     _rerender();
   };
-  const handleCompleted = () => {
+  // V1.10.4-r11.0.15.d — Complete handler : invalide cache + force fermeture accordéon
+  // pour ce template (l'override remplace tout default). User clique sur le résumé compact
+  // pour rouvrir et modifier.
+  const handleCompletedFor = (tplId) => {
     invalidateRespCache();
+    setExpandedOverride(prev => ({ ...prev, [tplId]: false }));
     _rerender();
   };
   // pushNotification wrapper utilise par ResponseFiller inline.
@@ -215,7 +303,11 @@ const FicheInteractionTemplates = ({
               <span style={{fontSize:8,fontWeight:700,padding:'2px 6px',borderRadius:4,background:status.bg,color:status.color,flexShrink:0}}>{status.label}</span>
             </div>
 
-            {/* Contenu accordéon — render ResponseFiller inline si déplié */}
+            {/* V1.10.4-r11.0.15.d — Si completed ET fermé : résumé compact (counts/preview).
+                Sinon si ouvert : ResponseFiller inline (édition complète). */}
+            {!open && t._status === 'completed' && (
+              <CompactSummary T={T} template={{ ...t, content: _normalizeContent(t) }} response={t._response}/>
+            )}
             {open && contact?.id && (
               <div style={{borderTop:'1px solid '+T.border, padding:'8px 10px', background:T.card}}>
                 <ResponseFiller
@@ -226,7 +318,7 @@ const FicheInteractionTemplates = ({
                   contactId={contact.id}
                   collaboratorId={collab?.id || ''}
                   onSaved={handleSaved}
-                  onCompleted={handleCompleted}
+                  onCompleted={() => handleCompletedFor(t.id)}
                   onClose={() => toggle(t.id, t._status)}
                   pushNotification={_pushNotif}
                 />
