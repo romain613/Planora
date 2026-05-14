@@ -5045,9 +5045,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
           ))}
         </nav>
 
-        {/* V1.10.4-r11.0.19 — Section Historique actions (Phase A SAFE + Phase A bis pipeline simples) */}
-        <div style={{ padding:"12px 16px 16px", borderTop:`1px solid ${T.border}` }}>
-          <div style={{ padding:"0 0 8px 4px", fontSize:10, fontWeight:700, color:T.text3, textTransform:"uppercase", letterSpacing:0.8 }}>Historique actions</div>
+        {/* V1.10.4-r11.0.19.b — Undo/Redo minimaliste premium (icones seules horizontales, sans label) */}
+        <div style={{ padding:"8px 14px 12px", borderTop:`1px solid ${T.border}`, display:"flex", justifyContent:"flex-start" }}>
           <UndoRedoButtons variant="sidebar" showNotif={showNotif} />
         </div>
 
