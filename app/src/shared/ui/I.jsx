@@ -108,6 +108,8 @@ const I = ({ n, s = 18, style }) => {
     palette: <><circle cx="13.5" cy="6.5" r="2.5"/><circle cx="17.5" cy="10.5" r="2.5"/><circle cx="8.5" cy="7.5" r="2.5"/><circle cx="6.5" cy="12.5" r="2.5"/><path d="M12 2C6.49 2 2 6.49 2 12s4.49 10 10 10c.55 0 1-.45 1-1v-.5c0-.27-.11-.52-.29-.71a1.003 1.003 0 0 1-.29-.71c0-.55.45-1 1-1h1.67C18.14 18.08 22 15.42 22 12c0-5.51-4.49-10-10-10z"/></>,
     upload: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></>,
     activity: <><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></>,
+    'rotate-ccw': <><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></>,
+    'rotate-cw': <><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></>,
   };
   if (!icons[n]) return null;
   return <svg {...p}>{icons[n]}</svg>;

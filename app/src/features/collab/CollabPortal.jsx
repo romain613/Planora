@@ -3,6 +3,8 @@ import { Device as TwilioDevice } from '@twilio/voice-sdk';
 
 // Phase 5.5 — tab-scoped state
 import { _T } from "../../shared/state/tabState";
+import { pushAction as _undoPush, undo as _undoFn, redo as _redoFn, canUndo as _undoCan, canRedo as _redoCan, nextUndoLabel as _undoLabel, nextRedoLabel as _redoLabel, subscribe as _undoSub } from "../../shared/state/undoStack"; // V1.10.4-r11.0.18
+import UndoRedoButtons from "./components/UndoRedoButtons"; // V1.10.4-r11.0.18
 
 // Phase 1A extractions
 import { T, T_LIGHT, T_DARK, setTheme } from "../../theme";
@@ -3429,7 +3431,10 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     });
     return nc;
   };
-  const handleCollabUpdateContact = (id, updates) => {
+  // V1.10.4-r11.0.18 — rename original en _Raw pour wrapper undo/redo ci-dessous.
+  // _noUndo flag bypass le wrapper (utilise par revert/apply pour eviter recursivite).
+  // _forceStageChange flag bypass aussi (cascade pipeline non-undoable v1, doc r11.0.18).
+  const _handleCollabUpdateContactRaw = (id, updates) => {
     // Securite: valider pipeline_stage si present
     if (updates.pipeline_stage) {
       const VALID = ['nouveau','contacte','qualifie','rdv_programme','nrp','client_valide','perdu', ...((typeof pipelineStages!=='undefined'?pipelineStages:null)||[]).map(s=>s.id)];
@@ -3511,6 +3516,54 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     if (_tgt && _tgt._pending) { console.warn('[CONTACT UPDATE] skipped PUT — contact pending:', id); return; }
     saveToBackend();
   };
+
+  // V1.10.4-r11.0.18 — Wrapper undo/redo Phase A SAFE pour handleCollabUpdateContact.
+  // Snapshot le previous state des champs modifies + push action sur undoStack.
+  // Bypass automatique pour : _noUndo (revert/apply lui-meme), _forceStageChange (cascade pipeline non-undoable v1).
+  // Couvre ~75% actions user-percues : edition fiche + tags + notes + rating + custom fields + pipeline_stage simple.
+  // Exclus Phase 1 : cascade perdu->bookings, updateBooking, sendNotification, SMS auto, sync Google/Outlook.
+  const handleCollabUpdateContact = (id, updates) => {
+    // Bypass : revert/apply lui-meme, ou cascade pipeline forcee
+    if (updates._noUndo || updates._forceStageChange) {
+      return _handleCollabUpdateContactRaw(id, updates);
+    }
+    // Snapshot previous state des champs modifies
+    const prev = (contacts || []).find(c => c.id === id);
+    if (!prev) {
+      // Contact introuvable : pas de snapshot possible, pass-through sans undo
+      return _handleCollabUpdateContactRaw(id, updates);
+    }
+    const prevSnapshot = {};
+    Object.keys(updates).forEach(k => {
+      if (k.startsWith('_')) return; // skip metadata _source, _origin, _reason, _tabId, _pending
+      prevSnapshot[k] = prev[k] !== undefined ? prev[k] : null;
+    });
+    // Si rien a snapshot, skip undo
+    if (Object.keys(prevSnapshot).length === 0) {
+      return _handleCollabUpdateContactRaw(id, updates);
+    }
+    // Label pour tooltip / toast
+    const _ctName = prev.name || prev.firstname + ' ' + (prev.lastname || '') || 'Contact';
+    const _fieldList = Object.keys(prevSnapshot).join(', ');
+    const _label = `Modification fiche ${_ctName.trim()} (${_fieldList})`;
+    // Push action sur undoStack (import ES modules en tete de fichier)
+    try {
+      _undoPush({
+        type: 'contact.update',
+        entityId: id,
+        label: _label,
+        apply: () => _handleCollabUpdateContactRaw(id, { ...updates, _noUndo: true, _source: 'undo_redo' }),
+        revert: () => _handleCollabUpdateContactRaw(id, { ...prevSnapshot, _noUndo: true, _source: 'undo_redo' }),
+        _prevSnapshot: prevSnapshot,
+        _nextUpdates: updates,
+      });
+    } catch (e) {
+      console.warn('[handleCollabUpdateContact] undoStack pushAction failed', e);
+    }
+    // Execute action
+    return _handleCollabUpdateContactRaw(id, updates);
+  };
+
   // ── REGLE: RDV passé sans action → notification pour qualifier ──
   const rdvCheckRef = useRef(null);
   useEffect(() => {
@@ -4884,6 +4937,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                 <I n="smartphone" s={10} style={{color:(typeof smsCredits!=='undefined'?smsCredits:null)<20?'#EF4444':(typeof smsCredits!=='undefined'?smsCredits:null)<50?'#F59E0B':'#22C55E'}}/>
                 <span style={{fontSize:9,fontWeight:700,color:(typeof smsCredits!=='undefined'?smsCredits:null)<20?'#EF4444':(typeof smsCredits!=='undefined'?smsCredits:null)<50?'#F59E0B':'#22C55E'}}>{smsCredits}</span>
               </div>}
+              {/* V1.10.4-r11.0.18 — Undo/Redo Phase A SAFE, top bar global cohérent Notion. */}
+              <UndoRedoButtons showNotif={showNotif} />
               <div style={{ position:'relative' }}>
                 <div onClick={(e) => { e.stopPropagation(); setNotifOpen(p=>!p); }} style={{ cursor:'pointer', position:'relative', padding:4 }} title="Notifications">
                   <I n="bell" s={18} color={notifUnread>0?"#2563EB":T.text3}/>
