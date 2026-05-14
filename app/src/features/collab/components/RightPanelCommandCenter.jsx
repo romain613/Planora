@@ -32,6 +32,7 @@ const RightPanelCommandCenter = () => {
     setNotifList,
     setNotifUnread,
     collab,
+    pipelineStages, // V1.10.4-r11.0.23.b — custom stages lookup pour label/color
     setPipelineRightContact,
     setSelectedCrmContact,
     setSelectedBooking,
@@ -190,7 +191,9 @@ const RightPanelCommandCenter = () => {
     }
   };
 
-  const stageColor = (stage) => {
+  // V1.10.4-r11.0.23.b — resolve stage label/color : defaults d'abord, puis pipelineStages
+  // custom (clé technique ps_xxx ne doit jamais s'afficher brut). Fallback "Étape personnalisée".
+  const stageColor = (stageId) => {
     const map = {
       nouveau: "#3B82F6",
       contacte: "#F59E0B",
@@ -200,10 +203,12 @@ const RightPanelCommandCenter = () => {
       client_valide: "#22C55E",
       perdu: "#6B7280",
     };
-    return map[stage] || "#6B7280";
+    if (map[stageId]) return map[stageId];
+    const custom = (pipelineStages || []).find((s) => s && s.id === stageId);
+    return (custom && custom.color) || "#6B7280";
   };
 
-  const stageLabel = (stage) => {
+  const stageLabel = (stageId) => {
     const map = {
       nouveau: "Nouveau",
       contacte: "En discussion",
@@ -213,7 +218,12 @@ const RightPanelCommandCenter = () => {
       client_valide: "Validé",
       perdu: "Perdu",
     };
-    return map[stage] || stage || "—";
+    if (map[stageId]) return map[stageId];
+    const custom = (pipelineStages || []).find((s) => s && s.id === stageId);
+    if (custom && (custom.label || custom.name)) return custom.label || custom.name;
+    // Si clé technique custom non resolue (stage supprime, sync en cours) -> label propre
+    if (typeof stageId === "string" && stageId.startsWith("ps_")) return "Étape personnalisée";
+    return stageId || "—";
   };
 
   const sectionStyle = {
