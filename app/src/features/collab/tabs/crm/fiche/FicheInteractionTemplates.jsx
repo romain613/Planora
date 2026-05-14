@@ -99,11 +99,26 @@ function _normalizeContent(t) {
 }
 
 // V1.10.4-r11.0.15.d — Résumé compact pour templates completed (accordéon fermé par défaut).
+// V1.10.4-r11.0.17 — TOUJOURS rendre qqch (jamais null) pour completed + carte blanche premium.
 // Affiche counts/preview courts au lieu des questions completes. Click sur le header rouvre
 // l'accordéon pour modification.
 function CompactSummary({ T, template, response }) {
   const content = template.content || {};
   const answers = (response && response.answers) || {};
+
+  // Wrapper card style commun : carte blanche premium avec bordure fine + padding + hint modification.
+  const cardStyle = {
+    padding: '10px 12px',
+    fontSize: 11,
+    color: T.text2,
+    borderTop: '1px solid ' + T.border,
+    background: T.card || T.bg,
+  };
+  const modifyHint = (
+    <span style={{ fontSize: 10, color: T.text3, fontStyle: 'italic', whiteSpace: 'nowrap' }}>
+      Cliquer pour modifier
+    </span>
+  );
 
   if (template.type === 'checklist') {
     const items = content.items || [];
@@ -114,13 +129,21 @@ function CompactSummary({ T, template, response }) {
       else if (v === 'refused') refused++;
       else neutral++;
     });
-    if (items.length === 0) return null;
+    // Fallback si content non parseable (items vide) : affiche au moins "Checklist complétée"
+    if (items.length === 0) {
+      return (
+        <div style={{ ...cardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontWeight: 600, color: '#10B981' }}>✓ Checklist complétée</span>
+          {modifyHint}
+        </div>
+      );
+    }
     return (
-      <div style={{padding:'8px 12px', fontSize:11, color:T.text2, display:'flex', gap:10, flexWrap:'wrap', borderTop:'1px solid '+T.border, background:T.bg}}>
-        {validated > 0 && <span style={{color:'#10B981', fontWeight:600}}>✅ {validated} validé{validated>1?'s':''}</span>}
-        {refused > 0 && <span style={{color:'#EF4444', fontWeight:600}}>❌ {refused} refusé{refused>1?'s':''}</span>}
-        {neutral > 0 && <span style={{color:T.text3, fontWeight:600}}>⚪ {neutral} neutre{neutral>1?'s':''}</span>}
-        <span style={{marginLeft:'auto', fontSize:10, color:T.text3, fontStyle:'italic'}}>Cliquer pour modifier</span>
+      <div style={{ ...cardStyle, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
+        {validated > 0 && <span style={{ color: '#10B981', fontWeight: 600 }}>✅ {validated} validé{validated > 1 ? 's' : ''}</span>}
+        {refused > 0 && <span style={{ color: '#EF4444', fontWeight: 600 }}>❌ {refused} refusé{refused > 1 ? 's' : ''}</span>}
+        {neutral > 0 && <span style={{ color: T.text3, fontWeight: 600 }}>⚪ {neutral} neutre{neutral > 1 ? 's' : ''}</span>}
+        <span style={{ marginLeft: 'auto' }}>{modifyHint}</span>
       </div>
     );
   }
@@ -133,9 +156,9 @@ function CompactSummary({ T, template, response }) {
     });
     if (filled.length === 0) {
       return (
-        <div style={{padding:'8px 12px', fontSize:11, color:T.text3, fontStyle:'italic', borderTop:'1px solid '+T.border, background:T.bg, display:'flex', justifyContent:'space-between', alignItems:'center'}}>
-          <span>Formulaire complété (aucune réponse renseignée)</span>
-          <span style={{fontSize:10, color:T.text3, fontStyle:'italic'}}>Cliquer pour modifier</span>
+        <div style={{ ...cardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontWeight: 600, color: '#10B981' }}>✓ Formulaire complété <span style={{ color: T.text3, fontWeight: 400, fontSize: 10 }}>(aucune réponse renseignée)</span></span>
+          {modifyHint}
         </div>
       );
     }
@@ -150,17 +173,17 @@ function CompactSummary({ T, template, response }) {
       return { label: f.label, valStr };
     });
     return (
-      <div style={{padding:'8px 12px', fontSize:11, color:T.text2, borderTop:'1px solid '+T.border, background:T.bg}}>
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:4}}>
-          <span style={{fontWeight:600, color:'#10B981'}}>Formulaire complété · {filled.length} réponse{filled.length>1?'s':''}</span>
-          <span style={{fontSize:10, color:T.text3, fontStyle:'italic'}}>Cliquer pour modifier</span>
+      <div style={cardStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+          <span style={{ fontWeight: 600, color: '#10B981' }}>✓ Formulaire complété · {filled.length} réponse{filled.length > 1 ? 's' : ''}</span>
+          {modifyHint}
         </div>
         {preview.map((p, i) => (
-          <div key={i} style={{fontSize:10, color:T.text3, marginTop:2, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap'}}>
-            <span style={{fontWeight:600}}>{p.label}</span> : {p.valStr}
+          <div key={i} style={{ fontSize: 10, color: T.text3, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ fontWeight: 600 }}>{p.label}</span> : {p.valStr}
           </div>
         ))}
-        {filled.length > 2 && <div style={{fontSize:9, color:T.text3, marginTop:2, fontStyle:'italic'}}>+ {filled.length - 2} autre{filled.length - 2 > 1 ? 's' : ''}…</div>}
+        {filled.length > 2 && <div style={{ fontSize: 9, color: T.text3, marginTop: 2, fontStyle: 'italic' }}>+ {filled.length - 2} autre{filled.length - 2 > 1 ? 's' : ''}…</div>}
       </div>
     );
   }
@@ -168,17 +191,23 @@ function CompactSummary({ T, template, response }) {
   if (template.type === 'script') {
     const notes = (answers.notes || '').trim();
     return (
-      <div style={{padding:'8px 12px', fontSize:11, color:T.text2, borderTop:'1px solid '+T.border, background:T.bg}}>
-        <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:notes ? 4 : 0}}>
-          <span style={{fontWeight:600, color:'#10B981'}}>Script consulté{notes ? ' · notes enregistrées' : ''}</span>
-          <span style={{fontSize:10, color:T.text3, fontStyle:'italic'}}>Cliquer pour modifier</span>
+      <div style={cardStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: notes ? 4 : 0 }}>
+          <span style={{ fontWeight: 600, color: '#10B981' }}>✓ Script consulté{notes ? ' · notes enregistrées' : ''}</span>
+          {modifyHint}
         </div>
-        {notes && <div style={{fontSize:10, color:T.text3, marginTop:2, fontStyle:'italic', lineHeight:1.4}}>{notes.length > 120 ? notes.slice(0, 120) + '…' : notes}</div>}
+        {notes && <div style={{ fontSize: 10, color: T.text3, marginTop: 2, fontStyle: 'italic', lineHeight: 1.4 }}>{notes.length > 120 ? notes.slice(0, 120) + '…' : notes}</div>}
       </div>
     );
   }
 
-  return null;
+  // Fallback type inconnu — toujours render qqch pour completed (anti-régression UX)
+  return (
+    <div style={{ ...cardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+      <span style={{ fontWeight: 600, color: '#10B981' }}>✓ Élément complété</span>
+      {modifyHint}
+    </div>
+  );
 }
 
 const FicheInteractionTemplates = ({

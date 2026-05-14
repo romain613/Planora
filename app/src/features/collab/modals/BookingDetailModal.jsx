@@ -200,6 +200,16 @@ const BookingDetailModal = () => {
                   ))}
                 </div>
 
+                {/* V1.10.4-r11.0.17 — FicheInteractionTemplates REMONTÉ juste après Contact info (Coordonnées). */}
+                <FicheInteractionTemplates
+                  contact={_bContact}
+                  setPhoneSubTab={setPhoneSubTab}
+                  setPortalTab={setPortalTab}
+                  setPipelineRightContact={setPipelineRightContact}
+                  setSelectedBooking={setSelectedBooking}
+                  setBookingDetailTab={setBookingDetailTab}
+                />
+
                 {/* Pipeline stage — modifiable */}
                 <div style={{ marginBottom:16 }}>
                   <div style={{ fontSize:11, fontWeight:600, color:T.text3, marginBottom:6 }}>Étape pipeline</div>
@@ -238,15 +248,7 @@ const BookingDetailModal = () => {
                   </div>
                 </div>
 
-                {/* V1.10.4-r11.0.15 — Apercu compact Scripts/Checklists/Formulaires applicables au contact */}
-                <FicheInteractionTemplates
-                  contact={_bContact}
-                  setPhoneSubTab={setPhoneSubTab}
-                  setPortalTab={setPortalTab}
-                  setPipelineRightContact={setPipelineRightContact}
-                  setSelectedBooking={setSelectedBooking}
-                  setBookingDetailTab={setBookingDetailTab}
-                />
+                {/* V1.10.4-r11.0.17 — FicheInteractionTemplates DEPLACE plus haut (juste apres Contact info Coordonnees). Voir nouveau emplacement L~202. */}
 
                 {/* Quick actions */}
                 <div style={{ display:"flex", flexWrap:"wrap", gap:8, paddingTop:16, borderTop:`1px solid ${T.border}` }}>

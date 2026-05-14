@@ -316,12 +316,9 @@ const FicheContactModal = () => {
 
                 {/* Custom Fields (company + collab) */}
                 <FicheCustomFields ct={ct} />
-                <FicheNotes ct={ct} />
 
-                {/* V4: Debug mode — Historique des statuts */}
-                <FicheStatusHistory ct={ct} />
-
-                {/* V1.10.4-r11.0.15 — Apercu compact Scripts/Checklists/Formulaires applicables au contact */}
+                {/* V1.10.4-r11.0.17 — FicheInteractionTemplates REMONTÉ juste après Coordonnées (FicheCoordonnees + Rating + Tags + CustomFields).
+                    Apercu unifié Scripts/Checklists/Formulaires applicables au contact. */}
                 <FicheInteractionTemplates
                   contact={ct}
                   setPhoneSubTab={setPhoneSubTab}
@@ -330,6 +327,11 @@ const FicheContactModal = () => {
                   setSelectedCrmContact={setSelectedCrmContact}
                   setCollabFicheTab={setCollabFicheTab}
                 />
+
+                <FicheNotes ct={ct} />
+
+                {/* V4: Debug mode — Historique des statuts */}
+                <FicheStatusHistory ct={ct} />
 
                 {/* Accordéon Résumé IA — CRM fiche */}
                 <FicheAiAnalyses ct={ct} />

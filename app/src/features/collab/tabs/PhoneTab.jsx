@@ -2113,6 +2113,15 @@ if (n === ph) matched.set(c.id, c);
     </details>
     </div>;
   })()}
+  {/* V1.10.4-r11.0.17 — FicheInteractionTemplates REMONTÉ juste après Coordonnées.
+      Apercu unifié Scripts/Checklists/Formulaires (interaction-templates).
+      Regle de visibilite : active=1 && (showByDefault=1 || responseExistsForContact).
+      Tri showByDefault DESC, updatedAt DESC. Max 3. Cache TTL 60s. */}
+  <FicheInteractionTemplates
+    contact={ct}
+    setPhoneSubTab={setPhoneSubTab}
+    setPipelineRightContact={setPipelineRightContact}
+  />
   {/* Contract info when signed */}
   {ct.contract_signed ? (
     ct.contract_status === 'cancelled' ? (
@@ -2180,15 +2189,8 @@ if (n === ph) matched.set(c.id, c);
       })}
     </div>;
   })()}
-  {/* V1.10.4-r11.0.15 — Apercu unifie Scripts/Checklists/Formulaires (interaction-templates).
-      Composant reutilisable FicheInteractionTemplates.
-      Regle de visibilite : active=1 && (showByDefault=1 || responseExistsForContact).
-      Tri showByDefault DESC, updatedAt DESC. Max 3. Cache TTL 60s. */}
-  <FicheInteractionTemplates
-    contact={ct}
-    setPhoneSubTab={setPhoneSubTab}
-    setPipelineRightContact={setPipelineRightContact}
-  />
+  {/* V1.10.4-r11.0.17 — FicheInteractionTemplates DEPLACE plus haut (juste apres Coordonnees).
+      L'ancien emplacement ici (apres "Formulaires remplis") est supprime — voir nouveau emplacement L~2114. */}
 
   {/* V1.10.4-r11.0.13 — Apercu compact Formulaires a remplir (call-forms admin assignes non encore repondus).
       Filtre callFormResponses pour ne montrer que les forms NON encore remplis pour ce contact.
