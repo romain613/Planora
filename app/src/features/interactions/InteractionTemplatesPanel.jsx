@@ -275,8 +275,24 @@ export function ResponseFiller({ T, I, Btn, template, response, contactId, onSav
   const debounceRef = useRef(null);
   const status = response?.status || 'draft';
 
+  // V1.10.4-r11.0.17.d — BUG FIX isolation responses par contact (defense en profondeur).
+  // Reset state quand contactId ou response.id change (en plus de la key parent qui force remount).
+  // Necessaire car useState n'est evalue qu'a l'init du composant et ne reagit pas aux prop changes.
+  useEffect(() => {
+    setAnswers(response?.answers || {});
+    setResponseId(response?.id || null);
+    setSavedAt(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [contactId, response?.id]);
+
   // Lazy create response on first edit
   const ensureResponse = async () => {
+    // V1.10.4-r11.0.17.d — Guard defensif : si contactId absent, refuser write.
+    if (!contactId) {
+      console.warn('[ResponseFiller] No contactId — refusing create response');
+      pushNotification && pushNotification('Erreur', 'Contact non identifié — édition impossible', 'error');
+      return null;
+    }
     if (responseId) return responseId;
     const res = await api(`/api/interaction-responses/by-contact/${contactId}`, { method: 'POST', body: { templateId: template.id } });
     if (res?.error) { pushNotification('Erreur', res.error, 'error'); return null; }
@@ -284,9 +300,9 @@ export function ResponseFiller({ T, I, Btn, template, response, contactId, onSav
     return res.id;
   };
 
-  // Autosave debounce 800ms
+  // Autosave debounce 800ms — V1.10.4-r11.0.17.d guard : si contactId absent, ne pas PUT.
   useEffect(() => {
-    if (!responseId) return;
+    if (!responseId || !contactId) return;
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(async () => {
       setSaving(true);
@@ -301,14 +317,26 @@ export function ResponseFiller({ T, I, Btn, template, response, contactId, onSav
       } catch {} finally { setSaving(false); }
     }, 800);
     return () => debounceRef.current && clearTimeout(debounceRef.current);
-  }, [answers, responseId]);
+  }, [answers, responseId, contactId]);
 
   const setAnswer = async (key, value) => {
+    // V1.10.4-r11.0.17.d — Guard defensif : si contactId absent, refuser edit.
+    if (!contactId) {
+      console.warn('[ResponseFiller] No contactId — refusing edit', { templateId: template?.id, key });
+      pushNotification && pushNotification('Erreur', 'Contact non identifié — édition impossible', 'error');
+      return;
+    }
     setAnswers(prev => ({ ...prev, [key]: value }));
     if (!responseId) await ensureResponse();
   };
 
   const complete = async () => {
+    // V1.10.4-r11.0.17.d — Guard defensif sur complete aussi.
+    if (!contactId) {
+      console.warn('[ResponseFiller] No contactId — refusing complete', { templateId: template?.id });
+      pushNotification && pushNotification('Erreur', 'Contact non identifié — terminer impossible', 'error');
+      return;
+    }
     let id = responseId;
     if (!id) id = await ensureResponse();
     if (!id) return;

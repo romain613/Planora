@@ -98,22 +98,25 @@ function _normalizeContent(t) {
   return {};
 }
 
-// V1.10.4-r11.0.15.d — Résumé compact pour templates completed (accordéon fermé par défaut).
-// V1.10.4-r11.0.17 — TOUJOURS rendre qqch (jamais null) pour completed + carte blanche premium.
-// Affiche counts/preview courts au lieu des questions completes. Click sur le header rouvre
-// l'accordéon pour modification.
-function CompactSummary({ T, template, response }) {
+// V1.10.4-r11.0.17.c — CompactSummary CLIQUABLE (whole card → onOpen).
+// Checklist affiche maintenant la LISTE des items avec état individuel (au lieu de counts).
+// Questionnaire affiche jusqu'à 8 réponses au lieu de 2. Click sur la carte = ouvre l'édition.
+function CompactSummary({ T, template, response, onOpen }) {
   const content = template.content || {};
   const answers = (response && response.answers) || {};
 
-  // Wrapper card style commun : carte blanche premium avec bordure fine + padding + hint modification.
+  // Wrapper card style commun : carte premium cliquable, hover discret vert.
   const cardStyle = {
     padding: '10px 12px',
     fontSize: 11,
     color: T.text2,
     borderTop: '1px solid ' + T.border,
     background: T.card || T.bg,
+    cursor: 'pointer',
+    transition: 'background .12s',
   };
+  const onMouseEnter = (e) => { e.currentTarget.style.background = '#10B98108'; };
+  const onMouseLeave = (e) => { e.currentTarget.style.background = T.card || T.bg; };
   const modifyHint = (
     <span style={{ fontSize: 10, color: T.text3, fontStyle: 'italic', whiteSpace: 'nowrap' }}>
       Cliquer pour modifier
@@ -122,6 +125,14 @@ function CompactSummary({ T, template, response }) {
 
   if (template.type === 'checklist') {
     const items = content.items || [];
+    if (items.length === 0) {
+      return (
+        <div onClick={onOpen} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} title="Cliquer pour modifier" style={{ ...cardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ fontWeight: 600, color: '#10B981' }}>✓ Checklist complétée</span>
+          {modifyHint}
+        </div>
+      );
+    }
     let validated = 0, refused = 0, neutral = 0;
     items.forEach(it => {
       const v = answers[it.id] || 'neutral';
@@ -129,21 +140,34 @@ function CompactSummary({ T, template, response }) {
       else if (v === 'refused') refused++;
       else neutral++;
     });
-    // Fallback si content non parseable (items vide) : affiche au moins "Checklist complétée"
-    if (items.length === 0) {
-      return (
-        <div style={{ ...cardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ fontWeight: 600, color: '#10B981' }}>✓ Checklist complétée</span>
-          {modifyHint}
-        </div>
-      );
-    }
+    const MAX_ITEMS = 8;
+    const itemsShown = items.slice(0, MAX_ITEMS);
+    const itemsRemaining = items.length - MAX_ITEMS;
     return (
-      <div style={{ ...cardStyle, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-        {validated > 0 && <span style={{ color: '#10B981', fontWeight: 600 }}>✅ {validated} validé{validated > 1 ? 's' : ''}</span>}
-        {refused > 0 && <span style={{ color: '#EF4444', fontWeight: 600 }}>❌ {refused} refusé{refused > 1 ? 's' : ''}</span>}
-        {neutral > 0 && <span style={{ color: T.text3, fontWeight: 600 }}>⚪ {neutral} neutre{neutral > 1 ? 's' : ''}</span>}
-        <span style={{ marginLeft: 'auto' }}>{modifyHint}</span>
+      <div onClick={onOpen} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} title="Cliquer pour modifier" style={cardStyle}>
+        {/* Header counts + hint */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginBottom: 8, paddingBottom: 6, borderBottom: '1px solid ' + T.border }}>
+          {validated > 0 && <span style={{ color: '#10B981', fontWeight: 600 }}>✅ {validated} validé{validated > 1 ? 's' : ''}</span>}
+          {refused > 0 && <span style={{ color: '#EF4444', fontWeight: 600 }}>❌ {refused} refusé{refused > 1 ? 's' : ''}</span>}
+          {neutral > 0 && <span style={{ color: T.text3, fontWeight: 600 }}>⚪ {neutral} neutre{neutral > 1 ? 's' : ''}</span>}
+          <span style={{ marginLeft: 'auto' }}>{modifyHint}</span>
+        </div>
+        {/* Liste items individuels avec leur état */}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {itemsShown.map((it, i) => {
+            const v = answers[it.id] || 'neutral';
+            const stConfig = v === 'validated' ? { icon: '✅', label: 'Validé', color: '#10B981' }
+                           : v === 'refused' ? { icon: '❌', label: 'Refusé', color: '#EF4444' }
+                           : { icon: '⚪', label: 'Neutre', color: T.text3 };
+            return (
+              <div key={it.id || i} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11 }}>
+                <span style={{ flex: 1, minWidth: 0, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{it.label}</span>
+                <span style={{ color: stConfig.color, fontWeight: 600, flexShrink: 0, fontSize: 10 }}>{stConfig.icon} {stConfig.label}</span>
+              </div>
+            );
+          })}
+          {itemsRemaining > 0 && <div style={{ fontSize: 9, color: T.text3, fontStyle: 'italic', marginTop: 2 }}>+ {itemsRemaining} autre{itemsRemaining > 1 ? 's' : ''}…</div>}
+        </div>
       </div>
     );
   }
@@ -156,34 +180,40 @@ function CompactSummary({ T, template, response }) {
     });
     if (filled.length === 0) {
       return (
-        <div style={{ ...cardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <div onClick={onOpen} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} title="Cliquer pour modifier" style={{ ...cardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ fontWeight: 600, color: '#10B981' }}>✓ Formulaire complété <span style={{ color: T.text3, fontWeight: 400, fontSize: 10 }}>(aucune réponse renseignée)</span></span>
           {modifyHint}
         </div>
       );
     }
-    const preview = filled.slice(0, 2).map(f => {
-      const v = answers[f.id];
-      let valStr;
-      if (Array.isArray(v)) valStr = v.join(', ');
-      else if (v === 'yes') valStr = 'Oui';
-      else if (v === 'no') valStr = 'Non';
-      else valStr = String(v);
-      if (valStr.length > 50) valStr = valStr.slice(0, 50) + '…';
-      return { label: f.label, valStr };
-    });
+    // Toutes les réponses (jusqu'à 8 max) — pas seulement 2 comme avant
+    const MAX_FIELDS = 8;
+    const fieldsShown = filled.slice(0, MAX_FIELDS);
+    const fieldsRemaining = filled.length - MAX_FIELDS;
     return (
-      <div style={cardStyle}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 4 }}>
+      <div onClick={onOpen} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} title="Cliquer pour modifier" style={cardStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8, paddingBottom: 6, borderBottom: '1px solid ' + T.border }}>
           <span style={{ fontWeight: 600, color: '#10B981' }}>✓ Formulaire complété · {filled.length} réponse{filled.length > 1 ? 's' : ''}</span>
           {modifyHint}
         </div>
-        {preview.map((p, i) => (
-          <div key={i} style={{ fontSize: 10, color: T.text3, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-            <span style={{ fontWeight: 600 }}>{p.label}</span> : {p.valStr}
-          </div>
-        ))}
-        {filled.length > 2 && <div style={{ fontSize: 9, color: T.text3, marginTop: 2, fontStyle: 'italic' }}>+ {filled.length - 2} autre{filled.length - 2 > 1 ? 's' : ''}…</div>}
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          {fieldsShown.map((f, i) => {
+            const v = answers[f.id];
+            let valStr;
+            if (Array.isArray(v)) valStr = v.join(', ');
+            else if (v === 'yes') valStr = 'Oui';
+            else if (v === 'no') valStr = 'Non';
+            else valStr = String(v);
+            if (valStr.length > 60) valStr = valStr.slice(0, 60) + '…';
+            return (
+              <div key={i} style={{ display: 'flex', gap: 6, fontSize: 11 }}>
+                <span style={{ flex: '0 0 40%', minWidth: 0, color: T.text2, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.label}</span>
+                <span style={{ flex: 1, minWidth: 0, color: T.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{valStr}</span>
+              </div>
+            );
+          })}
+          {fieldsRemaining > 0 && <div style={{ fontSize: 9, color: T.text3, fontStyle: 'italic', marginTop: 2 }}>+ {fieldsRemaining} autre{fieldsRemaining > 1 ? 's' : ''}…</div>}
+        </div>
       </div>
     );
   }
@@ -191,19 +221,19 @@ function CompactSummary({ T, template, response }) {
   if (template.type === 'script') {
     const notes = (answers.notes || '').trim();
     return (
-      <div style={cardStyle}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: notes ? 4 : 0 }}>
+      <div onClick={onOpen} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} title="Cliquer pour modifier" style={cardStyle}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: notes ? 6 : 0, paddingBottom: notes ? 4 : 0, borderBottom: notes ? '1px solid ' + T.border : 'none' }}>
           <span style={{ fontWeight: 600, color: '#10B981' }}>✓ Script consulté{notes ? ' · notes enregistrées' : ''}</span>
           {modifyHint}
         </div>
-        {notes && <div style={{ fontSize: 10, color: T.text3, marginTop: 2, fontStyle: 'italic', lineHeight: 1.4 }}>{notes.length > 120 ? notes.slice(0, 120) + '…' : notes}</div>}
+        {notes && <div style={{ fontSize: 11, color: T.text, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{notes.length > 240 ? notes.slice(0, 240) + '…' : notes}</div>}
       </div>
     );
   }
 
   // Fallback type inconnu — toujours render qqch pour completed (anti-régression UX)
   return (
-    <div style={{ ...cardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+    <div onClick={onOpen} onMouseEnter={onMouseEnter} onMouseLeave={onMouseLeave} title="Cliquer pour modifier" style={{ ...cardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
       <span style={{ fontWeight: 600, color: '#10B981' }}>✓ Élément complété</span>
       {modifyHint}
     </div>
@@ -310,7 +340,21 @@ const FicheInteractionTemplates = ({
       {items.map(t => {
         const meta = TYPE_META[t.type] || TYPE_META.script;
         const status = STATUS_META[t._status] || STATUS_META.notStarted;
-        const open = isOpen(t.id, t._status);
+        // V1.10.4-r11.0.17.e — 3 états distincts :
+        //   - completed + !isEditing : résumé seul visible (pas de questions)
+        //   - completed + isEditing : résumé visible + ResponseFiller en dessous
+        //   - notStarted/inProgress + open : ResponseFiller seul (pas de résumé à montrer)
+        //   - notStarted/inProgress + !open : header seul (collapse volontaire)
+        const isCompleted = t._status === 'completed';
+        const isOverride = Object.prototype.hasOwnProperty.call(expandedOverride, t.id);
+        // Pour completed : override=true signifie "edit mode actif"
+        // Pour autres : isOpen normal (true par défaut)
+        const isEditing = isCompleted
+          ? (isOverride && expandedOverride[t.id] === true)
+          : (isOverride ? expandedOverride[t.id] : true);
+        const showFiller = isEditing && contact?.id;
+        // Toggle handler — completed : edit on/off ; autres : show/hide questions
+        const toggleEdit = () => setExpandedOverride(prev => ({ ...prev, [t.id]: !isEditing }));
         return (
           <div
             key={t.id}
@@ -318,13 +362,13 @@ const FicheInteractionTemplates = ({
           >
             {/* Header accordéon — toujours visible */}
             <div
-              onClick={() => toggle(t.id, t._status)}
-              title={open ? 'Replier' : 'Déplier'}
+              onClick={toggleEdit}
+              title={isEditing ? (isCompleted ? 'Replier édition (le résumé reste visible)' : 'Replier') : (isCompleted ? 'Modifier' : 'Déplier')}
               style={{display:'flex',alignItems:'center',gap:6,padding:'7px 9px',cursor:'pointer',transition:'all .12s'}}
               onMouseEnter={e=>{ e.currentTarget.style.background = meta.color + '08'; }}
               onMouseLeave={e=>{ e.currentTarget.style.background = 'transparent'; }}
             >
-              <I n={open ? 'chevron-down' : 'chevron-right'} s={10} style={{color:T.text3,flexShrink:0}}/>
+              <I n={isEditing ? 'chevron-down' : 'chevron-right'} s={10} style={{color:T.text3,flexShrink:0}}/>
               <I n={meta.icon} s={11} style={{color:meta.color,flexShrink:0}}/>
               <div style={{flex:1,minWidth:0,fontSize:11,fontWeight:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{t.title || 'Sans titre'}</div>
               {t._showByDefault && <span title="Global — affiché sur toutes les fiches" style={{fontSize:7,fontWeight:700,padding:'1px 5px',borderRadius:3,background:'#64748B12',color:'#64748B',border:'1px solid #64748B25',flexShrink:0,letterSpacing:0.3}}>GLOBAL</span>}
@@ -332,14 +376,24 @@ const FicheInteractionTemplates = ({
               <span style={{fontSize:8,fontWeight:700,padding:'2px 6px',borderRadius:4,background:status.bg,color:status.color,flexShrink:0}}>{status.label}</span>
             </div>
 
-            {/* V1.10.4-r11.0.15.d — Si completed ET fermé : résumé compact (counts/preview).
-                Sinon si ouvert : ResponseFiller inline (édition complète). */}
-            {!open && t._status === 'completed' && (
-              <CompactSummary T={T} template={{ ...t, content: _normalizeContent(t) }} response={t._response}/>
+            {/* V1.10.4-r11.0.17.e — Si completed : TOUJOURS afficher CompactSummary (même en edit mode).
+                Le résumé sert de "state visible" du template completed, indépendamment du mode édition. */}
+            {isCompleted && (
+              <CompactSummary
+                T={T}
+                template={{ ...t, content: _normalizeContent(t) }}
+                response={t._response}
+                onOpen={toggleEdit}
+              />
             )}
-            {open && contact?.id && (
+            {showFiller && (
               <div style={{borderTop:'1px solid '+T.border, padding:'8px 10px', background:T.card}}>
+                {/* V1.10.4-r11.0.17.d — BUG FIX isolation responses par contact :
+                    key force le remount complet de ResponseFiller quand contact/template/response
+                    change. Sans cette key, useState garde les valeurs du contact precedent
+                    et l'autosave PUT sur le mauvais responseId. */}
                 <ResponseFiller
+                  key={`${contact.id}::${t.id}::${t._response?.id || 'new'}`}
                   inline={true}
                   T={T} I={I} Btn={Btn} Modal={Modal}
                   template={{ ...t, content: _normalizeContent(t) }}
@@ -348,7 +402,7 @@ const FicheInteractionTemplates = ({
                   collaboratorId={collab?.id || ''}
                   onSaved={handleSaved}
                   onCompleted={() => handleCompletedFor(t.id)}
-                  onClose={() => toggle(t.id, t._status)}
+                  onClose={toggleEdit}
                   pushNotification={_pushNotif}
                 />
               </div>
