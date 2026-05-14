@@ -1681,8 +1681,8 @@ if (n === ph) matched.set(c.id, c);
   <I n="x" s={14}/>
 </div>
 </div>
-{/* Quick actions */}
-<div style={{display:'flex',gap:4,marginTop:10}}>
+{/* Quick actions — V1.10.4-r11.0.9 UX : padding/fontSize/icon legerement enrichis pour lisibilite */}
+<div style={{display:'flex',gap:5,marginTop:10}}>
 {[
   {icon:'phone',color:'#22C55E',tip:'Appeler',action:()=>startPhoneCall(ctNum||ct.phone||ct.mobile,ct.id)},
   {icon:'message-square',color:'#0EA5E9',tip:'SMS',action:()=>{prefillKeypad(ctNum||ct.phone||ct.mobile||'', { skipNav: true });setPhoneRightTab('sms');}},
@@ -1690,8 +1690,8 @@ if (n === ph) matched.set(c.id, c);
   {icon:'users',color:'#8B5CF6',tip:'Transférer',action:()=>{setV7TransferModal({contact:ct,fromPhonePipeline:true});setV7TransferTarget('');}},
   {icon:'calendar-plus',color:'#F59E0B',tip:'RDV',action:()=>{if(ct.id){setPhoneScheduleForm({contactId:ct.id,contactName:ct.name,number:ct.phone||ctNum||'',date:new Date(Date.now()+86400000).toISOString().split('T')[0],time:'10:00',duration:30,notes:'',calendarId:getCollaboratorDefaultCalendarId(calendars,collab.id),_bookingMode:true});setPhoneShowScheduleModal(true);}else{showNotif('Creez le contact avant de programmer un RDV','info');}}},
 ].map((a,i)=>(
-  <div key={i} onClick={a.action} style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:3,padding:'5px 0',borderRadius:8,cursor:'pointer',background:a.color+'0A',border:'1px solid '+a.color+'20',transition:'all .12s',fontSize:9,fontWeight:600,color:a.color}} title={a.tip} onMouseEnter={e=>{e.currentTarget.style.background=a.color+'18';}} onMouseLeave={e=>{e.currentTarget.style.background=a.color+'0A';}}>
-    <I n={a.icon} s={11}/>{a.tip}
+  <div key={i} onClick={a.action} style={{flex:1,display:'flex',alignItems:'center',justifyContent:'center',gap:4,padding:'6px 0',borderRadius:8,cursor:'pointer',background:a.color+'0F',border:'1px solid '+a.color+'25',transition:'all .15s',fontSize:10,fontWeight:600,color:a.color}} title={a.tip} onMouseEnter={e=>{e.currentTarget.style.background=a.color+'22';e.currentTarget.style.borderColor=a.color+'55';e.currentTarget.style.transform='translateY(-1px)';}} onMouseLeave={e=>{e.currentTarget.style.background=a.color+'0F';e.currentTarget.style.borderColor=a.color+'25';e.currentTarget.style.transform='translateY(0)';}}>
+    <I n={a.icon} s={12}/>{a.tip}
   </div>
 ))}
 </div>
@@ -1699,7 +1699,9 @@ if (n === ph) matched.set(c.id, c);
 
       {/* Tabs */}
       <div style={{display:'flex',borderBottom:'1px solid '+T.border,flexShrink:0}}>
-{[{id:'fiche',icon:'user',label:'Info'},{id:'script',icon:'file-text',label:'Script'},{id:'appels',icon:'phone',label:'Appels'},{id:'sms',icon:'message-square',label:'SMS'},{id:'flux',icon:'activity',label:'Activite'},{id:'forms',icon:'clipboard',label:'Forms'},{id:'ia',icon:'cpu',label:'IA Copilot'}].map(t=>(
+{/* V1.10.4-r11.0.9 UX — Onglet 'SMS' supprime de tabs nav (doublon avec bouton SMS header).
+    Contenu SMS L3128+ reste rendu via setPhoneRightTab('sms') declenche par bouton header L1688. */}
+{[{id:'fiche',icon:'user',label:'Info'},{id:'script',icon:'file-text',label:'Script'},{id:'appels',icon:'phone',label:'Appels'},{id:'flux',icon:'activity',label:'Activite'},{id:'forms',icon:'clipboard',label:'Forms'},{id:'ia',icon:'cpu',label:'IA Copilot'}].map(t=>(
 <div key={t.id} onClick={()=>(typeof setPhoneRightTab==='function'?setPhoneRightTab:function(){})(t.id)} style={{flex:1,padding:'7px 0',textAlign:'center',cursor:'pointer',fontSize:9,fontWeight:phoneRightTab===t.id?700:500,color:phoneRightTab===t.id?T.accent:T.text3,borderBottom:phoneRightTab===t.id?'2px solid '+T.accent:'2px solid transparent',display:'flex',flexDirection:'column',alignItems:'center',gap:1,transition:'all .12s'}}>
   <I n={t.icon} s={12}/>{t.label}
 </div>
