@@ -14,7 +14,7 @@
 //
 // Chaque element cliquable. Pas de cascade emails/SMS depuis ce composant.
 
-import React, { useMemo } from "react";
+import React, { useMemo, useState } from "react";
 import { T } from "../../../theme";
 import { I } from "../../../shared/ui";
 import { useCollabContext } from "../context/CollabContext";
@@ -22,6 +22,8 @@ import { _T } from "../../../shared/state/tabState";
 import { api } from "../../../shared/services/api";
 
 const RightPanelCommandCenter = () => {
+  // V1.10.4-r11.0.23.c — expand/collapse pour "Prochains RDV" (4 par défaut → tous)
+  const [nextRdvExpanded, setNextRdvExpanded] = useState(false);
   const ctx = useCollabContext() || {};
   const {
     contacts,
@@ -96,15 +98,15 @@ const RightPanelCommandCenter = () => {
       })
       .filter(Boolean);
 
-    // 5. Prochains RDV (futurs confirmed)
+    // 5. Prochains RDV (futurs confirmed) — V1.10.4-r11.0.23.c : liste complète,
+    // slice fait dans le render (4 par défaut, expand → tous).
     const nextBookings = bks
       .filter((b) => b && b.contactId && myIds.has(b.contactId) && b.status === "confirmed")
       .filter((b) => {
         const t = new Date((b.date || "") + (b.time ? "T" + b.time : "T00:00")).getTime();
         return !isNaN(t) && t > nowMs;
       })
-      .sort((a, z) => (a.date + (a.time || "")).localeCompare(z.date + (z.time || "")))
-      .slice(0, 3);
+      .sort((a, z) => (a.date + (a.time || "")).localeCompare(z.date + (z.time || "")));
 
     // 6. RDV passes a statuer (date+time < now, status='confirmed', contact still rdv_programme)
     const pastUnstatus = bks
@@ -443,18 +445,42 @@ const RightPanelCommandCenter = () => {
         )}
       </div>
 
-      {/* 5. Prochains RDV */}
+      {/* 5. Prochains RDV — V1.10.4-r11.0.23.c : 4 par defaut, expand → tous avec scroll */}
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>
           📅 Prochains RDV
-          <span style={{ marginLeft: "auto", fontSize: 9, fontWeight: 600, color: T.accent, cursor: "pointer" }} onClick={openAgenda}>Agenda →</span>
+          {data.nextBookings.length > 4 && (
+            <span
+              onClick={(e) => { e.stopPropagation(); setNextRdvExpanded((v) => !v); }}
+              title={nextRdvExpanded ? "Réduire" : `Voir tous (${data.nextBookings.length})`}
+              aria-label={nextRdvExpanded ? "Réduire la liste" : "Voir tous les RDV"}
+              style={{
+                marginLeft: "auto",
+                width: 18, height: 18,
+                borderRadius: 5,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer",
+                fontSize: 12, fontWeight: 700,
+                color: T.accent, background: T.accentBg,
+                border: `1px solid ${T.accent}25`,
+                transition: "all .12s",
+                lineHeight: 1,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = T.accent + "20"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = T.accentBg; }}
+            >
+              {nextRdvExpanded ? "−" : "+"}
+            </span>
+          )}
+          <span style={{ marginLeft: data.nextBookings.length > 4 ? 6 : "auto", fontSize: 9, fontWeight: 600, color: T.accent, cursor: "pointer" }} onClick={openAgenda}>Agenda →</span>
         </div>
         {data.nextBookings.length === 0 ? (
           <div style={{ fontSize: 10, color: T.text3, padding: "6px 4px", fontStyle: "italic" }}>
             Aucun RDV à venir.
           </div>
         ) : (
-          data.nextBookings.map((b) => {
+          <div style={nextRdvExpanded ? { maxHeight: 280, overflowY: "auto" } : undefined}>
+          {(nextRdvExpanded ? data.nextBookings : data.nextBookings.slice(0, 4)).map((b) => {
             const ct = (contacts || []).find((c) => c.id === b.contactId);
             const name = ct?.name || b.visitorName || b.contactName || "RDV";
             return (
@@ -483,7 +509,11 @@ const RightPanelCommandCenter = () => {
                 </div>
               </div>
             );
-          })
+          })}
+          {nextRdvExpanded && data.nextBookings.length > 4 && (
+            <div onClick={() => setNextRdvExpanded(false)} style={{ textAlign: "center", padding: 6, fontSize: 9, fontWeight: 600, color: T.accent, cursor: "pointer" }}>− Réduire</div>
+          )}
+          </div>
         )}
       </div>
 
