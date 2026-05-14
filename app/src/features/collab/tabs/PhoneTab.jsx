@@ -21,6 +21,7 @@ import { _T } from "../../../shared/state/tabState";
 import { useCollabContext } from "../context/CollabContext";
 import { FicheDocsPanelScreen } from "../screens"; // hotfix 2026-04-23 — Phase 14b missed import propagation
 import FicheInteractionTemplates from "./crm/fiche/FicheInteractionTemplates"; // V1.10.4-r11.0.15 — apercu compact reutilisable
+import RightPanelCommandCenter from "../components/RightPanelCommandCenter"; // V1.10.4-r11.0.21 Phase 1 empty state
 import { isContactInSuiviForCollab, getContactSuiviRole, getReceiverIdForSentTransfer, getActiveSentTransferBooking } from "../../../shared/utils/suivi";
 // V1.14.1.x — modale hard delete pour contacts archivés trouvés via fallback Hub SMS
 import HardDeleteContactModal from "../modals/HardDeleteContactModal";
@@ -1645,6 +1646,15 @@ return <div key={ev.id} style={{fontSize:11,color:T.text3,textAlign:'center',pad
       </div>
     </div>);
   })() : null}
+
+  {/* V1.10.4-r11.0.21 — Command Center empty state. Sibling mutuellement exclusif avec l'unified
+      panel ci-dessous : ne s'affiche QUE si pas de multi-select ET pas de contact pipeline ET
+      pas de call detail ET pas d'active call. Composant frontend pur (zero side-effect backend). */}
+  {(typeof pipeSelectedIds!=='undefined'?pipeSelectedIds:{}).length < 2
+    && !(typeof pipelineRightContact!=='undefined'?pipelineRightContact:null)
+    && !(typeof phoneCallDetailId!=='undefined'?phoneCallDetailId:null)
+    && !(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null)
+    && <RightPanelCommandCenter />}
 
   {/* ── UNIFIED RIGHT PANEL — pipeline contact OR call detail OR active call (dialer manuel) (hidden when multi-select active) ── */}
   {/* V1.9 UX FIX BUG 1 — Étendu à phoneActiveCall pour que le panel droit complet (header + tabs + IA Copilot) s'affiche identiquement quelle que soit la source d'appel (pastille pipeline / clavier / fiche / entrant) */}
