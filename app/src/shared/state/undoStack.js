@@ -139,6 +139,21 @@ export function canRedo() {
   return state.redoStack.length > 0;
 }
 
+/** Returns number of non-stale entries in undoStack (V1.10.4-r11.0.19) */
+export function undoCount() {
+  _purgeStale(state.undoStack);
+  return state.undoStack.length;
+}
+
+/** Returns number of non-stale entries in redoStack (V1.10.4-r11.0.19) */
+export function redoCount() {
+  _purgeStale(state.redoStack);
+  return state.redoStack.length;
+}
+
+/** Max history (V1.10.4-r11.0.19 — exposed for UI counter display) */
+export const HISTORY_MAX = MAX_HISTORY;
+
 /** Returns label of next undo target (for tooltip) */
 export function nextUndoLabel() {
   _purgeStale(state.undoStack);

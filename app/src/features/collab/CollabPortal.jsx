@@ -3737,6 +3737,40 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       const newNote = dateStr + ' [' + stageLabel + '] : ' + note;
       updates.notes = (ct?.notes ? ct.notes + '\n' + newNote : newNote);
     }
+    // V1.10.4-r11.0.19 — Phase A bis SAFE : push undo pour transitions pipeline simples.
+    // Exclusions cascade non-undoable v1 : perdu (cancel bookings), rdv_programme (create booking),
+    // client_valide (contract modal + contract_*), nrp (auto followups schedule).
+    // contractData present = passe par le path client_valide cascade -> non-undoable.
+    // _forceStageChange + _noUndo dans revert/apply pour eviter double-push et bypass cascade.
+    {
+      const _CASCADE_STAGES = new Set(['perdu','rdv_programme','client_valide','nrp']);
+      const _isSimpleStageMove = (
+        fromStage !== newStage &&
+        !_CASCADE_STAGES.has(fromStage) &&
+        !_CASCADE_STAGES.has(newStage) &&
+        !contractData
+      );
+      if (_isSimpleStageMove) {
+        try {
+          const _ctName = (ct?.name || ((ct?.firstname||'') + ' ' + (ct?.lastname||'')).trim() || 'Contact').trim();
+          const _stages = PIPELINE_STAGES || [];
+          const _fromLabel = (_stages.find(s => s.id === fromStage)?.label) || fromStage;
+          const _toLabel = (_stages.find(s => s.id === newStage)?.label) || newStage;
+          const _prevNotes = ct?.notes || '';
+          const _prevStage = fromStage;
+          const _nextUpdates = { ...updates };
+          _undoPush({
+            type: 'pipeline.stage',
+            entityId: contactId,
+            label: `Pipeline ${_ctName} : ${_fromLabel} → ${_toLabel}`,
+            apply: () => _handleCollabUpdateContactRaw(contactId, { ..._nextUpdates, _forceStageChange: true, _noUndo: true, _source: 'undo_redo', _origin: 'pipeline_stage_redo' }),
+            revert: () => _handleCollabUpdateContactRaw(contactId, { pipeline_stage: _prevStage, notes: _prevNotes, _forceStageChange: true, _noUndo: true, _source: 'undo_redo', _origin: 'pipeline_stage_undo' }),
+            _prevSnapshot: { pipeline_stage: _prevStage, notes: _prevNotes },
+            _nextUpdates,
+          });
+        } catch (e) { console.warn('[handlePipelineStageChange] undoStack push failed', e); }
+      }
+    }
     // V3: _forceStageChange = action utilisateur explicite, autorise la descente de stage côté backend
     // V4: source=manual + origin contextualisé pour traçabilité
     handleCollabUpdateContact(contactId, { ...updates, _forceStageChange: true, _source: 'manual', _origin: 'pipeline_stage_change', _reason: note || '' });
@@ -4937,8 +4971,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                 <I n="smartphone" s={10} style={{color:(typeof smsCredits!=='undefined'?smsCredits:null)<20?'#EF4444':(typeof smsCredits!=='undefined'?smsCredits:null)<50?'#F59E0B':'#22C55E'}}/>
                 <span style={{fontSize:9,fontWeight:700,color:(typeof smsCredits!=='undefined'?smsCredits:null)<20?'#EF4444':(typeof smsCredits!=='undefined'?smsCredits:null)<50?'#F59E0B':'#22C55E'}}>{smsCredits}</span>
               </div>}
-              {/* V1.10.4-r11.0.18 — Undo/Redo Phase A SAFE, top bar global cohérent Notion. */}
-              <UndoRedoButtons showNotif={showNotif} />
+              {/* V1.10.4-r11.0.19 — Undo/Redo deplaces vers section dediee bas de sidebar (voir ci-dessous). */}
               <div style={{ position:'relative' }}>
                 <div onClick={(e) => { e.stopPropagation(); setNotifOpen(p=>!p); }} style={{ cursor:'pointer', position:'relative', padding:4 }} title="Notifications">
                   <I n="bell" s={18} color={notifUnread>0?"#2563EB":T.text3}/>
@@ -5012,6 +5045,12 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
           ))}
         </nav>
 
+        {/* V1.10.4-r11.0.19 — Section Historique actions (Phase A SAFE + Phase A bis pipeline simples) */}
+        <div style={{ padding:"12px 16px 16px", borderTop:`1px solid ${T.border}` }}>
+          <div style={{ padding:"0 0 8px 4px", fontSize:10, fontWeight:700, color:T.text3, textTransform:"uppercase", letterSpacing:0.8 }}>Historique actions</div>
+          <UndoRedoButtons variant="sidebar" showNotif={showNotif} />
+        </div>
+
         </> : <>
         {/* Mode collapsed — icones seulement */}
         <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:2,padding:'0 4px'}}>
@@ -5031,6 +5070,10 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
               {item.badge?<span style={{position:'absolute',top:2,right:2,background:item.badgeColor||'#EF4444',color:'#fff',fontSize:8,fontWeight:800,borderRadius:8,padding:'1px 4px',minWidth:14,textAlign:'center'}}>{item.badge}</span>:null}
             </div>
           ))}
+          {/* V1.10.4-r11.0.19 — Undo/Redo collapsed (2 mini icones avec compteur badge) */}
+          <div style={{ marginTop: 10, paddingTop: 10, borderTop:`1px solid ${T.border}`, display:'flex', flexDirection:'column', alignItems:'center', gap:2 }}>
+            <UndoRedoButtons variant="collapsed" showNotif={showNotif} />
+          </div>
         </div>
         </>}
       </aside>
