@@ -4009,15 +4009,15 @@ return <div style={{flex:1,overflowY:'auto',padding:10}}>
   })() :
   (
   <>
-  {/* ── Pas de contact selectionne — placeholder ── */}
+  {/* ── Pas de contact selectionne — placeholder compact (V1.10.4-r11.0.25.b) ── */}
   {!(typeof phoneActiveCall!=='undefined'?phoneActiveCall:null) ? (
-    <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',padding:32,textAlign:'center'}}>
-      <div style={{width:56,height:56,borderRadius:16,background:T.accent+'12',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:16}}>
-<I n="user" s={26} style={{color:T.accent}}/>
+    <div style={{flex:0,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'flex-start',padding:'18px 20px',marginTop:12,marginBottom:8,minHeight:'auto',textAlign:'center'}}>
+      <div style={{width:42,height:42,borderRadius:12,background:T.accent+'12',display:'flex',alignItems:'center',justifyContent:'center',marginBottom:10}}>
+<I n="user" s={20} style={{color:T.accent}}/>
       </div>
-      <div style={{fontSize:14,fontWeight:700,color:T.text,marginBottom:6}}>Fiche contact</div>
-      <div style={{fontSize:12,color:T.text3,lineHeight:1.5,maxWidth:220}}>
-Selectionnez un contact dans le pipeline ou les recents pour voir sa fiche.
+      <div style={{fontSize:13,fontWeight:700,color:T.text,marginBottom:4}}>Fiche contact</div>
+      <div style={{fontSize:11,color:T.text3,lineHeight:1.35,maxWidth:180}}>
+Sélectionnez un contact pour afficher sa fiche détaillée.
       </div>
     </div>
   ) : (

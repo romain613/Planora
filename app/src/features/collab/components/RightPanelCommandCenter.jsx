@@ -313,66 +313,188 @@ const RightPanelCommandCenter = () => {
   return (
     <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "10px 10px 20px", display: "flex", flexDirection: "column" }}>
 
-      {/* 1. Jauge energie du jour */}
+      {/* 4. Dernieres pastilles touchees */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>📍 Derniers contacts ouverts</div>
+        {data.recentBack.length === 0 ? (
+          <div style={{ fontSize: 10, color: T.text3, padding: "6px 4px", fontStyle: "italic" }}>
+            Ouvre un contact pour le voir apparaître ici.
+          </div>
+        ) : (
+          data.recentBack.map((c) => {
+            const sc = stageColor(c.pipeline_stage);
+            return (
+              <div
+                key={c.id}
+                onClick={() => openContact(c)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 7,
+                  padding: 6,
+                  borderRadius: 7,
+                  cursor: "pointer",
+                  marginBottom: 3,
+                  background: T.bg,
+                  borderLeft: `3px solid ${sc}`,
+                  transition: "all .12s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = sc + "08"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = T.bg; }}
+              >
+                <div style={{ width: 22, height: 22, borderRadius: 6, background: sc + "18", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 10, fontWeight: 800, color: sc }}>
+                  {(c.name || "?")[0].toUpperCase()}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {c.name}
+                  </div>
+                  <div style={{ fontSize: 9, color: sc, fontWeight: 600 }}>{stageLabel(c.pipeline_stage)}</div>
+                </div>
+                {c.rating > 0 && <span style={{ fontSize: 9, color: "#F59E0B" }}>{"★".repeat(Math.min(5, c.rating))}</span>}
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {/* 6. RDV passes a statuer — V1.10.4-r11.0.23.d : 3 par defaut, expand → tous avec scroll */}
+      {data.pastUnstatus.length > 0 && (
+        <div style={{ ...sectionStyle, borderColor: "#F59E0B40", background: "#F59E0B06" }}>
+          <div style={{ ...sectionTitleStyle, color: "#F59E0B" }}>
+            <span>⚠ {data.pastUnstatus.length} RDV à statuer</span>
+            {data.pastUnstatus.length > 3 && (
+              <span
+                onClick={(e) => { e.stopPropagation(); setPastRdvExpanded((v) => !v); }}
+                title={pastRdvExpanded ? "Réduire" : `Voir tous (${data.pastUnstatus.length})`}
+                aria-label={pastRdvExpanded ? "Réduire la liste" : "Voir tous les RDV à statuer"}
+                style={{
+                  marginLeft: "auto",
+                  width: 18, height: 18,
+                  borderRadius: 5,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  cursor: "pointer",
+                  fontSize: 12, fontWeight: 700,
+                  color: "#F59E0B", background: "#F59E0B14",
+                  border: "1px solid #F59E0B30",
+                  transition: "all .12s",
+                  lineHeight: 1,
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "#F59E0B28"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "#F59E0B14"; }}
+              >
+                {pastRdvExpanded ? "−" : "+"}
+              </span>
+            )}
+          </div>
+          <div style={pastRdvExpanded ? { maxHeight: 280, overflowY: "auto" } : undefined}>
+          {(pastRdvExpanded ? data.pastUnstatus : data.pastUnstatus.slice(0, 3)).map((b) => {
+            const ct = (contacts || []).find((c) => c.id === b.contactId);
+            const name = ct?.name || b.visitorName || b.contactName || "RDV";
+            return (
+              <div
+                key={b.id}
+                onClick={() => openBookingModal(b)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 7,
+                  padding: "6px 7px",
+                  borderRadius: 7,
+                  cursor: "pointer",
+                  marginBottom: 3,
+                  background: "#F59E0B0F",
+                  border: "1px solid #F59E0B25",
+                  transition: "all .12s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "#F59E0B1F"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "#F59E0B0F"; }}
+              >
+                <I n="clock" s={12} style={{ color: "#F59E0B", flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#F59E0B" }}>{fmtBkTime(b)}</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
+                </div>
+                <span style={{ fontSize: 9, fontWeight: 700, color: "#F59E0B" }}>Statuer →</span>
+              </div>
+            );
+          })}
+          {pastRdvExpanded && data.pastUnstatus.length > 3 && (
+            <div onClick={() => setPastRdvExpanded(false)} style={{ textAlign: "center", padding: 6, fontSize: 9, fontWeight: 600, color: "#F59E0B", cursor: "pointer" }}>− Réduire</div>
+          )}
+          </div>
+        </div>
+      )}
+      {/* 5. Prochains RDV — V1.10.4-r11.0.23.c : 4 par defaut, expand → tous avec scroll */}
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>
-          <span>⚡ Énergie commerciale</span>
-          <span style={{ marginLeft: "auto", color: data.energyColor, fontWeight: 800, fontSize: 11 }}>{data.energyLabel}</span>
+          📅 Prochains RDV {data.nextBookings.length > 0 && <span style={{ fontWeight: 600, color: T.text2 }}>({data.nextBookings.length})</span>}
+          {data.nextBookings.length > 4 && (
+            <span
+              onClick={(e) => { e.stopPropagation(); setNextRdvExpanded((v) => !v); }}
+              title={nextRdvExpanded ? "Réduire" : `Voir tous (${data.nextBookings.length})`}
+              aria-label={nextRdvExpanded ? "Réduire la liste" : "Voir tous les RDV"}
+              style={{
+                marginLeft: "auto",
+                width: 18, height: 18,
+                borderRadius: 5,
+                display: "flex", alignItems: "center", justifyContent: "center",
+                cursor: "pointer",
+                fontSize: 12, fontWeight: 700,
+                color: T.accent, background: T.accentBg,
+                border: `1px solid ${T.accent}25`,
+                transition: "all .12s",
+                lineHeight: 1,
+              }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = T.accent + "20"; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = T.accentBg; }}
+            >
+              {nextRdvExpanded ? "−" : "+"}
+            </span>
+          )}
+          <span style={{ marginLeft: data.nextBookings.length > 4 ? 6 : "auto", fontSize: 9, fontWeight: 600, color: T.accent, cursor: "pointer" }} onClick={openAgenda}>Agenda →</span>
         </div>
-        <div style={{ position: "relative", height: 8, background: T.bg, borderRadius: 4, overflow: "hidden", marginBottom: 6 }}>
-          <div
-            style={{
-              position: "absolute",
-              left: 0,
-              top: 0,
-              bottom: 0,
-              width: `${data.energyPct}%`,
-              background: `linear-gradient(90deg, ${data.energyColor}88, ${data.energyColor})`,
-              borderRadius: 4,
-              transition: "width .5s ease",
-            }}
-          />
-        </div>
-        <div style={{ display: "flex", gap: 8, fontSize: 9, color: T.text3, flexWrap: "wrap", alignItems: "center" }}>
-          {data.todayCalls > 0 && <span><strong style={{ color: T.text2 }}>{data.todayCalls}</strong> appels</span>}
-          {data.todaySmsOut > 0 && <span><strong style={{ color: T.text2 }}>{data.todaySmsOut}</strong> SMS</span>}
-          {data.todayBkCreated > 0 && <span><strong style={{ color: T.text2 }}>{data.todayBkCreated}</strong> RDV</span>}
-          {data.todayContracts > 0 && <span><strong style={{ color: "#22C55E" }}>{data.todayContracts}</strong> contrats ✓</span>}
-          {data.todayCalls + data.todaySmsOut + data.todayBkCreated + data.todayContracts === 0 && <span style={{ fontStyle: "italic" }}>Démarre la journée 🚀</span>}
-          {/* V1.10.4-r11.0.24.b — Micro badge activite dominante (max 1, seuil 3 actions + >50%) */}
-          {(() => {
-            const _tot = data.todayCalls + data.todaySmsOut + data.todayBkCreated;
-            if (_tot < 3) return null;
-            let _b = null;
-            if (data.todayCalls > _tot * 0.5) _b = { icon: "phone", label: "Appels dominants", color: "#22C55E" };
-            else if (data.todaySmsOut > _tot * 0.5) _b = { icon: "message-circle", label: "Forte activité SMS", color: "#0EA5E9" };
-            else if (data.todayBkCreated > _tot * 0.5) _b = { icon: "calendar", label: "Journée RDV", color: "#F59E0B" };
-            if (!_b) return null;
+        {data.nextBookings.length === 0 ? (
+          <div style={{ fontSize: 10, color: T.text3, padding: "6px 4px", fontStyle: "italic" }}>
+            Aucun RDV à venir.
+          </div>
+        ) : (
+          <div style={nextRdvExpanded ? { maxHeight: 280, overflowY: "auto" } : undefined}>
+          {(nextRdvExpanded ? data.nextBookings : data.nextBookings.slice(0, 4)).map((b) => {
+            const ct = (contacts || []).find((c) => c.id === b.contactId);
+            const name = ct?.name || b.visitorName || b.contactName || "RDV";
             return (
-              <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 3, fontSize: 9, fontWeight: 700, color: _b.color, background: _b.color + "14", border: `1px solid ${_b.color}25`, borderRadius: 5, padding: "2px 6px" }}>
-                <I n={_b.icon} s={10} /> {_b.label}
-              </span>
+              <div
+                key={b.id}
+                onClick={() => openBookingModal(b)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 7,
+                  padding: "6px 7px",
+                  borderRadius: 7,
+                  cursor: "pointer",
+                  marginBottom: 3,
+                  background: "#0EA5E908",
+                  border: "1px solid #0EA5E920",
+                  transition: "all .12s",
+                }}
+                onMouseEnter={(e) => { e.currentTarget.style.background = "#0EA5E914"; }}
+                onMouseLeave={(e) => { e.currentTarget.style.background = "#0EA5E908"; }}
+              >
+                <I n="calendar" s={12} style={{ color: "#0EA5E9", flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 10, fontWeight: 700, color: "#0EA5E9" }}>{fmtBkTime(b)}</div>
+                  <div style={{ fontSize: 11, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
+                </div>
+              </div>
             );
-          })()}
-        </div>
-        {/* V1.10.4-r11.0.24 — Sparkline activite 24h sous la jauge (ultra-discret, hover tooltip) */}
-        <EnergySparkline
-          bins={activity.bins}
-          maxBin={activity.maxBin}
-          currentHour={activity.currentHour}
-          color={data.energyColor}
-          pulse={pulse}
-        />
-        {/* V1.10.4-r11.0.24.b — Delta activite ultra discret (10px opacity 0.7) */}
-        <div style={{ marginTop: 4, fontSize: 9, color: T.text3, opacity: 0.75, fontWeight: 500, textAlign: "center", letterSpacing: 0.2 }}>
-          {(() => {
-            if (activity.recentCount > 0) return `+${activity.recentCount} action${activity.recentCount > 1 ? "s" : ""} depuis 1h`;
-            if (activity.minutesSinceLastActivity == null) return "Aucune activité aujourd'hui";
-            if (activity.minutesSinceLastActivity < 60) return "Aucune activité depuis " + activity.minutesSinceLastActivity + " min";
-            const _h = Math.floor(activity.minutesSinceLastActivity / 60);
-            return "Aucune activité depuis " + _h + "h";
-          })()}
-        </div>
+          })}
+          {nextRdvExpanded && data.nextBookings.length > 4 && (
+            <div onClick={() => setNextRdvExpanded(false)} style={{ textAlign: "center", padding: 6, fontSize: 9, fontWeight: 600, color: T.accent, cursor: "pointer" }}>− Réduire</div>
+          )}
+          </div>
+        )}
       </div>
 
       {/* 2. Notifications LIVE */}
@@ -561,190 +683,68 @@ const RightPanelCommandCenter = () => {
         )}
       </div>
 
-      {/* 4. Dernieres pastilles touchees */}
-      <div style={sectionStyle}>
-        <div style={sectionTitleStyle}>📍 Derniers contacts ouverts</div>
-        {data.recentBack.length === 0 ? (
-          <div style={{ fontSize: 10, color: T.text3, padding: "6px 4px", fontStyle: "italic" }}>
-            Ouvre un contact pour le voir apparaître ici.
-          </div>
-        ) : (
-          data.recentBack.map((c) => {
-            const sc = stageColor(c.pipeline_stage);
-            return (
-              <div
-                key={c.id}
-                onClick={() => openContact(c)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 7,
-                  padding: 6,
-                  borderRadius: 7,
-                  cursor: "pointer",
-                  marginBottom: 3,
-                  background: T.bg,
-                  borderLeft: `3px solid ${sc}`,
-                  transition: "all .12s",
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = sc + "08"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = T.bg; }}
-              >
-                <div style={{ width: 22, height: 22, borderRadius: 6, background: sc + "18", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, fontSize: 10, fontWeight: 800, color: sc }}>
-                  {(c.name || "?")[0].toUpperCase()}
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 11, fontWeight: 700, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                    {c.name}
-                  </div>
-                  <div style={{ fontSize: 9, color: sc, fontWeight: 600 }}>{stageLabel(c.pipeline_stage)}</div>
-                </div>
-                {c.rating > 0 && <span style={{ fontSize: 9, color: "#F59E0B" }}>{"★".repeat(Math.min(5, c.rating))}</span>}
-              </div>
-            );
-          })
-        )}
-      </div>
-
-      {/* 5. Prochains RDV — V1.10.4-r11.0.23.c : 4 par defaut, expand → tous avec scroll */}
+      {/* 1. Jauge energie du jour */}
       <div style={sectionStyle}>
         <div style={sectionTitleStyle}>
-          📅 Prochains RDV {data.nextBookings.length > 0 && <span style={{ fontWeight: 600, color: T.text2 }}>({data.nextBookings.length})</span>}
-          {data.nextBookings.length > 4 && (
-            <span
-              onClick={(e) => { e.stopPropagation(); setNextRdvExpanded((v) => !v); }}
-              title={nextRdvExpanded ? "Réduire" : `Voir tous (${data.nextBookings.length})`}
-              aria-label={nextRdvExpanded ? "Réduire la liste" : "Voir tous les RDV"}
-              style={{
-                marginLeft: "auto",
-                width: 18, height: 18,
-                borderRadius: 5,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                cursor: "pointer",
-                fontSize: 12, fontWeight: 700,
-                color: T.accent, background: T.accentBg,
-                border: `1px solid ${T.accent}25`,
-                transition: "all .12s",
-                lineHeight: 1,
-              }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = T.accent + "20"; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = T.accentBg; }}
-            >
-              {nextRdvExpanded ? "−" : "+"}
-            </span>
-          )}
-          <span style={{ marginLeft: data.nextBookings.length > 4 ? 6 : "auto", fontSize: 9, fontWeight: 600, color: T.accent, cursor: "pointer" }} onClick={openAgenda}>Agenda →</span>
+          <span>⚡ Énergie commerciale</span>
+          <span style={{ marginLeft: "auto", color: data.energyColor, fontWeight: 800, fontSize: 11 }}>{data.energyLabel}</span>
         </div>
-        {data.nextBookings.length === 0 ? (
-          <div style={{ fontSize: 10, color: T.text3, padding: "6px 4px", fontStyle: "italic" }}>
-            Aucun RDV à venir.
-          </div>
-        ) : (
-          <div style={nextRdvExpanded ? { maxHeight: 280, overflowY: "auto" } : undefined}>
-          {(nextRdvExpanded ? data.nextBookings : data.nextBookings.slice(0, 4)).map((b) => {
-            const ct = (contacts || []).find((c) => c.id === b.contactId);
-            const name = ct?.name || b.visitorName || b.contactName || "RDV";
+        <div style={{ position: "relative", height: 8, background: T.bg, borderRadius: 4, overflow: "hidden", marginBottom: 6 }}>
+          <div
+            style={{
+              position: "absolute",
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: `${data.energyPct}%`,
+              background: `linear-gradient(90deg, ${data.energyColor}88, ${data.energyColor})`,
+              borderRadius: 4,
+              transition: "width .5s ease",
+            }}
+          />
+        </div>
+        <div style={{ display: "flex", gap: 8, fontSize: 9, color: T.text3, flexWrap: "wrap", alignItems: "center" }}>
+          {data.todayCalls > 0 && <span><strong style={{ color: T.text2 }}>{data.todayCalls}</strong> appels</span>}
+          {data.todaySmsOut > 0 && <span><strong style={{ color: T.text2 }}>{data.todaySmsOut}</strong> SMS</span>}
+          {data.todayBkCreated > 0 && <span><strong style={{ color: T.text2 }}>{data.todayBkCreated}</strong> RDV</span>}
+          {data.todayContracts > 0 && <span><strong style={{ color: "#22C55E" }}>{data.todayContracts}</strong> contrats ✓</span>}
+          {data.todayCalls + data.todaySmsOut + data.todayBkCreated + data.todayContracts === 0 && <span style={{ fontStyle: "italic" }}>Démarre la journée 🚀</span>}
+          {/* V1.10.4-r11.0.24.b — Micro badge activite dominante (max 1, seuil 3 actions + >50%) */}
+          {(() => {
+            const _tot = data.todayCalls + data.todaySmsOut + data.todayBkCreated;
+            if (_tot < 3) return null;
+            let _b = null;
+            if (data.todayCalls > _tot * 0.5) _b = { icon: "phone", label: "Appels dominants", color: "#22C55E" };
+            else if (data.todaySmsOut > _tot * 0.5) _b = { icon: "message-circle", label: "Forte activité SMS", color: "#0EA5E9" };
+            else if (data.todayBkCreated > _tot * 0.5) _b = { icon: "calendar", label: "Journée RDV", color: "#F59E0B" };
+            if (!_b) return null;
             return (
-              <div
-                key={b.id}
-                onClick={() => openBookingModal(b)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 7,
-                  padding: "6px 7px",
-                  borderRadius: 7,
-                  cursor: "pointer",
-                  marginBottom: 3,
-                  background: "#0EA5E908",
-                  border: "1px solid #0EA5E920",
-                  transition: "all .12s",
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = "#0EA5E914"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "#0EA5E908"; }}
-              >
-                <I n="calendar" s={12} style={{ color: "#0EA5E9", flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#0EA5E9" }}>{fmtBkTime(b)}</div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
-                </div>
-              </div>
+              <span style={{ marginLeft: "auto", display: "inline-flex", alignItems: "center", gap: 3, fontSize: 9, fontWeight: 700, color: _b.color, background: _b.color + "14", border: `1px solid ${_b.color}25`, borderRadius: 5, padding: "2px 6px" }}>
+                <I n={_b.icon} s={10} /> {_b.label}
+              </span>
             );
-          })}
-          {nextRdvExpanded && data.nextBookings.length > 4 && (
-            <div onClick={() => setNextRdvExpanded(false)} style={{ textAlign: "center", padding: 6, fontSize: 9, fontWeight: 600, color: T.accent, cursor: "pointer" }}>− Réduire</div>
-          )}
-          </div>
-        )}
+          })()}
+        </div>
+        {/* V1.10.4-r11.0.24 — Sparkline activite 24h sous la jauge (ultra-discret, hover tooltip) */}
+        <EnergySparkline
+          bins={activity.bins}
+          maxBin={activity.maxBin}
+          currentHour={activity.currentHour}
+          color={data.energyColor}
+          pulse={pulse}
+        />
+        {/* V1.10.4-r11.0.24.b — Delta activite ultra discret (10px opacity 0.7) */}
+        <div style={{ marginTop: 4, fontSize: 9, color: T.text3, opacity: 0.75, fontWeight: 500, textAlign: "center", letterSpacing: 0.2 }}>
+          {(() => {
+            if (activity.recentCount > 0) return `+${activity.recentCount} action${activity.recentCount > 1 ? "s" : ""} depuis 1h`;
+            if (activity.minutesSinceLastActivity == null) return "Aucune activité aujourd'hui";
+            if (activity.minutesSinceLastActivity < 60) return "Aucune activité depuis " + activity.minutesSinceLastActivity + " min";
+            const _h = Math.floor(activity.minutesSinceLastActivity / 60);
+            return "Aucune activité depuis " + _h + "h";
+          })()}
+        </div>
       </div>
 
-      {/* 6. RDV passes a statuer — V1.10.4-r11.0.23.d : 3 par defaut, expand → tous avec scroll */}
-      {data.pastUnstatus.length > 0 && (
-        <div style={{ ...sectionStyle, borderColor: "#F59E0B40", background: "#F59E0B06" }}>
-          <div style={{ ...sectionTitleStyle, color: "#F59E0B" }}>
-            <span>⚠ {data.pastUnstatus.length} RDV à statuer</span>
-            {data.pastUnstatus.length > 3 && (
-              <span
-                onClick={(e) => { e.stopPropagation(); setPastRdvExpanded((v) => !v); }}
-                title={pastRdvExpanded ? "Réduire" : `Voir tous (${data.pastUnstatus.length})`}
-                aria-label={pastRdvExpanded ? "Réduire la liste" : "Voir tous les RDV à statuer"}
-                style={{
-                  marginLeft: "auto",
-                  width: 18, height: 18,
-                  borderRadius: 5,
-                  display: "flex", alignItems: "center", justifyContent: "center",
-                  cursor: "pointer",
-                  fontSize: 12, fontWeight: 700,
-                  color: "#F59E0B", background: "#F59E0B14",
-                  border: "1px solid #F59E0B30",
-                  transition: "all .12s",
-                  lineHeight: 1,
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = "#F59E0B28"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "#F59E0B14"; }}
-              >
-                {pastRdvExpanded ? "−" : "+"}
-              </span>
-            )}
-          </div>
-          <div style={pastRdvExpanded ? { maxHeight: 280, overflowY: "auto" } : undefined}>
-          {(pastRdvExpanded ? data.pastUnstatus : data.pastUnstatus.slice(0, 3)).map((b) => {
-            const ct = (contacts || []).find((c) => c.id === b.contactId);
-            const name = ct?.name || b.visitorName || b.contactName || "RDV";
-            return (
-              <div
-                key={b.id}
-                onClick={() => openBookingModal(b)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 7,
-                  padding: "6px 7px",
-                  borderRadius: 7,
-                  cursor: "pointer",
-                  marginBottom: 3,
-                  background: "#F59E0B0F",
-                  border: "1px solid #F59E0B25",
-                  transition: "all .12s",
-                }}
-                onMouseEnter={(e) => { e.currentTarget.style.background = "#F59E0B1F"; }}
-                onMouseLeave={(e) => { e.currentTarget.style.background = "#F59E0B0F"; }}
-              >
-                <I n="clock" s={12} style={{ color: "#F59E0B", flexShrink: 0 }} />
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 10, fontWeight: 700, color: "#F59E0B" }}>{fmtBkTime(b)}</div>
-                  <div style={{ fontSize: 11, fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</div>
-                </div>
-                <span style={{ fontSize: 9, fontWeight: 700, color: "#F59E0B" }}>Statuer →</span>
-              </div>
-            );
-          })}
-          {pastRdvExpanded && data.pastUnstatus.length > 3 && (
-            <div onClick={() => setPastRdvExpanded(false)} style={{ textAlign: "center", padding: 6, fontSize: 9, fontWeight: 600, color: "#F59E0B", cursor: "pointer" }}>− Réduire</div>
-          )}
-          </div>
-        </div>
-      )}
 
     </div>
   );
