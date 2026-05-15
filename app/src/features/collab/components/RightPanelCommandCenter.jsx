@@ -21,6 +21,7 @@ import { useCollabContext } from "../context/CollabContext";
 import { _T } from "../../../shared/state/tabState";
 import { api } from "../../../shared/services/api";
 import { useCollabActivity } from "../hooks/useCollabActivity"; // V1.10.4-r11.0.24 sparkline data
+import { useRecentActivityFeed } from "../hooks/useRecentActivityFeed"; // V1.10.4-r11.0.25 timeline activite
 import EnergySparkline from "./EnergySparkline"; // V1.10.4-r11.0.24 sparkline 24h SVG
 
 const RightPanelCommandCenter = () => {
@@ -30,6 +31,8 @@ const RightPanelCommandCenter = () => {
   const [pastRdvExpanded, setPastRdvExpanded] = useState(false);
   // V1.10.4-r11.0.24 — sparkline activite 24h (memoized, partage source unique)
   const activity = useCollabActivity();
+  // V1.10.4-r11.0.25 — timeline activite recente (max 5 events, fusion 4 sources frontend)
+  const recentActivity = useRecentActivityFeed();
   // V1.10.4-r11.0.24.b — micro pulse glow quand totalCount augmente (nouvelle activite)
   const [pulse, setPulse] = useState(false);
   const prevTotalRef = useRef(activity.totalCount);
@@ -172,6 +175,34 @@ const RightPanelCommandCenter = () => {
   const openBookingModal = (bk) => {
     if (!bk) return;
     if (typeof setSelectedBooking === "function") setSelectedBooking(bk);
+  };
+
+  // V1.10.4-r11.0.25 — routing event timeline → action contextuelle
+  const handleActivityClick = (ev) => {
+    if (!ev) return;
+    if (ev.action === "booking" && ev.bookingId) {
+      const bk = (bookings || []).find((b) => b.id === ev.bookingId);
+      if (bk) openBookingModal(bk);
+      return;
+    }
+    if (ev.action === "sms") {
+      openSms();
+      return;
+    }
+    if (ev.action === "contact" && ev.contactId) {
+      const ct = (contacts || []).find((c) => c.id === ev.contactId);
+      if (ct) openContact(ct);
+    }
+  };
+
+  // V1.10.4-r11.0.25 — heure relative compacte ("il y a 3 min", "12 min", "1h", "2j")
+  const fmtRelative = (ms) => {
+    if (!ms) return "";
+    const diff = Math.max(0, Math.floor((Date.now() - ms) / 1000));
+    if (diff < 60) return "à l'instant";
+    if (diff < 3600) return Math.floor(diff / 60) + " min";
+    if (diff < 86400) return Math.floor(diff / 3600) + "h";
+    return Math.floor(diff / 86400) + "j";
   };
 
   const handleNotifClick = (n) => {
@@ -460,6 +491,73 @@ const RightPanelCommandCenter = () => {
               </div>
             );
           })
+        )}
+      </div>
+
+      {/* V1.10.4-r11.0.25 — Bloc Activité récente (timeline unifiée 5 events max) */}
+      <div style={sectionStyle}>
+        <div style={sectionTitleStyle}>🕘 Activité récente</div>
+        {recentActivity.length === 0 ? (
+          <div style={{ fontSize: 10, color: T.text3, padding: "6px 4px", fontStyle: "italic" }}>
+            Pas d'activité aujourd'hui.
+          </div>
+        ) : (
+          <div style={{ maxHeight: 180, overflowY: "auto" }}>
+            {recentActivity.map((ev) => {
+              const clickable = !!ev.action;
+              return (
+                <div
+                  key={ev.id}
+                  onClick={clickable ? () => handleActivityClick(ev) : undefined}
+                  title={clickable ? ev.label : undefined}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 7,
+                    padding: "5px 6px",
+                    borderRadius: 7,
+                    cursor: clickable ? "pointer" : "default",
+                    marginBottom: 2,
+                    transition: "background .12s",
+                  }}
+                  onMouseEnter={(e) => { if (clickable) e.currentTarget.style.background = T.bg; }}
+                  onMouseLeave={(e) => { e.currentTarget.style.background = "transparent"; }}
+                >
+                  <div
+                    style={{
+                      width: 22,
+                      height: 22,
+                      borderRadius: 6,
+                      background: ev.color + "18",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      flexShrink: 0,
+                    }}
+                  >
+                    <I n={ev.icon} s={11} style={{ color: ev.color }} />
+                  </div>
+                  <div
+                    style={{
+                      flex: 1,
+                      minWidth: 0,
+                      fontSize: 10,
+                      fontWeight: 600,
+                      color: T.text,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {ev.label}
+                  </div>
+                  <span style={{ fontSize: 9, color: T.text3, flexShrink: 0, fontWeight: 500 }}>
+                    {fmtRelative(ev.ms)}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
         )}
       </div>
 
