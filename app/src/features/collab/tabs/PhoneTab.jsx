@@ -6103,6 +6103,67 @@ api('/api/conversations?companyId='+company.id).then(d=>{if(Array.isArray(d))set
   const zoomPct=hub._zoom;
   const setZoom=(v)=>{hub._zoom=Math.max(50,Math.min(120,v));try{localStorage.setItem(_zoomKey,String(hub._zoom));}catch{}_rerender();};
 
+  // ═══════════════════════════════════════════════════════════════
+  // V1.10.4-r11.0.26 — Phase 1 SAFE SMS Hub helpers
+  // ═══════════════════════════════════════════════════════════════
+  // Stage label/color résolution (réutilise pattern r11.0.23.b)
+  const _stageLabel = (id) => {
+    const map = {nouveau:'Nouveau',contacte:'En discussion',qualifie:'Intéressé',rdv_programme:'RDV programmé',nrp:'NRP',client_valide:'Validé',perdu:'Perdu'};
+    if (map[id]) return map[id];
+    const custom = (pipelineStages||[]).find(s=>s&&s.id===id);
+    if (custom && (custom.label||custom.name)) return custom.label||custom.name;
+    if (typeof id==='string' && id.startsWith('ps_')) return 'Étape personnalisée';
+    return id || '';
+  };
+  const _stageColor = (id) => {
+    const map = {nouveau:'#3B82F6',contacte:'#F59E0B',qualifie:'#7C3AED',rdv_programme:'#0EA5E9',nrp:'#EF4444',client_valide:'#22C55E',perdu:'#6B7280'};
+    if (map[id]) return map[id];
+    const custom = (pipelineStages||[]).find(s=>s&&s.id===id);
+    return (custom && custom.color) || '#6B7280';
+  };
+  // Température lead selon rating contact (HOT/WARM/COLD)
+  const _tempLead = (rating) => {
+    const r = rating || 0;
+    if (r >= 3) return { emoji:'🔥', label:'HOT', color:'#EF4444' };
+    if (r >= 1) return { emoji:'🟠', label:'WARM', color:'#F59E0B' };
+    return { emoji:'⚪', label:'COLD', color:'#9CA3AF' };
+  };
+  // Reset render limit si filter/search change (virtualisation custom)
+  if (hub._prevFilter !== hub.filter || hub._prevSearch !== (hub.search||'')) {
+    hub._renderLimit = 50;
+    hub._prevFilter = hub.filter;
+    hub._prevSearch = hub.search || '';
+  }
+  if (!hub._renderLimit) hub._renderLimit = 50;
+  // Empty state cockpit computations
+  const _24hAgoIso = new Date(Date.now() - 86400000).toISOString();
+  const hotCount = allSmsConvs.filter(c => {
+    const ct = contacts.find(x => x.id === c.contactId || (x.phone||'').replace(/\D/g,'').slice(-9) === (c.clientPhone||'').replace(/\D/g,'').slice(-9));
+    return ct && (ct.rating||0) >= 3;
+  }).length;
+  const noReplyOld = allSmsConvs.filter(c =>
+    c.lastEventType === 'sms_out' && !c.unreadCount && (c.lastActivityAt||'') < _24hAgoIso
+  ).length;
+  // Priority conversations : unread first, then recent sms_in today, then HOT
+  const priorityConvs = (() => {
+    const list = [...allSmsConvs];
+    list.sort((a, b) => {
+      const aU = (a.unreadCount||0) > 0 ? 1 : 0;
+      const bU = (b.unreadCount||0) > 0 ? 1 : 0;
+      if (aU !== bU) return bU - aU;
+      const aT = (a.lastEventType === 'sms_in' && (a.lastActivityAt||'').startsWith(todayStr)) ? 1 : 0;
+      const bT = (b.lastEventType === 'sms_in' && (b.lastActivityAt||'').startsWith(todayStr)) ? 1 : 0;
+      if (aT !== bT) return bT - aT;
+      const aC = contacts.find(x => x.id === a.contactId || (x.phone||'').replace(/\D/g,'').slice(-9) === (a.clientPhone||'').replace(/\D/g,'').slice(-9));
+      const bC = contacts.find(x => x.id === b.contactId || (x.phone||'').replace(/\D/g,'').slice(-9) === (b.clientPhone||'').replace(/\D/g,'').slice(-9));
+      const aH = (aC?.rating||0) >= 3 ? 1 : 0;
+      const bH = (bC?.rating||0) >= 3 ? 1 : 0;
+      if (aH !== bH) return bH - aH;
+      return new Date(b.lastActivityAt||0) - new Date(a.lastActivityAt||0);
+    });
+    return list.slice(0, 5);
+  })();
+
   return <div style={{position:'absolute',left:(typeof phoneLeftCollapsed!=='undefined'?phoneLeftCollapsed:null)?49:281,right:(typeof phoneRightCollapsed!=='undefined'?phoneRightCollapsed:null)?49:340,top:0,bottom:0,zIndex:10,display:'flex',flexDirection:'column',background:T.bg,overflow:'hidden'}}>
 
     {/* ═══ HEADER STATS BANNER ═══ */}
@@ -6135,56 +6196,203 @@ api('/api/conversations?companyId='+company.id).then(d=>{if(Array.isArray(d))set
     {/* ═══ MAIN BODY — 2 columns with zoom ═══ */}
     <div style={{flex:1,display:'flex',overflow:'hidden',zoom:(zoomPct/100),transition:'zoom .15s'}}>
 
-      {/* ── LEFT: Conversation List ── */}
-      <div style={{width:300,flexShrink:0,borderRight:'1px solid '+T.border,display:'flex',flexDirection:'column',background:T.surface}}>
-{/* Filter pills */}
-<div style={{padding:'8px 10px',borderBottom:'1px solid '+T.border,display:'flex',gap:3,flexWrap:'wrap'}}>
-{[{id:'all',label:'Tous'},{id:'unread',label:'Non lus',badge:totalUnread},{id:'today',label:"Aujourd'hui"},{id:'sent_today',label:'Envoyés'},{id:'recv_today',label:'Reçus'},{id:'no_reply',label:'Sans réponse'},{id:'week',label:'7 jours'},{id:'month',label:'30 jours'}].map(f=>
-  <div key={f.id} onClick={()=>{hub.filter=f.id;_rerender();}} style={{padding:'3px 8px',borderRadius:6,fontSize:9,fontWeight:hub.filter===f.id?700:500,cursor:'pointer',background:hub.filter===f.id?T.accentBg:'transparent',color:hub.filter===f.id?T.accent:T.text3,border:'1px solid '+(hub.filter===f.id?T.accent+'40':'transparent'),transition:'all .12s'}}>{f.label}{f.badge>0?' ('+f.badge+')':''}</div>
-)}
-</div>
-{/* Search */}
-<div style={{padding:'6px 10px',borderBottom:'1px solid '+T.border}}>
-<div style={{position:'relative'}}>
-  <I n="search" s={12} style={{position:'absolute',left:8,top:'50%',transform:'translateY(-50%)',color:T.text3}}/>
-  <input value={hub.search||''} onChange={e=>{hub.search=e.target.value;_rerender();}} placeholder="Rechercher..." style={{width:'100%',padding:'6px 8px 6px 28px',borderRadius:6,border:'1px solid '+T.border,background:T.bg,fontSize:10,color:T.text,outline:'none',fontFamily:'inherit'}}/>
-  {hub.search && <div onClick={()=>{hub.search='';_rerender();}} style={{position:'absolute',right:6,top:'50%',transform:'translateY(-50%)',cursor:'pointer',fontSize:10,color:T.text3}}>×</div>}
-</div>
-</div>
-{/* Conversation items */}
-<div style={{flex:1,overflowY:'auto'}}>
-{filteredConvs.length===0 && <div style={{textAlign:'center',padding:24,fontSize:11,color:T.text3}}>Aucune conversation SMS</div>}
-{filteredConvs.map(conv=>{
-  const ct = contacts.find(c=>c.id===conv.contactId||(c.phone||'').replace(/\D/g,'').slice(-9)===(conv.clientPhone||'').replace(/\D/g,'').slice(-9));
-  const isActive = hub.selectedConvId===conv.id;
-  return <div key={conv.id} onClick={()=>{
-    hub.selectedConvId=conv.id;hub.composeText='';_rerender();
-    loadConvEvents(conv.id);
-    if(conv.unreadCount>0){api('/api/conversations/'+conv.id+'/read',{method:'PUT'}).catch(()=>{});setAppConversations(prev=>prev.map(c=>c.id===conv.id?{...c,unreadCount:0}:c));}
-  }} style={{padding:'10px 12px',borderBottom:'1px solid '+T.border,cursor:'pointer',display:'flex',gap:10,alignItems:'flex-start',background:isActive?T.accentBg+'20':'transparent',borderLeft:isActive?'3px solid '+T.accent:'3px solid transparent',transition:'all .12s'}} onMouseEnter={e=>{if(!isActive)e.currentTarget.style.background=T.bg;}} onMouseLeave={e=>{if(!isActive)e.currentTarget.style.background='transparent';}}>
-    <div style={{width:36,height:36,borderRadius:10,background:T.accent+'18',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:12,fontWeight:700,color:T.accent}}>{(ct?.name||conv.contactName||'?')[0]?.toUpperCase()}</div>
-    <div style={{flex:1,minWidth:0}}>
-      <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:2}}>
-        <span style={{fontSize:11,fontWeight:conv.unreadCount>0?700:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',maxWidth:150}}>{ct?.name||conv.contactName||_fmtPhone(conv.clientPhone)}</span>
-        <span style={{fontSize:8,color:T.text3,flexShrink:0}}>{_timeAgo(conv.lastActivityAt)}</span>
-      </div>
-      <div style={{fontSize:9,color:T.text3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{_fmtPhone(conv.clientPhone)}</div>
-      <div style={{fontSize:10,color:conv.unreadCount>0?T.text:T.text3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',marginTop:2,fontWeight:conv.unreadCount>0?600:400}}>{conv.lastEventPreview||'—'}</div>
+      {/* ── LEFT: Conversation List — V1.10.4-r11.0.26 SMS Hub Phase 1 SAFE ── */}
+      <div style={{width:300,flexShrink:0,borderRight:'1px solid '+T.border,display:'flex',flexDirection:'column',background:T.surface,minHeight:0,overflow:'hidden'}}>
+{/* Scrolling container avec sticky filters + search en haut */}
+<div style={{flex:1,minHeight:0,overflowY:'auto'}}>
+  {/* STICKY top : Filter pills + Search (V1.10.4-r11.0.26) */}
+  <div style={{position:'sticky',top:0,zIndex:5,background:'rgba(255,255,255,0.86)',backdropFilter:'blur(8px)',WebkitBackdropFilter:'blur(8px)',borderBottom:'1px solid '+T.border}}>
+    <div style={{padding:'8px 10px',display:'flex',gap:3,flexWrap:'wrap'}}>
+      {[{id:'all',label:'Tous'},{id:'unread',label:'Non lus',badge:totalUnread},{id:'today',label:"Aujourd'hui"},{id:'sent_today',label:'Envoyés'},{id:'recv_today',label:'Reçus'},{id:'no_reply',label:'Sans réponse'},{id:'week',label:'7 jours'},{id:'month',label:'30 jours'}].map(f=>
+        <div key={f.id} onClick={()=>{hub.filter=f.id;_rerender();}} style={{padding:'3px 8px',borderRadius:6,fontSize:9,fontWeight:hub.filter===f.id?700:500,cursor:'pointer',background:hub.filter===f.id?T.accentBg:'transparent',color:hub.filter===f.id?T.accent:T.text3,border:'1px solid '+(hub.filter===f.id?T.accent+'40':'transparent'),transition:'all .12s'}}>{f.label}{f.badge>0?' ('+f.badge+')':''}</div>
+      )}
     </div>
-    {conv.unreadCount>0 && <div style={{width:18,height:18,borderRadius:9,background:'#EF4444',color:'#fff',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0}}>{conv.unreadCount}</div>}
-  </div>;
-})}
+    <div style={{padding:'4px 10px 8px'}}>
+      <div style={{position:'relative'}}>
+        <I n="search" s={12} style={{position:'absolute',left:8,top:'50%',transform:'translateY(-50%)',color:T.text3}}/>
+        <input value={hub.search||''} onChange={e=>{hub.search=e.target.value;_rerender();}} placeholder="Rechercher..." style={{width:'100%',padding:'6px 8px 6px 28px',borderRadius:6,border:'1px solid '+T.border,background:T.bg,fontSize:10,color:T.text,outline:'none',fontFamily:'inherit'}}/>
+        {hub.search && <div onClick={()=>{hub.search='';_rerender();}} style={{position:'absolute',right:6,top:'50%',transform:'translateY(-50%)',cursor:'pointer',fontSize:10,color:T.text3}}>×</div>}
+      </div>
+    </div>
+  </div>
+  {/* Conversation items — virtualisation custom (50 initial + sentinel IntersectionObserver) */}
+  {filteredConvs.length===0 && <div style={{textAlign:'center',padding:24,fontSize:11,color:T.text3}}>Aucune conversation SMS</div>}
+  {filteredConvs.slice(0, hub._renderLimit).map(conv=>{
+    const ct = contacts.find(c=>c.id===conv.contactId||(c.phone||'').replace(/\D/g,'').slice(-9)===(conv.clientPhone||'').replace(/\D/g,'').slice(-9));
+    const isActive = hub.selectedConvId===conv.id;
+    const temp = _tempLead(ct?.rating);
+    const stageId = ct?.pipeline_stage;
+    const stColor = stageId ? _stageColor(stageId) : null;
+    const stLabel = stageId ? _stageLabel(stageId) : null;
+    return <div key={conv.id} onClick={()=>{
+      hub.selectedConvId=conv.id;hub.composeText='';_rerender();
+      loadConvEvents(conv.id);
+      if(conv.unreadCount>0){api('/api/conversations/'+conv.id+'/read',{method:'PUT'}).catch(()=>{});setAppConversations(prev=>prev.map(c=>c.id===conv.id?{...c,unreadCount:0}:c));}
+    }} style={{padding:'10px 12px',borderBottom:'1px solid '+T.border,cursor:'pointer',display:'flex',gap:9,alignItems:'flex-start',background:isActive?T.accentBg+'20':'transparent',borderLeft:isActive?'3px solid '+T.accent:'3px solid transparent',transition:'all .12s',position:'relative',minHeight:60}}
+      onMouseEnter={e=>{
+        if(!isActive) e.currentTarget.style.background = T.bg;
+        const a = e.currentTarget.querySelector('[data-conv-actions]');
+        if (a) a.style.opacity = '1';
+      }}
+      onMouseLeave={e=>{
+        if(!isActive) e.currentTarget.style.background = 'transparent';
+        const a = e.currentTarget.querySelector('[data-conv-actions]');
+        if (a) a.style.opacity = '0';
+      }}>
+      <div style={{width:34,height:34,borderRadius:10,background:T.accent+'18',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:12,fontWeight:700,color:T.accent}}>{(ct?.name||conv.contactName||'?')[0]?.toUpperCase()}</div>
+      <div style={{flex:1,minWidth:0}}>
+        {/* Ligne 1 : Nom + heure relative */}
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',gap:6,marginBottom:3}}>
+          <span style={{fontSize:11,fontWeight:conv.unreadCount>0?700:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{ct?.name||conv.contactName||_fmtPhone(conv.clientPhone)}</span>
+          <span style={{fontSize:8,color:T.text3,flexShrink:0,fontWeight:500}}>{_timeAgo(conv.lastActivityAt)}</span>
+        </div>
+        {/* Ligne 2 : Preview SMS */}
+        <div style={{fontSize:10,color:conv.unreadCount>0?T.text:T.text3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',fontWeight:conv.unreadCount>0?600:400,marginBottom:4}}>{conv.lastEventPreview||'—'}</div>
+        {/* Ligne 3 : Pipeline chip + Temperature */}
+        <div style={{display:'flex',alignItems:'center',gap:5,flexWrap:'nowrap',overflow:'hidden'}}>
+          {stLabel && <span style={{fontSize:8,fontWeight:700,padding:'1px 6px',borderRadius:4,background:stColor+'18',color:stColor,whiteSpace:'nowrap',overflow:'hidden',textOverflow:'ellipsis',maxWidth:110}}>{stLabel}</span>}
+          <span title={temp.label} style={{fontSize:9,color:temp.color,fontWeight:600,display:'inline-flex',alignItems:'center',gap:2}}>{temp.emoji}<span style={{fontSize:8}}>{temp.label}</span></span>
+        </div>
+      </div>
+      {/* Badge unread */}
+      {conv.unreadCount>0 && <div style={{width:18,height:18,borderRadius:9,background:'#EF4444',color:'#fff',fontSize:9,fontWeight:700,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,marginTop:6}}>{conv.unreadCount}</div>}
+      {/* Hover actions reveal (DOM-controlled, zero re-render) */}
+      <div data-conv-actions style={{position:'absolute',right:8,bottom:8,display:'flex',gap:3,opacity:0,transition:'opacity .15s ease',background:T.surface,padding:'3px 5px',borderRadius:6,border:'1px solid '+T.border,boxShadow:'0 2px 6px rgba(0,0,0,0.06)'}}>
+        {ct?.phone && <div onClick={e=>{e.stopPropagation();prefillKeypad(ct.phone,{skipNav:true});setPhoneSubTab('pipeline');}} title="Appeler" style={{width:22,height:22,borderRadius:5,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#22C55E12',border:'1px solid #22C55E25'}}><I n="phone" s={11} style={{color:'#22C55E'}}/></div>}
+        {ct?.id && <div onClick={e=>{e.stopPropagation();setPhoneScheduleForm({contactId:ct.id,contactName:ct.name,number:ct.phone||'',date:new Date(Date.now()+86400000).toISOString().split('T')[0],time:'10:00',duration:30,notes:'',_bookingMode:true});setPhoneShowScheduleModal(true);}} title="Créer RDV" style={{width:22,height:22,borderRadius:5,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:'#F59E0B12',border:'1px solid #F59E0B25'}}><I n="calendar-plus" s={11} style={{color:'#F59E0B'}}/></div>}
+        {ct && <div onClick={e=>{e.stopPropagation();setPipelineRightContact(ct);setPhoneRightCollapsed(false);}} title="Ouvrir fiche" style={{width:22,height:22,borderRadius:5,display:'flex',alignItems:'center',justifyContent:'center',cursor:'pointer',background:T.accentBg,border:'1px solid '+T.accent+'25'}}><I n="user" s={11} style={{color:T.accent}}/></div>}
+      </div>
+    </div>;
+  })}
+  {/* Sentinel IntersectionObserver pour load-more (50 par 50) */}
+  {filteredConvs.length > hub._renderLimit && <div ref={el => {
+    if (!el || el._smsHubObs) return;
+    try {
+      const obs = new IntersectionObserver(entries => {
+        if (entries[0] && entries[0].isIntersecting) {
+          hub._renderLimit = (hub._renderLimit || 50) + 50;
+          _rerender();
+        }
+      }, { rootMargin: '120px', threshold: 0 });
+      obs.observe(el);
+      el._smsHubObs = obs;
+    } catch (e) {
+      // IntersectionObserver fallback : pas de virtualisation, on charge tout (sécuritaire)
+      hub._renderLimit = filteredConvs.length;
+      _rerender();
+    }
+  }} style={{padding:'12px 0',textAlign:'center',fontSize:10,color:T.text3,fontStyle:'italic'}}>Chargement… ({hub._renderLimit}/{filteredConvs.length})</div>}
 </div>
       </div>
 
       {/* ── CENTER: Conversation Detail ── */}
       <div style={{flex:1,display:'flex',flexDirection:'column',overflow:'hidden'}}>
 
-{/* State A: No selection */}
-{!hub.selectedConvId && <div style={{flex:1,display:'flex',flexDirection:'column',alignItems:'center',justifyContent:'center',gap:12,color:T.text3}}>
-<div style={{width:64,height:64,borderRadius:16,background:T.accentBg,display:'flex',alignItems:'center',justifyContent:'center'}}><I n="message-circle" s={28} style={{color:T.accent}}/></div>
-<div style={{fontSize:14,fontWeight:700,color:T.text}}>Sélectionnez une conversation</div>
-<div style={{fontSize:11}}>Choisissez une conversation dans la liste ou envoyez un nouveau SMS</div>
+{/* State A: SMS Command Center — V1.10.4-r11.0.26 Phase 1 SAFE empty state */}
+{!hub.selectedConvId && <div style={{flex:1,minHeight:0,overflow:'auto',padding:'16px 18px',display:'flex',flexDirection:'column',gap:10}}>
+  {/* Header titre */}
+  <div style={{padding:'0 4px',marginBottom:2}}>
+    <div style={{fontSize:13,fontWeight:700,color:T.text,display:'flex',alignItems:'center',gap:6}}>
+      <I n="message-circle" s={14} style={{color:T.accent}}/>
+      SMS Command Center
+    </div>
+    <div style={{fontSize:10,color:T.text3,marginTop:2}}>
+      Sélectionnez une conversation ou agissez ci-dessous
+    </div>
+  </div>
+
+  {/* BLOC 1 — Activité SMS jour (4 KPI compacts) */}
+  <div style={{padding:12,borderRadius:10,background:T.surface,border:'1px solid '+T.border}}>
+    <div style={{fontSize:9,fontWeight:700,color:T.text3,textTransform:'uppercase',letterSpacing:0.7,marginBottom:8}}>📊 Activité SMS · aujourd'hui</div>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:8}}>
+      {[
+        {emoji:'📤',value:sentToday,label:'envoyés',color:'#22C55E'},
+        {emoji:'📥',value:recvToday,label:'réponses',color:'#0EA5E9'},
+        {emoji:'🔥',value:hotCount,label:'chaudes',color:'#EF4444'},
+        {emoji:'⚠',value:noReplyOld,label:'sans réponse >24h',color:'#F59E0B'},
+      ].map((s,i)=>(
+        <div key={i} style={{padding:'8px 10px',borderRadius:8,background:s.color+'0C',border:'1px solid '+s.color+'25',display:'flex',alignItems:'center',gap:7}}>
+          <span style={{fontSize:14}}>{s.emoji}</span>
+          <div style={{minWidth:0}}>
+            <div style={{fontSize:14,fontWeight:800,color:s.color,lineHeight:1}}>{s.value}</div>
+            <div style={{fontSize:8,color:T.text3,fontWeight:600,marginTop:1,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{s.label}</div>
+          </div>
+        </div>
+      ))}
+    </div>
+  </div>
+
+  {/* BLOC 2 — Actions rapides grid 2×2 */}
+  <div style={{padding:12,borderRadius:10,background:T.surface,border:'1px solid '+T.border}}>
+    <div style={{fontSize:9,fontWeight:700,color:T.text3,textTransform:'uppercase',letterSpacing:0.7,marginBottom:8}}>⚡ Actions rapides</div>
+    <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:6}}>
+      {[
+        {label:'+ Nouveau SMS',icon:'edit-3',color:'#0EA5E9',action:()=>{hub.selectedConvId='__new__';hub.events=[];_rerender();}},
+        {label:'+ SMS groupé',icon:'users',color:'#7C3AED',action:()=>{hub.bulkModalOpen=true;hub.bulkSelectedContacts=[];hub.bulkMessage='';hub.bulkSending=false;hub.bulkProgress=0;hub.bulkSearch='';_rerender();}},
+        {label:'+ Import contacts',icon:'upload',color:'#22C55E',action:()=>showNotif('Import contacts — bientôt disponible','info'),placeholder:true},
+        {label:'+ Modèles SMS',icon:'file-text',color:'#F59E0B',action:()=>showNotif('Modèles SMS — bientôt disponible','info'),placeholder:true},
+      ].map((a,i)=>(
+        <div key={i} onClick={a.action} style={{padding:'10px 8px',borderRadius:8,cursor:'pointer',background:a.color+'0F',border:'1px solid '+a.color+'25',color:a.color,fontSize:11,fontWeight:600,display:'flex',alignItems:'center',justifyContent:'center',gap:5,transition:'all .12s',opacity:a.placeholder?0.6:1}}
+          onMouseEnter={e=>{e.currentTarget.style.background=a.color+(a.placeholder?'14':'20');e.currentTarget.style.transform='translateY(-1px)';}}
+          onMouseLeave={e=>{e.currentTarget.style.background=a.color+'0F';e.currentTarget.style.transform='translateY(0)';}}>
+          <I n={a.icon} s={12}/> {a.label}
+        </div>
+      ))}
+    </div>
+  </div>
+
+  {/* BLOC 3 — Conversations prioritaires (top 5) */}
+  <div style={{padding:12,borderRadius:10,background:T.surface,border:'1px solid '+T.border}}>
+    <div style={{fontSize:9,fontWeight:700,color:T.text3,textTransform:'uppercase',letterSpacing:0.7,marginBottom:8}}>📌 Conversations prioritaires</div>
+    {priorityConvs.length === 0 ? (
+      <div style={{fontSize:10,color:T.text3,padding:'6px 4px',fontStyle:'italic'}}>Aucune conversation prioritaire.</div>
+    ) : (
+      priorityConvs.map(conv => {
+        const ct = contacts.find(c=>c.id===conv.contactId||(c.phone||'').replace(/\D/g,'').slice(-9)===(conv.clientPhone||'').replace(/\D/g,'').slice(-9));
+        const temp = _tempLead(ct?.rating);
+        return (
+          <div key={conv.id} onClick={()=>{
+            hub.selectedConvId=conv.id;hub.composeText='';_rerender();
+            loadConvEvents(conv.id);
+            if(conv.unreadCount>0){api('/api/conversations/'+conv.id+'/read',{method:'PUT'}).catch(()=>{});setAppConversations(prev=>prev.map(c=>c.id===conv.id?{...c,unreadCount:0}:c));}
+          }} style={{padding:'7px 8px',borderRadius:7,cursor:'pointer',display:'flex',alignItems:'center',gap:8,marginBottom:3,background:conv.unreadCount>0?'#0EA5E908':T.bg,border:'1px solid '+(conv.unreadCount>0?'#0EA5E920':T.border),transition:'all .12s'}}
+            onMouseEnter={e=>{if(!conv.unreadCount)e.currentTarget.style.background=T.surface;}}
+            onMouseLeave={e=>{if(!conv.unreadCount)e.currentTarget.style.background=T.bg;}}>
+            <div style={{width:24,height:24,borderRadius:7,background:T.accent+'18',display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:11,fontWeight:700,color:T.accent}}>{(ct?.name||conv.contactName||'?')[0]?.toUpperCase()}</div>
+            <div style={{flex:1,minWidth:0}}>
+              <div style={{display:'flex',alignItems:'center',gap:4,marginBottom:1}}>
+                <span style={{fontSize:11,fontWeight:conv.unreadCount>0?700:600,color:T.text,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',flex:1}}>{ct?.name||conv.contactName||_fmtPhone(conv.clientPhone)}</span>
+                <span style={{fontSize:9,color:temp.color,fontWeight:600}}>{temp.emoji}</span>
+                {conv.unreadCount>0 && <span style={{fontSize:8,fontWeight:800,color:'#fff',background:'#EF4444',borderRadius:6,padding:'1px 5px'}}>{conv.unreadCount}</span>}
+              </div>
+              <div style={{fontSize:9,color:T.text3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>{conv.lastEventPreview||'—'}</div>
+            </div>
+            <span style={{fontSize:8,color:T.text3,flexShrink:0,fontWeight:500}}>{_timeAgo(conv.lastActivityAt)}</span>
+          </div>
+        );
+      })
+    )}
+  </div>
+
+  {/* BLOC 4 — Campagnes live */}
+  <div style={{padding:12,borderRadius:10,background:T.surface,border:'1px solid '+T.border}}>
+    <div style={{fontSize:9,fontWeight:700,color:T.text3,textTransform:'uppercase',letterSpacing:0.7,marginBottom:8}}>📡 Campagnes</div>
+    {hub.bulkSending ? (
+      <div style={{padding:'8px 10px',borderRadius:7,background:'#7C3AED0F',border:'1px solid #7C3AED25'}}>
+        <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:6}}>
+          <I n="users" s={12} style={{color:'#7C3AED'}}/>
+          <span style={{fontSize:11,fontWeight:700,color:T.text,flex:1}}>Campagne en cours</span>
+          <span style={{fontSize:10,fontWeight:700,color:'#7C3AED'}}>{hub.bulkProgress||0}%</span>
+        </div>
+        <div style={{position:'relative',height:6,background:T.bg,borderRadius:3,overflow:'hidden'}}>
+          <div style={{position:'absolute',left:0,top:0,bottom:0,width:(hub.bulkProgress||0)+'%',background:'linear-gradient(90deg,#7C3AED88,#7C3AED)',transition:'width .3s'}}/>
+        </div>
+      </div>
+    ) : (
+      <div style={{fontSize:10,color:T.text3,padding:'6px 4px',fontStyle:'italic'}}>Aucune campagne active.</div>
+    )}
+  </div>
+
 </div>}
 
 {/* State B: New SMS compose */}
