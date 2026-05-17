@@ -51,6 +51,8 @@ const ReminderChooser = () => {
     collab,
     company,
     showNotif,
+    // V1.10.4-r11.0.27.b.1 — bouton ← Retour aux choix si ouvert depuis ContacteChooser
+    previousChooser, setPreviousChooser, setContacteChooser,
   } = useCollabContext();
 
   const open = !!reminderChooser;
@@ -93,6 +95,28 @@ const ReminderChooser = () => {
     setDuration(15);
     setNote('');
     setSubmitting(false);
+    // r11.0.27.b.1 — clear l'origine chooser pour ne pas re-afficher ← Retour la prochaine fois
+    if (typeof setPreviousChooser === 'function') setPreviousChooser(null);
+  };
+
+  // r11.0.27.b.1 — Retour vers ContacteChooser. Le contact a déjà été move'd en 'contacte'
+  // par ContacteChooser._finalizeContacteMove avant d'ouvrir ReminderChooser. Le ← Retour
+  // réouvre simplement le chooser pour changer d'action (Programmer RDV / Aucun suivi).
+  const _showBackButton = previousChooser?.type === 'contacte' && !!previousChooser?.contactId;
+  const onBackToChooser = () => {
+    const _cid = previousChooser?.contactId || contactId;
+    // Reset local state
+    setPreset('tomorrow');
+    const dt = _presetDateTime('tomorrow');
+    setDate(dt.date);
+    setTime(dt.time);
+    setDuration(15);
+    setNote('');
+    setSubmitting(false);
+    // Fermer ReminderChooser + ouvrir ContacteChooser sur le même contact
+    setReminderChooser(null);
+    if (typeof setContacteChooser === 'function' && _cid) setContacteChooser({ contactId: _cid });
+    if (typeof setPreviousChooser === 'function') setPreviousChooser(null);
   };
 
   const onCreate = () => {
@@ -177,6 +201,12 @@ const ReminderChooser = () => {
             <div style={{ fontSize:17, fontWeight:800, color:'#1F2937' }}>Créer un rappel</div>
             <div style={{ fontSize:11, color:'#6B7280', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{contactName}</div>
           </div>
+          {/* V1.10.4-r11.0.27.b.1 — bouton ← Retour aux choix si ouvert depuis ContacteChooser */}
+          {_showBackButton && (
+            <div onClick={onBackToChooser} title="Retour aux choix Contact établi" style={{ cursor:'pointer', padding:'5px 9px', borderRadius:8, background:'#F3F4F6', fontSize:11, fontWeight:700, color:'#374151', whiteSpace:'nowrap', display:'inline-flex', alignItems:'center', gap:4 }}>
+              <I n="chevron-left" s={12}/> Retour aux choix
+            </div>
+          )}
           <div onClick={onClose} title="Annuler" style={{ cursor:'pointer', padding:6, borderRadius:8, background:'#F3F4F6' }}>
             <I n="x" s={16} />
           </div>

@@ -66,6 +66,8 @@ const ScheduleRdvModal = () => {
     availBuffer,
     collab, company,
     contacts, setContacts,
+    // V1.10.4-r11.0.27.b.1 — bouton "← Retour aux choix" si modal ouvert depuis ContacteChooser
+    previousChooser, setPreviousChooser, setContacteChooser,
   } = useCollabContext();
 
   if (!phoneShowScheduleModal) return null;
@@ -78,7 +80,24 @@ const ScheduleRdvModal = () => {
     setPhoneScheduleForm({ contactId:'', number:'', date:'', time:'', notes:'' });
     setSchedSearchQ('');
     setSchedContactMode('new');
+    // r11.0.27.b.1 — clear l'origine chooser pour ne pas re-afficher ← Retour la prochaine fois
+    if (typeof setPreviousChooser === 'function') setPreviousChooser(null);
   };
+
+  // r11.0.27.b.1 — Retour vers ContacteChooser sans notif "Aucun RDV créé" (le contact reste à 'contacte').
+  // Le contact a déjà été move'd en 'contacte' par ContacteChooser._finalizeContacteMove avant
+  // d'ouvrir ScheduleRdvModal. Le ← Retour réouvre simplement le chooser pour changer d'action.
+  const _showBackButton = previousChooser?.type === 'contacte' && !!previousChooser?.contactId;
+  const onBackToChooser = () => {
+    const _cid = previousChooser?.contactId;
+    setPhoneShowScheduleModal(false);
+    setPhoneScheduleForm({ contactId:'', number:'', date:'', time:'', notes:'' });
+    setSchedSearchQ('');
+    setSchedContactMode('new');
+    if (typeof setContacteChooser === 'function' && _cid) setContacteChooser({ contactId: _cid });
+    if (typeof setPreviousChooser === 'function') setPreviousChooser(null);
+  };
+
   const hasPrefilledContact = !!phoneScheduleForm.contactId;
 
   return (
@@ -86,11 +105,17 @@ const ScheduleRdvModal = () => {
       <div onClick={e=>e.stopPropagation()} style={{background:'#fff',borderRadius:20,padding:24,maxWidth:440,width:'90%',boxShadow:'0 25px 50px rgba(0,0,0,0.25)',maxHeight:'90vh',overflowY:'auto'}}>
         <div style={{display:'flex',alignItems:'center',gap:10,marginBottom:16}}>
           <div style={{width:40,height:40,borderRadius:12,background:phoneScheduleForm._bookingMode?'linear-gradient(135deg,#7C3AED,#6D28D9)':'linear-gradient(135deg,#2563EB,#1D4ED8)',display:'flex',alignItems:'center',justifyContent:'center'}}><I n={phoneScheduleForm._bookingMode?'calendar-check':'clock'} s={18} style={{color:'#fff'}}/></div>
-          <div>
+          <div style={{minWidth:0,flex:1}}>
             <h3 style={{fontSize:16,fontWeight:700,margin:0}}>{phoneScheduleForm._bookingMode?'Programmer un RDV':'Programmer un appel'}</h3>
             <div style={{fontSize:12,color:T.text3}}>{phoneScheduleForm.contactName ? phoneScheduleForm.contactName+' — Choisissez date et heure' : 'Choisissez un contact puis date et heure'}</div>
           </div>
-          <span onClick={closeScheduleModal} style={{marginLeft:'auto',cursor:'pointer',color:T.text3}}><I n="x" s={18}/></span>
+          {/* V1.10.4-r11.0.27.b.1 — bouton ← Retour aux choix visible si modal ouvert depuis ContacteChooser */}
+          {_showBackButton && (
+            <span onClick={onBackToChooser} title="Retour aux choix Contact établi" style={{cursor:'pointer',color:T.text2,padding:'5px 9px',borderRadius:8,background:'#F3F4F6',fontSize:11,fontWeight:700,whiteSpace:'nowrap',display:'inline-flex',alignItems:'center',gap:4}}>
+              <I n="chevron-left" s={12}/> Retour aux choix
+            </span>
+          )}
+          <span onClick={closeScheduleModal} style={{cursor:'pointer',color:T.text3}}><I n="x" s={18}/></span>
         </div>
 
         {/* ── Contact Mode Switch ── */}

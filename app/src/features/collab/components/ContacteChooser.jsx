@@ -23,6 +23,7 @@ const ContacteChooser = () => {
     contacts,
     showNotif,
     setReminderChooser, // r11.0.27.b — déclenche le ReminderChooser après finalize move
+    setPreviousChooser, // r11.0.27.b.1 — trace l'origine pour activer ← Retour dans les modals suivants
   } = useCollabContext();
 
   if (!contacteChooser) return null;
@@ -43,6 +44,8 @@ const ContacteChooser = () => {
   };
 
   const onScheduleRdv = () => {
+    // r11.0.27.b.1 — trace l'origine AVANT chain pour activer "← Retour aux choix" dans ScheduleRdvModal.
+    if (typeof setPreviousChooser === 'function') setPreviousChooser({ type: 'contacte', contactId });
     setContacteChooser(null);
     _finalizeContacteMove();
     // setTimeout(0) → laisser React batcher le premier update avant d'enchaîner.
@@ -52,6 +55,8 @@ const ContacteChooser = () => {
 
   const onCreateReminder = () => {
     // r11.0.27.b Phase 2 LIVE : finalize move + ouvre ReminderChooser (5 presets + custom datetime + note).
+    // r11.0.27.b.1 — trace l'origine AVANT pour activer "← Retour aux choix" dans ReminderChooser.
+    if (typeof setPreviousChooser === 'function') setPreviousChooser({ type: 'contacte', contactId });
     setContacteChooser(null);
     _finalizeContacteMove();
     if (typeof setReminderChooser === 'function') {

@@ -2240,6 +2240,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       });
       setPhoneShowScheduleModal(false);
       setPhoneScheduleForm({contactId:'',number:'',date:'',time:'',notes:'',collaboratorId:collab.id});
+      setPreviousChooser(null); // r11.0.27.b.1 — RDV créé : clear l'origine chooser
       showNotif((cancelOld?'RDV déplacé':'RDV programmé')+' le '+formatDateTime(f.date, f.time)+' ✅','success');
       return true;
     }
@@ -2249,6 +2250,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
     setPhoneScheduledCalls(prev => { const n=[...prev,sc]; localStorage.setItem("c360-phone-scheduled-"+collab.id,JSON.stringify(n)); return n; });
     setPhoneShowScheduleModal(false);
     setPhoneScheduleForm({contactId:'',number:'',date:'',time:'',notes:'',collaboratorId:collab.id});
+    setPreviousChooser(null); // r11.0.27.b.1 — rappel programmé : clear l'origine chooser
     showNotif("Rappel programmé ✓");
     return true;
   };
@@ -3021,6 +3023,10 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const _contacteChooserSkipRef = useRef({}); // skip-flag par contactId pour finalize move après choix
   // V1.10.4-r11.0.27.b Phase 2 — ReminderChooser (5 presets + custom datetime + note) → booking type='reminder'.
   const [reminderChooser, setReminderChooser] = useState(null); // {contactId}
+  // V1.10.4-r11.0.27.b.1 — Bug 2 fix : trace l'origine du chooser actif pour activer un bouton "← Retour".
+  // Set par ContacteChooser avant chain RDV/Rappel. Lu par ScheduleRdvModal et ReminderChooser.
+  // Cleared par les modals (close/back/success). Shape : {type:'contacte', contactId} | null.
+  const [previousChooser, setPreviousChooser] = useState(null);
   const [showAddStage, setShowAddStage] = useState(false);
   const [newStageName, setNewStageName] = useState('');
   const [newStageColor, setNewStageColor] = useState('#7C3AED');
@@ -3772,12 +3778,16 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       updates.notes = (ct?.notes ? ct.notes + '\n' + newNote : newNote);
     }
     // V1.10.4-r11.0.19 — Phase A bis SAFE : push undo pour transitions pipeline simples.
-    // Exclusions cascade non-undoable v1 : perdu (cancel bookings), rdv_programme (create booking),
+    // V1.10.4-r11.0.27.b.1 — 'perdu' retiré du cascade (option A pragmatique GO MH 2026-05-17).
+    // Snapshot {pipeline_stage, notes} capture la note motif PerduMotifModal, revert restaure les 2 champs.
+    // Aucun side effect destructif sur move TO 'perdu' depuis non-cascade : booking cancel reste
+    // conditionnel à fromStage='rdv_programme' (cascade fromStage préservé).
+    // Exclusions cascade non-undoable v1 : rdv_programme (create booking),
     // client_valide (contract modal + contract_*), nrp (auto followups schedule).
     // contractData present = passe par le path client_valide cascade -> non-undoable.
     // _forceStageChange + _noUndo dans revert/apply pour eviter double-push et bypass cascade.
     {
-      const _CASCADE_STAGES = new Set(['perdu','rdv_programme','client_valide','nrp']);
+      const _CASCADE_STAGES = new Set(['rdv_programme','client_valide','nrp']);
       const _isSimpleStageMove = (
         fromStage !== newStage &&
         !_CASCADE_STAGES.has(fromStage) &&
@@ -4757,6 +4767,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       contacteChooser, setContacteChooser, _contacteChooserSkipRef,
       // V1.10.4-r11.0.27.b Phase 2 — ReminderChooser (Reminder system : bookings type='reminder').
       reminderChooser, setReminderChooser,
+      // V1.10.4-r11.0.27.b.1 — Bouton "← Retour aux choix" cross-modal (ScheduleRdvModal / ReminderChooser).
+      previousChooser, setPreviousChooser,
 
       // V1.10.4-r11.0.16 — Override des 3 setters fiche contact avec wrappers historique navigation.
       // L'ordre object literal : later wins, donc les wrappers ci-dessous remplacent les setters
