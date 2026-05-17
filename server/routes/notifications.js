@@ -31,6 +31,77 @@ router.get('/', requireAuth, enforceCompany, (req, res) => {
   }
 });
 
+// GET /api/notifications/sync-reminders — V1.10.4-r11.0.27.c Phase 3
+// Fire les notifications "🔔 Rappel" pour les bookings bookingType='reminder' échus.
+// Idempotent : reminderFired=1 garantit qu'un rappel ne fire qu'une fois (UPDATE atomique
+// `WHERE reminderFired = 0` race-safe entre polls concurrents multi-tabs).
+// Appelé par le polling 30s frontend AVANT GET /api/notifications. Pas de cron, pas de websocket.
+// Skip dedup (chaque rappel = notif distincte avec sa note). Limit 50 par appel pour éviter
+// flood après long offline.
+router.get('/sync-reminders', requireAuth, enforceCompany, (req, res) => {
+  try {
+    const collaboratorId = req.auth.collaboratorId;
+    const companyId = req.auth.companyId;
+    if (!collaboratorId || !companyId) return res.json({ fired: 0, scanned: 0 });
+
+    // Format JS Date au même schéma que bookings.date (YYYY-MM-DD) + ' ' + bookings.time (HH:MM)
+    // → string compare SQLite-safe sans manipulation timezone côté SQL.
+    const _pad = n => String(n).padStart(2, '0');
+    const d = new Date();
+    const nowStr = d.getFullYear() + '-' + _pad(d.getMonth() + 1) + '-' + _pad(d.getDate()) + ' ' + _pad(d.getHours()) + ':' + _pad(d.getMinutes());
+
+    // Rappels échus pour ce collab — status='confirmed' exclut cancelled/dismissed.
+    const dueReminders = db.prepare(`
+      SELECT id, contactId, notes, date, time
+      FROM bookings
+      WHERE bookingType = 'reminder'
+        AND reminderFired = 0
+        AND status = 'confirmed'
+        AND collaboratorId = ?
+        AND companyId = ?
+        AND (date || ' ' || time) <= ?
+      ORDER BY date ASC, time ASC
+      LIMIT 50
+    `).all(collaboratorId, companyId, nowStr);
+
+    let fired = 0;
+    for (const r of dueReminders) {
+      // Résoudre nom du contact pour le titre lisible.
+      const contact = r.contactId
+        ? db.prepare('SELECT name, firstname, lastname FROM contacts WHERE id = ?').get(r.contactId)
+        : null;
+      const contactName = (contact?.name && contact.name.trim())
+        || (((contact?.firstname || '') + ' ' + (contact?.lastname || '')).trim())
+        || 'contact';
+
+      const title = '🔔 Rappel : ' + contactName;
+      const detail = (r.notes && r.notes.trim()) || ('Rappel programmé le ' + r.date + ' à ' + r.time);
+      const linkUrl = r.contactId ? '/crm/contact/' + r.contactId : '';
+
+      // INSERT direct (bypass dedup createNotification) — chaque rappel = notification distincte
+      // pour préserver la note spécifique de chaque rappel (vs dedup qui écraserait la précédente).
+      const notifId = 'notif' + Date.now() + Math.random().toString(36).slice(2, 6);
+      try {
+        db.prepare(
+          'INSERT INTO notifications (id, companyId, collaboratorId, type, title, detail, contactId, contactName, linkUrl, createdAt) VALUES (?,?,?,?,?,?,?,?,?,?)'
+        ).run(notifId, companyId, collaboratorId, 'reminder_due', title, detail, r.contactId || '', contactName, linkUrl, new Date().toISOString());
+      } catch (err) {
+        console.error('[REMINDER NOTIF INSERT ERROR]', err.message);
+        continue;
+      }
+
+      // Marquage atomique reminderFired=1 (race-safe entre polls concurrents multi-tabs).
+      const upd = db.prepare('UPDATE bookings SET reminderFired = 1 WHERE id = ? AND reminderFired = 0').run(r.id);
+      if (upd.changes > 0) fired++;
+    }
+
+    res.json({ fired, scanned: dueReminders.length });
+  } catch (err) {
+    console.error('[REMINDER SYNC ERROR]', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 // POST /api/notifications/read — marquer comme lu (un ou plusieurs)
 router.post('/read', requireAuth, (req, res) => {
   try {

@@ -116,7 +116,12 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   // Fetch unread notifications count
   useEffect(() => {
     if (!collab?.id) return;
-    const fetchNotifs = () => api('/api/notifications?unreadOnly=1&limit=10').then(r => { if (r?.unread !== undefined) { setNotifUnread(r.unread); setNotifList(r.notifications || []); } }).catch(() => {});
+    // V1.10.4-r11.0.27.c Phase 3 — sync-reminders fire les notifs "🔔 Rappel" échues AVANT
+    // le fetch principal. Idempotent backend-side (reminderFired flag). Erreur sync n'empêche
+    // pas fetch (chained .catch sur sync, puis fetch indépendant).
+    const fetchNotifs = () => api('/api/notifications/sync-reminders').catch(() => {}).then(() =>
+      api('/api/notifications?unreadOnly=1&limit=10').then(r => { if (r?.unread !== undefined) { setNotifUnread(r.unread); setNotifList(r.notifications || []); } })
+    ).catch(() => {});
     fetchNotifs();
     const niv = setInterval(fetchNotifs, 30000);
     return () => clearInterval(niv);
@@ -5049,6 +5054,7 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
                       call_missed:    { icon:'phone-missed', color:'#EF4444', cta:'Rappeler' },
                       sms_inbound:    { icon:'message-square',color:'#3B82F6',cta:'Repondre' },
                       client_message: { icon:'message-circle',color:'#2563EB',cta:'Voir le message' },
+                      reminder_due:   { icon:'bell',          color:'#F59E0B', cta:'Ouvrir la fiche' }, // r11.0.27.c
                     };
                     const ns = NOTIF_STYLE[n.type] || { icon:'bell', color:'#64748B', cta:null };
                     return <div key={n.id} onClick={()=>{
