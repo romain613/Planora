@@ -5,6 +5,7 @@ import { Device as TwilioDevice } from '@twilio/voice-sdk';
 import { _T } from "../../shared/state/tabState";
 import { pushAction as _undoPush, undo as _undoFn, redo as _redoFn, canUndo as _undoCan, canRedo as _redoCan, nextUndoLabel as _undoLabel, nextRedoLabel as _redoLabel, subscribe as _undoSub } from "../../shared/state/undoStack"; // V1.10.4-r11.0.18
 import UndoRedoButtons from "./components/UndoRedoButtons"; // V1.10.4-r11.0.18
+import ContacteChooser from "./components/ContacteChooser"; // V1.10.4-r11.0.27.a Phase 1 — mini-chooser "Contact établi"
 
 // Phase 1A extractions
 import { T, T_LIGHT, T_DARK, setTheme } from "../../theme";
@@ -3014,6 +3015,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   const [newContactForm, setNewContactForm] = useState({name:'',firstname:'',lastname:'',civility:'',contact_type:'btc',email:'',phone:'',mobile:'',company:'',address:'',website:'',siret:'',notes:'',pipeline_stage:'nouveau',tags:''});
   const [scanImageModal, setScanImageModal] = useState(null); // {step:'upload'|'preview', image, contacts[], loading}
   const [perduMotifModal, setPerduMotifModal] = useState(null); // {contactId, fromNote}
+  // V1.10.4-r11.0.27.a Phase 1 — mini-chooser quand un contact entre dans 'contacte' (RDV/Rappel/Pas de suivi).
+  const [contacteChooser, setContacteChooser] = useState(null); // {contactId}
+  const _contacteChooserSkipRef = useRef({}); // skip-flag par contactId pour finalize move après choix
   const [showAddStage, setShowAddStage] = useState(false);
   const [newStageName, setNewStageName] = useState('');
   const [newStageColor, setNewStageColor] = useState('#7C3AED');
@@ -3642,6 +3646,20 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       console.warn('[PIPELINE] Stage invalide:', newStage, '→ fallback nouveau');
       newStage = 'nouveau';
     }
+    // ── r11.0.27.a Phase 1 : "Contact établi" → mini-chooser RDV/Rappel/Pas de suivi ──
+    // Plus de justification obligatoire — ouvre un chooser qui finalize le move via skipRef
+    // puis chain l'action choisie. Skip si l'appel vient déjà du chooser (skipRef set).
+    // Ne déclenche que sur ENTRÉE dans 'contacte' (pas sur re-clic identique).
+    if (newStage === 'contacte' && !_contacteChooserSkipRef.current[contactId]) {
+      const _ct0 = (contacts||[]).find(_c => _c.id === contactId);
+      const _fromStage0 = _ct0?.pipeline_stage || 'nouveau';
+      if (_fromStage0 !== 'contacte') {
+        setContacteChooser({ contactId });
+        delete pipelineActionLockRef.current[contactId];
+        return;
+      }
+    }
+    if (_contacteChooserSkipRef.current[contactId]) delete _contacteChooserSkipRef.current[contactId];
     // ── REGLE: "Perdu" necessite un motif obligatoire (liste ou texte libre) ──
     // V1.10.4-r10.0.f — release lock AVANT return : la modale rappellera
     // handlePipelineStageChange une fois le motif choisi, et le lock encore actif
@@ -4732,6 +4750,9 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       // ── AST audit 2026-04-23 (v7) — complete phantom elimination via @babel/parser ──
       CALL_TAGS, PHONE_MODULES, ZOOM_LEVELS, _defaultLiveConfig, addToBlacklist, autoDialerNext, basePreset, collabContactTags, collabPaginatedContacts, collabsProp, dayBookings, dayDate, exportICS, fetchCallTranscript, generateCallAnalysis, googleConnected, gridTheme, hours, isAdminView, isAvailableSlot, monthMonth, monthYear, myGoogleEvents, myOutlookEvents, outlookConnected, outlookLoading, perduMotifModal, postCallResultModal, removeFromBlacklist, removeScheduledCall, saveCallRecording, savePhoneCallRating, savePhoneCallTag, saveScriptsDual, setPerduMotifModal, setPostCallResultModal, startAutoDialer, syncGoogle, syncAllExternal, today, toggleModule, togglePhoneFav, weekDates,
 
+      // V1.10.4-r11.0.27.a Phase 1 — Contact établi mini-chooser (RDV/Rappel/Pas de suivi).
+      contacteChooser, setContacteChooser, _contacteChooserSkipRef,
+
       // V1.10.4-r11.0.16 — Override des 3 setters fiche contact avec wrappers historique navigation.
       // L'ordre object literal : later wins, donc les wrappers ci-dessous remplacent les setters
       // shorthand declares plus haut (setPipelineRightContact L4563, setSelectedCrmContact L4567,
@@ -4760,6 +4781,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
             <SenderConflictModal />
             {/* Phase 5 — Consent guard modal (bloque l'appel si lead consent non validé) */}
             <ConsentGuardModal open={!!consentGuardModal} onClose={()=>setConsentGuardModal(null)} guardData={consentGuardModal} />
+            {/* V1.10.4-r11.0.27.a Phase 1 — Contact établi mini-chooser (RDV/Rappel/Pas de suivi) */}
+            <ContacteChooser />
 
             {/* V7 TRANSFER MODAL */}
             {v7TransferModal && (
