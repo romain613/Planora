@@ -269,6 +269,13 @@ try { db.exec('ALTER TABLE bookings ADD COLUMN meetLink TEXT'); } catch {}
 // On ajoute juste reminderFired pour tracker l'envoi de la notification (Phase C r11.0.27.c).
 try { db.exec('ALTER TABLE bookings ADD COLUMN reminderFired INTEGER DEFAULT 0'); } catch {}
 
+// V1.10.4-r11.0.27.d Phase 4 — Perdu move direct + motif libre fiche.
+// Champ texte libre "Pourquoi perdu ?" affiché conditionnellement si pipeline_stage='perdu'.
+// Plus de PerduMotifModal obligatoire au move (move direct, undoable simple). Motif optionnel
+// rempli après-coup dans la fiche Infos. PM2 restart nécessaire pour rebuild _tableColumnsCache
+// (safeUpdate column-aware refresh).
+try { db.exec('ALTER TABLE contacts ADD COLUMN loss_reason TEXT'); } catch {}
+
 // Pipeline stage for CRM contacts
 try { db.exec("ALTER TABLE contacts ADD COLUMN pipeline_stage TEXT DEFAULT 'nouveau'"); } catch {}
 

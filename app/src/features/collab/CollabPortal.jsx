@@ -3674,15 +3674,11 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
       }
     }
     if (_contacteChooserSkipRef.current[contactId]) delete _contacteChooserSkipRef.current[contactId];
-    // ── REGLE: "Perdu" necessite un motif obligatoire (liste ou texte libre) ──
-    // V1.10.4-r10.0.f — release lock AVANT return : la modale rappellera
-    // handlePipelineStageChange une fois le motif choisi, et le lock encore actif
-    // bloquerait le 2e appel (bug Nouveau→Perdu instable).
-    if (newStage === 'perdu' && !note) {
-      setPerduMotifModal({ contactId, fromNote: '' });
-      delete pipelineActionLockRef.current[contactId];
-      return;
-    }
+    // V1.10.4-r11.0.27.d Phase 4 — "Perdu" est désormais un simple move pipeline (move direct,
+    // undoable simple, aucune modal obligatoire). Le motif est saisi APRÈS-COUP dans la fiche
+    // contact onglet Infos via FicheLossReason (champ texte libre loss_reason). Auto-trigger
+    // setPerduMotifModal RETIRÉ. La modal PerduMotifModal reste disponible pour usages bulk /
+    // NRP auto qui peuvent l'invoquer explicitement (cf. PhoneTab L9205-9283 inline IIFE).
     // ── REGLE: "Qualifié" necessite une note explicative ──
     if (newStage === 'qualifie' && !note) {
       const reason = prompt('Pourquoi ce contact est intéressé ?\n(Besoin identifié, budget confirmé, demande active, etc.)');

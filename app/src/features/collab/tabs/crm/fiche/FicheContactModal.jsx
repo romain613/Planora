@@ -32,6 +32,7 @@ import FicheIntelligentBlock from "./FicheIntelligentBlock";
 import FicheActionsBar from "./FicheActionsBar";
 import FicheBookings from "./FicheBookings";
 import FicheCoordonnees from "./FicheCoordonnees";
+import FicheLossReason from "./FicheLossReason"; // V1.10.4-r11.0.27.d Phase 4 — champ "Pourquoi perdu ?"
 import FicheCustomFields from "./FicheCustomFields";
 import FicheNotes from "./FicheNotes";
 import FicheAiAnalyses from "./FicheAiAnalyses";
@@ -276,6 +277,8 @@ const FicheContactModal = () => {
               <>
                 {/* ── Coordonnées — même structure que pipeline ── */}
                 <FicheCoordonnees ct={ct} />
+                {/* V1.10.4-r11.0.27.d — Champ "Pourquoi perdu ?" visible si pipeline_stage='perdu' */}
+                <FicheLossReason ct={ct} />
                 {/* Source data (from lead import) */}
                 {(()=>{
                   let src = null;

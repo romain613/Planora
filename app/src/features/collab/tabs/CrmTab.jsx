@@ -26,6 +26,7 @@ import HardDeleteContactModal from "../modals/HardDeleteContactModal";
 import MergeContactsModal from "../modals/MergeContactsModal";
 import { useMergeContacts, canOpenMerge } from "../hooks/useMergeContacts";
 import { FicheClientMsgScreen, FicheDocsLinkedScreen, FicheSuiviScreen } from "../screens";
+import FicheLossReason from "./crm/fiche/FicheLossReason"; // V1.10.4-r11.0.27.d Phase 4 — champ "Pourquoi perdu ?"
 
 const CrmTab = () => {
   const ctx = useCollabContext();
@@ -1399,6 +1400,9 @@ const CrmTab = () => {
                   </div>
                   </>;
                 })()}
+                {/* V1.10.4-r11.0.27.d Phase 4 — Champ "Pourquoi perdu ?" visible uniquement si pipeline_stage='perdu'.
+                    Le composant FicheLossReason gère la condition en interne (return null sinon). */}
+                <FicheLossReason ct={ct} />
                 {/* Source data (from lead import) */}
                 {(()=>{
                   let src = null;
