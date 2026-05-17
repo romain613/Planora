@@ -58,6 +58,9 @@ const BookingDetailModal = () => {
         const b = selectedBooking;
         const cal = calendars.find(c => c.id === b.calendarId);
         const _bContact = b.contactId ? (contacts||[]).find(c => c.id === b.contactId) : (contacts||[]).find(c => c.email && b.visitorEmail && c.email.toLowerCase() === b.visitorEmail.toLowerCase());
+        // V1.10.4-r11.0.27.b — Rappel : titre adapté, masque champs RDV commercial (email/phone visiteur, statut, actions notif),
+        // conserve contact + date/heure + note + replanifier + supprimer. Skip GCal sync (booking jamais sync vers externes).
+        const _isReminder = b.bookingType === 'reminder';
         const _bContactBookings = _bContact ? (bookings||[]).filter(bk => bk.contactId === _bContact.id).sort((a,bb) => (bb.date+bb.time).localeCompare(a.date+a.time)) : [];
         const _bStages = [...(DEFAULT_STAGES||[{id:"nouveau",label:"Nouveau",color:"#2563EB"},{id:"contacte",label:"En discussion",color:"#F59E0B"},{id:"qualifie",label:"Intéressé",color:"#7C3AED"},{id:"rdv_programme",label:"RDV Programmé",color:"#0EA5E9"},{id:"nrp",label:"NRP",color:"#EF4444"},{id:"client_valide",label:"Validé",color:"#22C55E"},{id:"perdu",label:"Perdu",color:"#64748B"}]), ...(pipelineStages||[])];
         const _bCurrentStage = _bContact ? _bStages.find(s => s.id === _bContact.pipeline_stage) : null;
@@ -67,7 +70,7 @@ const BookingDetailModal = () => {
             <div style={{ display:"flex", gap:12, alignItems:"center", marginBottom:16 }}>
               <div style={{ width:48, height:48, borderRadius:14, background:(cal?.color||T.accent)+"14", display:"flex", alignItems:"center", justifyContent:"center", color:cal?.color||T.accent, fontWeight:700, fontSize:18 }}>{(b.visitorName||'?')[0]}</div>
               <div style={{flex:1,minWidth:0}}>
-                <div style={{ fontSize:18, fontWeight:700 }}>{b.visitorName}</div>
+                <div style={{ fontSize:18, fontWeight:700 }}>{_isReminder ? `🔔 Rappel · ${b.visitorName||''}`.trim() : b.visitorName}</div>
                 <div style={{ display:"flex", gap:6, alignItems:"center", marginTop:2 }}>
                   <span style={{ fontSize:12, color:T.text3 }}>{cal?.name||''}</span>
                   {_bContact && <span style={{ fontSize:10, padding:"1px 6px", borderRadius:6, background:(_bCurrentStage?.color||T.text3)+"14", color:_bCurrentStage?.color||T.text3, fontWeight:600 }}>{_bCurrentStage?.label||_bContact.pipeline_stage||''}</span>}
@@ -91,7 +94,9 @@ const BookingDetailModal = () => {
                   <I n="chevron-right" s={14}/>
                 </div>
               </div>
-              <Badge color={b.status==="confirmed"?T.success:b.status==="pending"?T.warning:T.danger}>{b.status==="confirmed"?"Confirmé":b.status==="pending"?"En attente":"Annulé"}</Badge>
+              {_isReminder
+                ? <Badge color="#F59E0B">🔔 Rappel</Badge>
+                : <Badge color={b.status==="confirmed"?T.success:b.status==="pending"?T.warning:T.danger}>{b.status==="confirmed"?"Confirmé":b.status==="pending"?"En attente":"Annulé"}</Badge>}
             </div>
 
             {/* ── Tabs ── */}
@@ -114,8 +119,11 @@ const BookingDetailModal = () => {
                   {[
                     { icon:"calendar", label:"Date", value:fmtDate(b.date) },
                     { icon:"clock", label:"Heure", value:`${b.time} · ${b.duration}min` },
-                    { icon:"mail", label:"Email", value:b.visitorEmail||'—' },
-                    { icon:"phone", label:"Téléphone", value:b.visitorPhone||"—" },
+                    // V1.10.4-r11.0.27.b — Email/Téléphone visiteur masqués pour les rappels (champs RDV commercial uniquement).
+                    ...(_isReminder ? [] : [
+                      { icon:"mail", label:"Email", value:b.visitorEmail||'—' },
+                      { icon:"phone", label:"Téléphone", value:b.visitorPhone||"—" },
+                    ]),
                   ].map((f,i) => (
                     <div key={i} style={{ padding:"10px 14px", borderRadius:8, background:T.bg, display:"flex", alignItems:"center", gap:10 }}>
                       <span style={{ color:T.text3 }}><I n={f.icon} s={15}/></span>
@@ -127,17 +135,19 @@ const BookingDetailModal = () => {
                   ))}
                 </div>
 
-                {/* Statut modifiable */}
-                <div style={{ marginBottom:16 }}>
-                  <div style={{ fontSize:11, fontWeight:600, color:T.text3, marginBottom:6 }}>Statut du RDV</div>
-                  <div style={{ display:'flex', gap:6 }}>
-                    {[{id:'confirmed',label:'Confirmé',color:T.success,icon:'check'},{id:'pending',label:'En attente',color:T.warning,icon:'clock'},{id:'cancelled',label:'Annulé',color:T.danger,icon:'x'}].map(s => (
-                      <div key={s.id} onClick={() => { if(b.status!==s.id){ updateBooking(b.id,{status:s.id}); setSelectedBooking({...b,status:s.id}); showNotif(`RDV ${s.label.toLowerCase()}`); if(s.id==='confirmed') sendNotification('booking-confirmed',buildNotifyPayload(b,calendars,[collab],company)); if(s.id==='cancelled') sendNotification('cancelled',buildNotifyPayload(b,calendars,[collab],company)); }}} style={{ padding:'6px 12px', borderRadius:8, fontSize:12, fontWeight:b.status===s.id?700:500, background:b.status===s.id?s.color+'18':'transparent', color:b.status===s.id?s.color:T.text3, border:`1px solid ${b.status===s.id?s.color+'40':T.border}`, cursor:'pointer', display:'flex', alignItems:'center', gap:4, transition:'all .15s' }}>
-                        <I n={s.icon} s={12}/> {s.label}
-                      </div>
-                    ))}
+                {/* Statut modifiable — V1.10.4-r11.0.27.b : masqué pour les rappels (toujours actif, pas de cycle RDV commercial) */}
+                {!_isReminder && (
+                  <div style={{ marginBottom:16 }}>
+                    <div style={{ fontSize:11, fontWeight:600, color:T.text3, marginBottom:6 }}>Statut du RDV</div>
+                    <div style={{ display:'flex', gap:6 }}>
+                      {[{id:'confirmed',label:'Confirmé',color:T.success,icon:'check'},{id:'pending',label:'En attente',color:T.warning,icon:'clock'},{id:'cancelled',label:'Annulé',color:T.danger,icon:'x'}].map(s => (
+                        <div key={s.id} onClick={() => { if(b.status!==s.id){ updateBooking(b.id,{status:s.id}); setSelectedBooking({...b,status:s.id}); showNotif(`RDV ${s.label.toLowerCase()}`); if(s.id==='confirmed') sendNotification('booking-confirmed',buildNotifyPayload(b,calendars,[collab],company)); if(s.id==='cancelled') sendNotification('cancelled',buildNotifyPayload(b,calendars,[collab],company)); }}} style={{ padding:'6px 12px', borderRadius:8, fontSize:12, fontWeight:b.status===s.id?700:500, background:b.status===s.id?s.color+'18':'transparent', color:b.status===s.id?s.color:T.text3, border:`1px solid ${b.status===s.id?s.color+'40':T.border}`, cursor:'pointer', display:'flex', alignItems:'center', gap:4, transition:'all .15s' }}>
+                          <I n={s.icon} s={12}/> {s.label}
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Timezone info */}
                 {b.visitorTimezone && (() => {
@@ -166,16 +176,21 @@ const BookingDetailModal = () => {
                   </div>
                 )}
 
-                {/* Action buttons */}
+                {/* Action buttons — V1.10.4-r11.0.27.b : pour les rappels, masquer Notifier/Rappel email/Renvoyer lien/Meet/Google Agenda
+                    (rappels internes Planora, pas de visitor email, pas de sync externe). Replanifier + Supprimer conservés. */}
                 <div style={{ display:"flex", flexWrap:"wrap", gap:8, paddingTop:16, borderTop:`1px solid ${T.border}` }}>
                   {!rescheduleData && b.status!=="cancelled" && (<Btn onClick={() => setRescheduleData({ date:b.date, time:b.time })}><I n="edit" s={14}/> Replanifier</Btn>)}
-                  <Btn disabled={!!actionLoading} onClick={() => { setActionLoading("notify"); showNotif("Rappel envoyé par email + SMS","warning"); sendNotification('reminder', buildNotifyPayload(b, calendars, [collab], company)); setTimeout(()=>setActionLoading(null),600); }}>{actionLoading==="notify" ? <Spinner size={14}/> : <I n="bell" s={14}/>} Notifier</Btn>
-                  <Btn onClick={() => { showNotif("Email de rappel envoyé","warning"); sendNotification('reminder', buildNotifyPayload(b, calendars, [collab], company)); }}><I n="mail" s={14}/> Rappel email</Btn>
-                  {/* V1.10.4-r11.0.7 Phase 1 UX — Renvoyer lien RDV (confirmation complète avec Meet/gcal) */}
-                  <Btn onClick={() => { showNotif("Lien RDV renvoyé (email + SMS)","success"); sendNotification('booking-confirmed', buildNotifyPayload(b, calendars, [collab], company)); }}><I n="send" s={14}/> Renvoyer lien RDV</Btn>
-                  {/* V1.10.4-r11.0.7 Phase 1 UX — Copier lien Meet (si présent) */}
-                  {b.meetLink && (<Btn onClick={() => { try { navigator.clipboard.writeText(b.meetLink); showNotif("Lien Meet copié","success"); } catch { showNotif("Erreur copie","danger"); } }}><I n="copy" s={14}/> Copier lien Meet</Btn>)}
-                  <Btn onClick={() => window.open(toGoogleCalUrl(b),"_blank")}><I n="calendar" s={14}/> Google Agenda</Btn>
+                  {!_isReminder && (
+                    <>
+                      <Btn disabled={!!actionLoading} onClick={() => { setActionLoading("notify"); showNotif("Rappel envoyé par email + SMS","warning"); sendNotification('reminder', buildNotifyPayload(b, calendars, [collab], company)); setTimeout(()=>setActionLoading(null),600); }}>{actionLoading==="notify" ? <Spinner size={14}/> : <I n="bell" s={14}/>} Notifier</Btn>
+                      <Btn onClick={() => { showNotif("Email de rappel envoyé","warning"); sendNotification('reminder', buildNotifyPayload(b, calendars, [collab], company)); }}><I n="mail" s={14}/> Rappel email</Btn>
+                      {/* V1.10.4-r11.0.7 Phase 1 UX — Renvoyer lien RDV (confirmation complète avec Meet/gcal) */}
+                      <Btn onClick={() => { showNotif("Lien RDV renvoyé (email + SMS)","success"); sendNotification('booking-confirmed', buildNotifyPayload(b, calendars, [collab], company)); }}><I n="send" s={14}/> Renvoyer lien RDV</Btn>
+                      {/* V1.10.4-r11.0.7 Phase 1 UX — Copier lien Meet (si présent) */}
+                      {b.meetLink && (<Btn onClick={() => { try { navigator.clipboard.writeText(b.meetLink); showNotif("Lien Meet copié","success"); } catch { showNotif("Erreur copie","danger"); } }}><I n="copy" s={14}/> Copier lien Meet</Btn>)}
+                      <Btn onClick={() => window.open(toGoogleCalUrl(b),"_blank")}><I n="calendar" s={14}/> Google Agenda</Btn>
+                    </>
+                  )}
                   <Btn ghost danger onClick={() => { deleteBooking(b.id); setSelectedBooking(null); }}><I n="trash" s={14}/> Supprimer</Btn>
                 </div>
               </div>

@@ -6,6 +6,7 @@ import { _T } from "../../shared/state/tabState";
 import { pushAction as _undoPush, undo as _undoFn, redo as _redoFn, canUndo as _undoCan, canRedo as _redoCan, nextUndoLabel as _undoLabel, nextRedoLabel as _redoLabel, subscribe as _undoSub } from "../../shared/state/undoStack"; // V1.10.4-r11.0.18
 import UndoRedoButtons from "./components/UndoRedoButtons"; // V1.10.4-r11.0.18
 import ContacteChooser from "./components/ContacteChooser"; // V1.10.4-r11.0.27.a Phase 1 — mini-chooser "Contact établi"
+import ReminderChooser from "./components/ReminderChooser"; // V1.10.4-r11.0.27.b Phase 2 — Reminder system
 
 // Phase 1A extractions
 import { T, T_LIGHT, T_DARK, setTheme } from "../../theme";
@@ -3018,6 +3019,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
   // V1.10.4-r11.0.27.a Phase 1 — mini-chooser quand un contact entre dans 'contacte' (RDV/Rappel/Pas de suivi).
   const [contacteChooser, setContacteChooser] = useState(null); // {contactId}
   const _contacteChooserSkipRef = useRef({}); // skip-flag par contactId pour finalize move après choix
+  // V1.10.4-r11.0.27.b Phase 2 — ReminderChooser (5 presets + custom datetime + note) → booking type='reminder'.
+  const [reminderChooser, setReminderChooser] = useState(null); // {contactId}
   const [showAddStage, setShowAddStage] = useState(false);
   const [newStageName, setNewStageName] = useState('');
   const [newStageColor, setNewStageColor] = useState('#7C3AED');
@@ -4752,6 +4755,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
 
       // V1.10.4-r11.0.27.a Phase 1 — Contact établi mini-chooser (RDV/Rappel/Pas de suivi).
       contacteChooser, setContacteChooser, _contacteChooserSkipRef,
+      // V1.10.4-r11.0.27.b Phase 2 — ReminderChooser (Reminder system : bookings type='reminder').
+      reminderChooser, setReminderChooser,
 
       // V1.10.4-r11.0.16 — Override des 3 setters fiche contact avec wrappers historique navigation.
       // L'ordre object literal : later wins, donc les wrappers ci-dessous remplacent les setters
@@ -4783,6 +4788,8 @@ const CollabPortal = ({ collab, company, bookings, setBookings, calendars, setCa
             <ConsentGuardModal open={!!consentGuardModal} onClose={()=>setConsentGuardModal(null)} guardData={consentGuardModal} />
             {/* V1.10.4-r11.0.27.a Phase 1 — Contact établi mini-chooser (RDV/Rappel/Pas de suivi) */}
             <ContacteChooser />
+            {/* V1.10.4-r11.0.27.b Phase 2 — ReminderChooser (presets + custom + note → booking type='reminder') */}
+            <ReminderChooser />
 
             {/* V7 TRANSFER MODAL */}
             {v7TransferModal && (

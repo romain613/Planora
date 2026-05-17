@@ -280,7 +280,8 @@ router.post('/', requireAuth, enforceCompany, requirePermission('bookings.create
     // pour que la réponse API porte meetLink (UI fiche RDV + email visiteur frontend).
     // RDV classiques restent fire-and-forget : aucune régression latence POST.
     // Try/catch obligatoire pour ne pas bloquer la création si Google API échoue.
-    if (b.collaboratorId && isConnected(b.collaboratorId)) {
+    // V1.10.4-r11.0.27.b — Skip sync GCal pour bookingType='reminder' (rappels internes Planora seulement).
+    if (b.collaboratorId && isConnected(b.collaboratorId) && b.bookingType !== 'reminder') {
       const cal = db.prepare('SELECT name, location FROM calendars WHERE id = ?').get(b.calendarId);
       const _evtPayload = { date: b.date, time: b.time, duration: b.duration || 30, visitorName: b.visitorName, visitorEmail: b.visitorEmail, visitorPhone: b.visitorPhone };
       const _calPayload = cal || { name: '', location: '' };
@@ -304,7 +305,8 @@ router.post('/', requireAuth, enforceCompany, requirePermission('bookings.create
     // V4.a — Push to Outlook Calendar (fire-and-forget, mirror Google pattern)
     // Anti-dup : skip si outlookEventId déjà rempli (défense en profondeur).
     // Non-bloquant : booking créé même si Outlook fail (R2 mitigée).
-    if (b.collaboratorId && outlookIsConnected(b.collaboratorId) && !b.outlookEventId) {
+    // V1.10.4-r11.0.27.b — Skip sync Outlook pour bookingType='reminder' (rappels internes Planora seulement).
+    if (b.collaboratorId && outlookIsConnected(b.collaboratorId) && !b.outlookEventId && b.bookingType !== 'reminder') {
       const calOl = db.prepare('SELECT name, location FROM calendars WHERE id = ?').get(b.calendarId);
       createEventOutlook(b.collaboratorId, { date: b.date, time: b.time, duration: b.duration || 30, visitorName: b.visitorName, visitorEmail: b.visitorEmail, visitorPhone: b.visitorPhone, notes: b.notes, title: b.title || '' }, calOl || { name: '', location: '' })
         .then(result => {
@@ -314,7 +316,8 @@ router.post('/', requireAuth, enforceCompany, requirePermission('bookings.create
     }
 
     // Auto-create Google Tasks follow-up (fire-and-forget)
-    if (b.collaboratorId && isConnected(b.collaboratorId)) {
+    // V1.10.4-r11.0.27.b — Skip Google Tasks pour bookingType='reminder' (rappels internes Planora seulement).
+    if (b.collaboratorId && isConnected(b.collaboratorId) && b.bookingType !== 'reminder') {
       const cal = db.prepare('SELECT name FROM calendars WHERE id = ?').get(b.calendarId);
       const settings = db.prepare(`
         SELECT s.google_tasks_auto FROM settings s

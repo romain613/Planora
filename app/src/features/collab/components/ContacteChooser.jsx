@@ -22,6 +22,7 @@ const ContacteChooser = () => {
     handlePipelineStageChange,
     contacts,
     showNotif,
+    setReminderChooser, // r11.0.27.b — déclenche le ReminderChooser après finalize move
   } = useCollabContext();
 
   if (!contacteChooser) return null;
@@ -50,11 +51,14 @@ const ContacteChooser = () => {
   };
 
   const onCreateReminder = () => {
-    // Phase 1 placeholder : finalize move + info Phase 2. Le vrai flow rappel arrive en r11.0.27.b.
+    // r11.0.27.b Phase 2 LIVE : finalize move + ouvre ReminderChooser (5 presets + custom datetime + note).
     setContacteChooser(null);
     _finalizeContacteMove();
-    if (typeof showNotif === 'function') {
-      showNotif("🔔 Système de rappel disponible en Phase 2 (r11.0.27.b)");
+    if (typeof setReminderChooser === 'function') {
+      setReminderChooser({ contactId });
+    } else if (typeof showNotif === 'function') {
+      // Fallback défensif si le context n'expose pas setReminderChooser (jamais en prod r11.0.27.b+).
+      showNotif("🔔 Reminder system indisponible — context manquant", 'danger');
     }
   };
 
@@ -82,9 +86,8 @@ const ContacteChooser = () => {
       iconColor: '#F59E0B',
       iconBg: '#F59E0B15',
       label: 'Créer un rappel',
-      hint: 'Bientôt disponible — rappel léger avec note',
+      hint: 'Rappel léger avec note · 15min par défaut',
       action: onCreateReminder,
-      _phase2: true,
     },
     {
       id: 'none',

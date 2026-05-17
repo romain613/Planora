@@ -576,10 +576,12 @@ const AgendaTab = () => {
                     const offsetPx = Math.round(offsetMin / 30 * slotH);
                     const blockHeight = Math.max(24, Math.round(dur / 30 * slotH));
                     const _bContact=(contacts||[]).find(c=>c.id===b.contactId||(c.email&&b.visitorEmail&&c.email.toLowerCase()===b.visitorEmail.toLowerCase()));
-                    const _bColor=_bContact?.card_color||'#4285F4';
+                    // V1.10.4-r11.0.27.b — Rappel : couleur orange #F59E0B override (ne compte pas comme vrai RDV).
+                    const _isReminder = b.bookingType === 'reminder';
+                    const _bColor=_isReminder ? '#F59E0B' : (_bContact?.card_color||'#4285F4');
                     // Phase2 premium : pending=#F59E0B, hover scale 1.02 + shadow renforcée
                     const _isPending = b.status === 'pending';
-                    const _bgColor = _isPending ? '#F59E0B' : _bColor;
+                    const _bgColor = (_isReminder || _isPending) ? '#F59E0B' : _bColor;
                     // Phase3 drag drop : booking draggable Day. Cancel sont non draggable (grayed).
                     const _isDragging = _dragBkId === b.id;
                     const _canDrag = b.status !== 'cancelled';
@@ -606,7 +608,7 @@ const AgendaTab = () => {
                         willChange:'transform',
                       }}>
                         <div style={{ fontWeight:600, textDecoration:b.status==="cancelled"?"line-through":"none", overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{(()=>{const _ct=b.contactId?(contacts||[]).find(_c=>_c.id===b.contactId):null; const _xc=_ct?.assignedTo&&Array.isArray(_ct.shared_with)&&_ct.shared_with.length>0; return _xc?<span title="RDV cross-collaborateur">🤝 </span>:null;})()}{b.title || b.visitorName}</div>
-                        <div style={{ fontSize:11, opacity:0.9 }}>{b.time} → {endTime} · {dur}min</div>
+                        <div style={{ fontSize:11, opacity:0.9 }}>{b.time} → {endTime} · {dur}min{_isReminder && <span style={{marginLeft:6,padding:'1px 5px',borderRadius:4,background:'rgba(255,255,255,0.25)',fontSize:9,fontWeight:800,letterSpacing:0.4}}>RAPPEL</span>}</div>
                         {/* V1.10.4-r11.0.7 Phase 1 UX — coordonnées + Meet visibles sur RDV card (height >= 56) */}
                         {blockHeight >= 56 && (b.visitorPhone || b.visitorEmail || b.meetLink) && (
                           <div style={{ fontSize:10, opacity:0.85, marginTop:2, display:'flex', gap:6, flexWrap:'wrap' }}>
@@ -755,10 +757,12 @@ const AgendaTab = () => {
                     const bkDisplayName = b.title || _wContact?.name || b.visitorName;
                     const _agXC = _wContact?.assignedTo && Array.isArray(_wContact.shared_with) && _wContact.shared_with.length > 0;
                     const _agDisplay = _agXC ? '🤝 ' + bkDisplayName : bkDisplayName;
-                    const _wColor=_wContact?.card_color||'#4285F4';
+                    // V1.10.4-r11.0.27.b — Rappel : couleur orange #F59E0B override (ne compte pas comme vrai RDV).
+                    const _wIsReminder = b.bookingType === 'reminder';
+                    const _wColor=_wIsReminder ? '#F59E0B' : (_wContact?.card_color||'#4285F4');
                     // Phase2 premium : pending=#F59E0B, hover scale 1.03 + shadow renforcée, border-radius 6
                     const _wIsPending = b.status === 'pending';
-                    const _wBgColor = _wIsPending ? '#F59E0B' : _wColor;
+                    const _wBgColor = (_wIsReminder || _wIsPending) ? '#F59E0B' : _wColor;
                     // Phase3 drag drop : booking draggable Week.
                     const _wIsDragging = _dragBkId === b.id;
                     const _wCanDrag = b.status !== 'cancelled';
@@ -785,7 +789,7 @@ const AgendaTab = () => {
                         willChange:'transform',
                       }}>
                         <div style={{ fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap', textDecoration:b.status==="cancelled"?"line-through":"none" }} title={bkDisplayName}>{_agDisplay}</div>
-                        <div style={{ fontSize:9, opacity:0.85 }}>{b.time}–{endTime}</div>
+                        <div style={{ fontSize:9, opacity:0.85 }}>{b.time}–{endTime}{_wIsReminder && <span style={{marginLeft:4,padding:'0px 4px',borderRadius:3,background:'rgba(255,255,255,0.25)',fontSize:8,fontWeight:800,letterSpacing:0.3}}>🔔</span>}</div>
                       </div>
                     );
                   })}

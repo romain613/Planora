@@ -264,6 +264,11 @@ try { db.exec('ALTER TABLE collaborators ADD COLUMN google_email TEXT'); } catch
 try { db.exec('ALTER TABLE bookings ADD COLUMN googleEventId TEXT'); } catch {}
 try { db.exec('ALTER TABLE bookings ADD COLUMN meetLink TEXT'); } catch {}
 
+// V1.10.4-r11.0.27.b Phase 2 — Reminder system flag (notification déclenchement Phase C).
+// bookingType existe déjà (Phase A 2026-04-20, valeurs 'external'/'share_transfer'/...).
+// On ajoute juste reminderFired pour tracker l'envoi de la notification (Phase C r11.0.27.c).
+try { db.exec('ALTER TABLE bookings ADD COLUMN reminderFired INTEGER DEFAULT 0'); } catch {}
+
 // Pipeline stage for CRM contacts
 try { db.exec("ALTER TABLE contacts ADD COLUMN pipeline_stage TEXT DEFAULT 'nouveau'"); } catch {}
 
