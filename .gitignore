@@ -11,8 +11,12 @@ backups/
 *.db-shm
 *.zip
 *.tar.gz
+*.tar.bz2
+*.tgz
 *.crt
 *.p7b
+*.pem
+*.key
 .claude/
 node_modules
 
@@ -39,3 +43,52 @@ server/.env.*
 !.env.example
 !*.env.example
 !server/.env.example
+
+# === Hardening Phase 1 (Audit 14 §4.2.3) ===
+
+# Audits + handoffs locaux (PII clients potentielle, hors repo public)
+AUDIT-*.md
+HANDOFF-*.md
+DECK-*.html
+
+# INCIDENTS/ : contenu ignoré (PII potentielle), mais template + .gitkeep préservés
+INCIDENTS/*
+!INCIDENTS/.gitkeep
+!INCIDENTS/INC-TEMPLATE.md
+
+# Phase 1 — tests/coverage outputs
+server/shared/**/coverage/
+server/shared/**/*.test.snap
+.nyc_output/
+coverage/
+*.lcov
+
+# Worktrees Phase 1
+PLANORA-phase1/
+PLANORA-hotfix/
+
+# IDE
+.vscode/settings.json
+.idea/
+*.iml
+*.swp
+*.swo
+*~
+
+# DB additionnels
+*.sqlite
+*.sqlite-wal
+*.sqlite-shm
+
+# MacOS spécifique
+.AppleDouble
+.LSOverride
+.Spotlight-V100
+.Trashes
+
+# Logs PM2 locaux
+.pm2/
+
+# Backup fingerprints + reports locaux
+baseline-fingerprints-*.txt
+ops/smoke/audit-collab-orphans-report.json
