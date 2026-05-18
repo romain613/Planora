@@ -1,0 +1,45 @@
+#!/usr/bin/env bash
+# commit-msg — Hardening Phase 1 (Audit 14 §4.2.4)
+# Installed: 2026-05-18
+# Purpose: enforce conventional commit format
+# Bypass: ALLOW_MSG_FREE=1
+set -e
+
+if [ -n "${ALLOW_MSG_FREE:-}" ]; then
+  exit 0
+fi
+
+COMMIT_MSG_FILE="$1"
+SUBJECT=$(head -1 "$COMMIT_MSG_FILE" | tr -d '\r')
+
+# Skip merge commits, revert commits, fixup commits
+case "$SUBJECT" in
+  "Merge "*|"Revert "*|"fixup! "*|"squash! "*|"amend! "*)
+    exit 0
+    ;;
+esac
+
+# Skip si message vide ou commenté
+if [ -z "$(echo "$SUBJECT" | sed 's/^#.*//' | tr -d ' ')" ]; then
+  exit 0
+fi
+
+# Pattern strict: <type>(<scope>): <subject min 5 chars max 72 chars>
+if ! echo "$SUBJECT" | grep -qE '^(feat|fix|refactor|docs|chore|test|ci|perf|style|revert|build)(\([a-z0-9/_-]+\))?: .{5,72}$'; then
+  echo ""
+  echo "❌ commit-msg STOP: format non conforme."
+  echo ""
+  echo "   Format attendu: <type>(<scope>): <subject>"
+  echo "   Types autorisés: feat, fix, refactor, docs, chore, test, ci, perf, style, revert, build"
+  echo "   Subject: 5-72 caractères"
+  echo ""
+  echo "   Exemple: feat(shared/db): add dbHandles abstraction"
+  echo ""
+  echo "   Reçu: $SUBJECT"
+  echo ""
+  echo "   Bypass exceptionnel: ALLOW_MSG_FREE=1 git commit ..."
+  echo ""
+  exit 1
+fi
+
+exit 0

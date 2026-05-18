@@ -1,0 +1,56 @@
+#!/usr/bin/env bash
+# pre-push — Hardening Phase 1 (Audit 14 §4.2.5)
+# Installed: 2026-05-18
+# Purpose: bloque force-push tag + delete remote branch/tag
+# Bypass: ALLOW_DESTRUCTIVE_PUSH=1
+set -e
+
+if [ -n "${ALLOW_DESTRUCTIVE_PUSH:-}" ]; then
+  exit 0
+fi
+
+ZERO_SHA="0000000000000000000000000000000000000000"
+
+while IFS=' ' read -r local_ref local_sha remote_ref remote_sha; do
+  [ -z "$local_ref" ] && continue
+
+  # Refuser push delete (local_sha = 0000...)
+  if [ "$local_sha" = "$ZERO_SHA" ]; then
+    echo ""
+    echo "❌ pre-push STOP: delete refusé pour $remote_ref"
+    echo "   Bypass exceptionnel: ALLOW_DESTRUCTIVE_PUSH=1 git push ..."
+    echo ""
+    exit 1
+  fi
+
+  # Refuser force-push sur tag (tag immutable)
+  case "$remote_ref" in
+    refs/tags/*)
+      if [ "$remote_sha" != "$ZERO_SHA" ] && [ "$remote_sha" != "$local_sha" ]; then
+        echo ""
+        echo "❌ pre-push STOP: force-push tag $remote_ref refusé (tag immutable)."
+        echo "   Bypass exceptionnel: ALLOW_DESTRUCTIVE_PUSH=1 git push ..."
+        echo ""
+        exit 1
+      fi
+      ;;
+  esac
+
+  # Refuser force-push sur clean-main et main
+  case "$remote_ref" in
+    refs/heads/clean-main|refs/heads/main)
+      # remote_sha non-zero ET pas un fast-forward = potentiel force-push
+      if [ "$remote_sha" != "$ZERO_SHA" ]; then
+        if ! git merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null; then
+          echo ""
+          echo "❌ pre-push STOP: force-push refusé sur $remote_ref (non fast-forward)."
+          echo "   Bypass exceptionnel: ALLOW_DESTRUCTIVE_PUSH=1 git push ..."
+          echo ""
+          exit 1
+        fi
+      fi
+      ;;
+  esac
+done
+
+exit 0

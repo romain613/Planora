@@ -1,0 +1,88 @@
+#!/usr/bin/env bash
+# pre-commit — Hardening Phase 1 (Audit 14 §4.2.2)
+# Installed: 2026-05-18
+# Purpose: bloque les erreurs courantes (commit sur clean-main, fichiers sensibles, scope Phase 1)
+# Bypass: ALLOW_MAIN_COMMIT=1 / ALLOW_PHASE1_LEGACY=1
+set -e
+
+BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")
+
+# 1. Refuser commit sur clean-main ou main sauf bypass explicite
+if [ "$BRANCH" = "clean-main" ] || [ "$BRANCH" = "main" ]; then
+  if [ -z "${ALLOW_MAIN_COMMIT:-}" ]; then
+    echo ""
+    echo "❌ pre-commit STOP: commit direct sur '$BRANCH' interdit."
+    echo "   Utiliser une branche feature/* ou chore/* ou hotfix/*."
+    echo "   Bypass exceptionnel: ALLOW_MAIN_COMMIT=1 git commit ..."
+    echo ""
+    exit 1
+  fi
+fi
+
+STAGED=$(git diff --cached --name-only)
+if [ -z "$STAGED" ]; then
+  exit 0
+fi
+
+# 2a. Refuser .env*
+ENV_VIOLATIONS=$(echo "$STAGED" | grep -E '(^|/)\.env(\.|$)' || true)
+if [ -n "$ENV_VIOLATIONS" ]; then
+  echo ""
+  echo "❌ pre-commit STOP: commit de fichier .env interdit."
+  echo "$ENV_VIOLATIONS" | sed 's/^/   → /'
+  echo ""
+  exit 1
+fi
+
+# 2b. Refuser .db / .db-wal / .db-shm / .sqlite
+DB_VIOLATIONS=$(echo "$STAGED" | grep -E '\.(db|sqlite)(-wal|-shm)?$' || true)
+if [ -n "$DB_VIOLATIONS" ]; then
+  echo ""
+  echo "❌ pre-commit STOP: commit de fichier DB interdit."
+  echo "$DB_VIOLATIONS" | sed 's/^/   → /'
+  echo ""
+  exit 1
+fi
+
+# 2c. Refuser tarballs
+TARBALL_VIOLATIONS=$(echo "$STAGED" | grep -E '\.(tar\.gz|tar\.bz2|tgz|zip)$' || true)
+if [ -n "$TARBALL_VIOLATIONS" ]; then
+  echo ""
+  echo "❌ pre-commit STOP: commit de tarball interdit."
+  echo "$TARBALL_VIOLATIONS" | sed 's/^/   → /'
+  echo ""
+  exit 1
+fi
+
+# 2d. Refuser fichier > 10 Mo
+while IFS= read -r f; do
+  [ -z "$f" ] && continue
+  [ ! -f "$f" ] && continue
+  SIZE=$(stat -f%z "$f" 2>/dev/null || stat -c%s "$f" 2>/dev/null || echo 0)
+  if [ "$SIZE" -gt 10485760 ]; then
+    echo ""
+    echo "❌ pre-commit STOP: fichier $f size > 10 Mo (artefact suspect)."
+    echo ""
+    exit 1
+  fi
+done <<< "$STAGED"
+
+# 3. Sur branche Phase 1 : refuser commit hors server/shared/* (sauf exceptions)
+if [[ "$BRANCH" == feature/phase1-* ]]; then
+  ALLOWED_REGEX='^(server/shared/|\.eslintrc|server/shared/README\.md|\.gitignore|AUDIT-|HANDOFF-|docs/RUNBOOKS/|docs/STOP-CONDITIONS|docs/GO-CONDITIONS|docs/SECRETS-INVENTORY|docs/PHASE1-BASELINE|INCIDENTS/|ops/r9-protect\.sh|ops/smoke/)'
+  VIOLATIONS=$(echo "$STAGED" | grep -vE "$ALLOWED_REGEX" || true)
+  if [ -n "$VIOLATIONS" ]; then
+    if [ -z "${ALLOW_PHASE1_LEGACY:-}" ]; then
+      echo ""
+      echo "❌ pre-commit STOP: commit Phase 1 doit rester dans server/shared/."
+      echo "   Fichiers hors périmètre :"
+      echo "$VIOLATIONS" | sed 's/^/   → /'
+      echo ""
+      echo "   Bypass exceptionnel: ALLOW_PHASE1_LEGACY=1 git commit ..."
+      echo ""
+      exit 1
+    fi
+  fi
+fi
+
+exit 0
