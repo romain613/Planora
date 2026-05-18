@@ -554,9 +554,20 @@ const AgendaTab = () => {
                           background: isLargeBuffer
                             ? 'repeating-linear-gradient(135deg, #FCD34D 0, #FCD34D 3px, transparent 3px, transparent 7px)'
                             : '#FCD34D',
-                          border:'1px dashed #FBBF24', borderRadius:4,
+                          // V1.10.4-r11.0.28.b.2 — Large buffer : borderTop/Bottom none + borderRadius 0 pour continuite visuelle
+                          // multi-slots (le buffer 45/60/90min traverse plusieurs slots horaires sans coupure dashed parasite).
+                          borderTop: isLargeBuffer ? 'none' : '1px dashed #FBBF24',
+                          borderBottom: isLargeBuffer ? 'none' : '1px dashed #FBBF24',
+                          borderLeft: '1px dashed #FBBF24',
+                          borderRight: '1px dashed #FBBF24',
+                          borderRadius: isLargeBuffer ? 0 : 4,
                           opacity: isLargeBuffer ? 0.35 : 0.55,
-                          zIndex:0, pointerEvents:'none',
+                          // V1.10.4-r11.0.28.b.2 — z-index 0 -> 1 : fix CSS stacking. Le buffer overflow (durations > 30min)
+                          // etait masque par le background du slot suivant car les 2 etaient en step 6 (CSS painting order)
+                          // et le sibling postérieur paint au-dessus. z-index:1 passe le buffer en step 7, au-dessus des
+                          // backgrounds des slots siblings, mais reste en-dessous des RDV (z-index:2). Resout le "trou"
+                          // visuel entre buffer 45min+ et RDV.
+                          zIndex:1, pointerEvents:'none',
                           fontSize:10, fontWeight:600, color:'#92400E',
                           padding:'2px 6px', overflow:'hidden', whiteSpace:'nowrap',
                         }}>
@@ -750,9 +761,16 @@ const AgendaTab = () => {
                           background: isLargeBuffer
                             ? 'repeating-linear-gradient(135deg, #FCD34D 0, #FCD34D 3px, transparent 3px, transparent 7px)'
                             : '#FCD34D',
-                          border:'1px dashed #FBBF24', borderRadius:4,
+                          // V1.10.4-r11.0.28.b.2 — Symetrique Day view : borderTop/Bottom none + radius 0 si large pour
+                          // continuite visuelle multi-slots.
+                          borderTop: isLargeBuffer ? 'none' : '1px dashed #FBBF24',
+                          borderBottom: isLargeBuffer ? 'none' : '1px dashed #FBBF24',
+                          borderLeft: '1px dashed #FBBF24',
+                          borderRight: '1px dashed #FBBF24',
+                          borderRadius: isLargeBuffer ? 0 : 4,
                           opacity: isLargeBuffer ? 0.35 : 0.55,
-                          zIndex:0, pointerEvents:'none',
+                          // V1.10.4-r11.0.28.b.2 — z-index 0 -> 1 : symetrique Day view, fix CSS stacking overflow.
+                          zIndex:1, pointerEvents:'none',
                           fontSize:9, fontWeight:600, color:'#92400E',
                           padding:'1px 4px', overflow:'hidden', whiteSpace:'nowrap',
                         }}>
