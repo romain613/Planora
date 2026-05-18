@@ -271,15 +271,18 @@ const AgendaTab = () => {
   );
 
   return (
-<div style={{ background:'#F8FAFC', borderRadius:14, padding:'18px 20px', minHeight:'100%' }}>
+<div style={{ background:'#fff', borderRadius:14, padding:'12px 16px', minHeight:'100%' }}>
+{/* V1.10.4-r11.0.28.a — wrapper bg #F8FAFC -> #fff + padding 18/20 -> 12/16 :
+    moins "dashboard CRM", plus "agenda premium Google/Notion-style" (grille respire). */}
 <div>
   {/* V1.10.4-r11.0.22.b — Barre nav rapide centree horizontalement (cohesion avec PhoneTab Pipeline Live) */}
-  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 14 }}>
+  <div style={{ display: 'flex', justifyContent: 'center', marginBottom: 10 }}>
     <QuickModuleNav />
   </div>
-  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:20 }}>
+  <div style={{ display:"flex", justifyContent:"space-between", alignItems:"center", marginBottom:12 }}>
+    {/* V1.10.4-r11.0.28.a — marginBottom 20 -> 12 + titre 22 -> 18 : header compact, grille visible immediatement. */}
     <div>
-      <h1 style={{ fontSize:22, fontWeight:700, letterSpacing:-0.5, marginBottom:4 }}>{collab?.name ? `Agenda de ${collab.name.split(' ')[0]}` : 'Mon Agenda'}</h1>
+      <h1 style={{ fontSize:18, fontWeight:700, letterSpacing:-0.4, marginBottom:3 }}>{collab?.name ? `Agenda de ${collab.name.split(' ')[0]}` : 'Mon Agenda'}</h1>
       {agendaFillRate.totalSlots > 0 ? (
         <div style={{display:'flex',alignItems:'center',gap:8}}>
           <div style={{width:80,height:6,borderRadius:3,background:T.border,overflow:'hidden',flexShrink:0}}>
@@ -407,35 +410,12 @@ const AgendaTab = () => {
     </div>
   </div>
 
-  {/* Compteurs RDV — filtres cliquables */}
-  {(()=>{
-    const myBk = (bookings||[]).filter(b=>b.collaboratorId===collab.id);
-    const confirmed = myBk.filter(b=>b.status==='confirmed'||b.status==='completed').length;
-    const pending = myBk.filter(b=>b.status==='pending').length;
-    const cancelled = myBk.filter(b=>b.status==='cancelled').length;
-    const total = confirmed + pending + cancelled;
-    // Phase1 quick wins — persist localStorage 'c360-agendaFilter' au click.
-    const [agendaFilter, setAgendaFilter] = [_T.agendaFilter||'all', (v)=>{_T.agendaFilter=v;try{localStorage.setItem('c360-agendaFilter',v);}catch{}setPortalTabKey(k=>k+1);}];
-    return <div style={{display:'flex',gap:8,marginBottom:14}}>
-      {[
-        {id:'confirmed',label:'Confirmés',count:confirmed,icon:'check',color:'#22C55E',bg:'#22C55E08'},
-        {id:'pending',label:'En attente',count:pending,icon:'clock',color:'#F59E0B',bg:'#F59E0B08'},
-        {id:'cancelled',label:'Annulés',count:cancelled,icon:'x',color:'#EF4444',bg:'#EF444408'},
-        {id:'all',label:'Total',count:total,icon:'calendar',color:'#3B82F6',bg:'#3B82F608'},
-      ].map(f=>(
-        <div key={f.id} onClick={()=>setAgendaFilter(agendaFilter===f.id?'all':f.id)} style={{flex:1,padding:'10px 12px',borderRadius:10,background:agendaFilter===f.id?f.color+'12':f.bg,border:'1.5px solid '+(agendaFilter===f.id?f.color+'40':'transparent'),cursor:'pointer',transition:'all .15s'}} onMouseEnter={e=>e.currentTarget.style.borderColor=f.color+'30'} onMouseLeave={e=>{if(agendaFilter!==f.id)e.currentTarget.style.borderColor='transparent';}}>
-          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
-            <div style={{width:24,height:24,borderRadius:6,background:f.color+'15',display:'flex',alignItems:'center',justifyContent:'center'}}><I n={f.icon} s={12} style={{color:f.color}}/></div>
-            <span style={{fontSize:11,fontWeight:600,color:T.text2}}>{f.label}</span>
-          </div>
-          <div style={{fontSize:22,fontWeight:800,color:T.text}}>{f.count}</div>
-        </div>
-      ))}
-    </div>;
-  })()}
+  {/* V1.10.4-r11.0.28.a — Compteurs RDV (filtres cliquables) DEPLACES sous la grille
+      (cf insertion avant Prochain RDV ~L900). La grille devient prioritaire visuellement.
+      Style refondu en r11.0.28.b (verre leger compact). */}
 
-  {/* Calendar legend */}
-  <div style={{ display:"flex", gap:12, marginBottom:16, flexWrap:"wrap" }}>
+  {/* Calendar legend — V1.10.4-r11.0.28.a marginBottom 16 -> 10 (compaction header) */}
+  <div style={{ display:"flex", gap:12, marginBottom:10, flexWrap:"wrap" }}>
     {calendars.filter(c => c.collaborators.includes(collab.id)).map(cal => (
       <div key={cal.id} style={{ display:"flex", alignItems:"center", gap:6, fontSize:12, color:T.text2 }}>
         <div style={{ width:10, height:10, borderRadius:3, background:cal.color }}/> {cal.name}
@@ -899,6 +879,35 @@ const AgendaTab = () => {
       </Card>
     </div>
   )}
+
+  {/* V1.10.4-r11.0.28.a — Compteurs RDV (filtres cliquables) sous la grille.
+      Style premier passage : marginTop discret + cards conservees a l'identique.
+      r11.0.28.b retravaillera le style (verre leger compact mini-bandeau). */}
+  {(()=>{
+    const myBk = (bookings||[]).filter(b=>b.collaboratorId===collab.id);
+    const confirmed = myBk.filter(b=>b.status==='confirmed'||b.status==='completed').length;
+    const pending = myBk.filter(b=>b.status==='pending').length;
+    const cancelled = myBk.filter(b=>b.status==='cancelled').length;
+    const total = confirmed + pending + cancelled;
+    // Phase1 quick wins — persist localStorage 'c360-agendaFilter' au click.
+    const [agendaFilter, setAgendaFilter] = [_T.agendaFilter||'all', (v)=>{_T.agendaFilter=v;try{localStorage.setItem('c360-agendaFilter',v);}catch{}setPortalTabKey(k=>k+1);}];
+    return <div style={{display:'flex',gap:8,marginTop:14,marginBottom:14}}>
+      {[
+        {id:'confirmed',label:'Confirmés',count:confirmed,icon:'check',color:'#22C55E',bg:'#22C55E08'},
+        {id:'pending',label:'En attente',count:pending,icon:'clock',color:'#F59E0B',bg:'#F59E0B08'},
+        {id:'cancelled',label:'Annulés',count:cancelled,icon:'x',color:'#EF4444',bg:'#EF444408'},
+        {id:'all',label:'Total',count:total,icon:'calendar',color:'#3B82F6',bg:'#3B82F608'},
+      ].map(f=>(
+        <div key={f.id} onClick={()=>setAgendaFilter(agendaFilter===f.id?'all':f.id)} style={{flex:1,padding:'10px 12px',borderRadius:10,background:agendaFilter===f.id?f.color+'12':f.bg,border:'1.5px solid '+(agendaFilter===f.id?f.color+'40':'transparent'),cursor:'pointer',transition:'all .15s'}} onMouseEnter={e=>e.currentTarget.style.borderColor=f.color+'30'} onMouseLeave={e=>{if(agendaFilter!==f.id)e.currentTarget.style.borderColor='transparent';}}>
+          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
+            <div style={{width:24,height:24,borderRadius:6,background:f.color+'15',display:'flex',alignItems:'center',justifyContent:'center'}}><I n={f.icon} s={12} style={{color:f.color}}/></div>
+            <span style={{fontSize:11,fontWeight:600,color:T.text2}}>{f.label}</span>
+          </div>
+          <div style={{fontSize:22,fontWeight:800,color:T.text}}>{f.count}</div>
+        </div>
+      ))}
+    </div>;
+  })()}
 
   {/* ── PROCHAIN RDV — Countdown + Actions ── */}
   {(() => {
