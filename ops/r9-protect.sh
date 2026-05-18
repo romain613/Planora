@@ -64,6 +64,22 @@ R9_MARKERS=(
   "/api/bookings/transmitted|Endpoint Agenda partagé"
   "nrp_followups_json|NRP follow-ups (intégré Smart V1.10.4-r9)"
   "/merge|Endpoint fusion contacts (POST /api/data/contacts/:id/merge)"
+  # === Markers cycle r11.0.27-28 (Audit 14 §7.2) ===
+  "ReminderChooser|Reminder system r11.0.27.b modal chooser"
+  "ContacteChooser|Contact établi mini-chooser r11.0.27.a"
+  "bookingType|Reminder vs RDV discrimination (r11.0.27.b)"
+  "reminderFired|Polling 30s reminders flag (r11.0.27.c)"
+  "sync-reminders|Endpoint reminder notifications (r11.0.27.c)"
+  "loss_reason|Perdu motif fiche contact (r11.0.27.d)"
+  "previousChooser|Back to chooser cross-modal state (r11.0.27.b.1)"
+  "Retour aux choix|Bouton back chooser (r11.0.27.b.2)"
+  "AUJOURD'HUI|Today badge agenda Day+Week (r11.0.28.c)"
+  "tabular-nums|Now-line pill heure + numéros jour (r11.0.28.c)"
+  "agendaNowPulse|Now-line dot animation (r11.0.28.c)"
+  "useRecentActivityFeed|Hook activité récente Command Center (r11.0.25)"
+  "pipeline.stage|Pipeline stages multi-cycle"
+  "_CASCADE_STAGES|Undo cascade fix r11.0.27.b.1"
+  "c360-agendaFilter|localStorage agenda filter (r11.0.25/26)"
 )
 
 EXPECTED_BRANCH="clean-main"
@@ -186,6 +202,167 @@ check_bundle() {
   return 0
 }
 
+# ── Constantes SSH (Audit 14 §7) ────────────────────────────
+VPS_SSH="${R9_VPS_SSH:-ssh -i $HOME/.ssh/id_ed25519 -o ConnectTimeout=8 root@136.144.204.115}"
+
+# ── check-db ────────────────────────────────────────────────
+# Vérifie intégrité + FK des DBs prod via SSH (READ-ONLY).
+check_db() {
+  log_info "DB check — intégrité + FK (READ-ONLY via SSH)"
+
+  local dbs=(
+    "/var/www/planora-data/calendar360.db"
+    "/var/www/planora-data/control_tower.db"
+  )
+
+  for db in "${dbs[@]}"; do
+    local status
+    status=$($VPS_SSH "sqlite3 $db 'PRAGMA integrity_check;'" 2>&1 | head -1)
+    if [ "$status" != "ok" ]; then
+      log_err "$db integrity_check FAILED : $status"
+      return 3
+    fi
+    log_ok "$(basename $db) integrity : ok"
+
+    local fk_count
+    fk_count=$($VPS_SSH "sqlite3 $db 'PRAGMA foreign_key_check;' | wc -l" 2>&1)
+    if [ "$fk_count" -gt 0 ]; then
+      log_err "$db FK violations : $fk_count lignes"
+      return 3
+    fi
+    log_ok "$(basename $db) FK : clean"
+  done
+
+  return 0
+}
+
+# ── check-pm2 ───────────────────────────────────────────────
+# Vérifie PID stable + status online via SSH (READ-ONLY).
+# Utilise pm2 jlist + jq pour parsing robuste.
+check_pm2() {
+  log_info "PM2 check — PID + status (jq parsing)"
+
+  local expected_pid="${PHASE1_BASELINE_PID:-2318858}"
+  local pm2_data
+  pm2_data=$($VPS_SSH "pm2 jlist 2>/dev/null | jq -r '.[] | select(.name==\"calendar360\") | \"\(.pid) \(.pm2_env.status) \(.pm2_env.restart_time)\"'" 2>&1)
+
+  if [ -z "$pm2_data" ]; then
+    log_err "PM2 calendar360 introuvable (jq parse failed)"
+    return 3
+  fi
+
+  local current_pid current_status current_restarts
+  current_pid=$(echo "$pm2_data" | awk '{print $1}')
+  current_status=$(echo "$pm2_data" | awk '{print $2}')
+  current_restarts=$(echo "$pm2_data" | awk '{print $3}')
+
+  if [ "$current_pid" != "$expected_pid" ]; then
+    log_err "PM2 PID changé : attendu $expected_pid, actuel $current_pid"
+    log_err "PM2 a redémarré — investigation requise"
+    return 3
+  fi
+  log_ok "PM2 PID stable : $current_pid"
+
+  if [ "$current_status" != "online" ]; then
+    log_err "PM2 status ≠ online : $current_status"
+    return 3
+  fi
+  log_ok "PM2 status : online"
+  log_ok "PM2 restart_count : $current_restarts"
+
+  return 0
+}
+
+# ── check-routes ────────────────────────────────────────────
+# Vérifie I2 : aucune route shared/ montée dans server/index.js (local check).
+check_routes() {
+  log_info "Routes check — invariant I2 (aucune route shared/ montée)"
+
+  local violations=""
+  if [ -f server/index.js ]; then
+    violations=$(grep -nE "from ['\"]\\./shared/" server/index.js 2>/dev/null || true)
+    if [ -n "$violations" ]; then
+      log_err "Import depuis shared/ détecté dans server/index.js (violates I2):"
+      printf '%s\n' "$violations" | sed 's/^/  → /'
+      return 3
+    fi
+
+    local mount_violations
+    mount_violations=$(grep -nE "app\\.use.*['\"][^'\"]*shared" server/index.js 2>/dev/null || true)
+    if [ -n "$mount_violations" ]; then
+      log_err "app.use(shared) détecté dans server/index.js (violates I2):"
+      printf '%s\n' "$mount_violations" | sed 's/^/  → /'
+      return 3
+    fi
+    log_ok "server/index.js : aucune route shared/ montée"
+  else
+    log_warn "server/index.js absent localement — check SSH skipped"
+  fi
+
+  return 0
+}
+
+# ── check-invariants ────────────────────────────────────────
+# Orchestrateur I1+I2+I3+I4 (Audit 14 §7.6).
+check_invariants() {
+  log_info "Invariants check — I1, I2, I3, I4"
+
+  local current_branch
+  current_branch=$(git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "?")
+
+  # I1 — Si branche feature/phase1-* : aucun fichier hors shared/ modifié
+  if [[ "$current_branch" == feature/phase1-* ]]; then
+    local off_scope
+    off_scope=$(git diff --name-only clean-main..HEAD 2>/dev/null | \
+                grep -vE '^(server/shared/|\.eslintrc|server/shared/README\.md|\.gitignore|docs/|INCIDENTS/|ops/r9-protect)' \
+                || true)
+    if [ -n "$off_scope" ]; then
+      log_err "I1 violé : fichiers hors server/shared/ modifiés :"
+      printf '%s\n' "$off_scope" | sed 's/^/  → /'
+      return 3
+    fi
+    log_ok "I1 : aucun fichier legacy modifié"
+  else
+    log_info "I1 : skip (branche $current_branch, pas feature/phase1-*)"
+  fi
+
+  # I2 — check-routes
+  check_routes || return 3
+
+  # I3 — Bundle MD5 (si baseline connue)
+  if [ -n "${PHASE1_BASELINE_BUNDLE_MD5:-}" ]; then
+    local current_md5
+    current_md5=$($VPS_SSH "md5sum /var/www/vhosts/calendar360.fr/httpdocs/assets/$PHASE1_BASELINE_BUNDLE_FILENAME 2>/dev/null | awk '{print \$1}'")
+    if [ "$current_md5" != "$PHASE1_BASELINE_BUNDLE_MD5" ]; then
+      log_err "I3 violé : bundle MD5 changé"
+      log_err "  Attendu: $PHASE1_BASELINE_BUNDLE_MD5"
+      log_err "  Actuel : $current_md5"
+      return 3
+    fi
+    log_ok "I3 : bundle MD5 inchangé ($current_md5)"
+  else
+    log_info "I3 : skip (PHASE1_BASELINE_BUNDLE_MD5 non défini)"
+  fi
+
+  # I4 — DB SHA-256 (si baseline connue)
+  if [ -n "${PHASE1_BASELINE_DB_SHA:-}" ]; then
+    local current_db_sha
+    current_db_sha=$($VPS_SSH "sha256sum /var/www/planora-data/calendar360.db | awk '{print \$1}'")
+    if [ "$current_db_sha" != "$PHASE1_BASELINE_DB_SHA" ]; then
+      log_warn "I4 : DB SHA-256 changé (writes runtime normaux possibles)"
+      log_warn "  Baseline: $PHASE1_BASELINE_DB_SHA"
+      log_warn "  Actuel : $current_db_sha"
+      # I4 = warning, pas erreur, car writes legacy attendus
+    else
+      log_ok "I4 : DB SHA-256 inchangé"
+    fi
+  else
+    log_info "I4 : skip (PHASE1_BASELINE_DB_SHA non défini)"
+  fi
+
+  return 0
+}
+
 # ── Dispatcher ──────────────────────────────────────────────
 cmd="${1:-}"
 case "$cmd" in
@@ -195,6 +372,18 @@ case "$cmd" in
   check-bundle|post-build)
     check_bundle
     ;;
+  check-db)
+    check_db
+    ;;
+  check-pm2)
+    check_pm2
+    ;;
+  check-routes)
+    check_routes
+    ;;
+  check-invariants)
+    check_invariants
+    ;;
   full)
     check_source || exit $?
     if [ -d app/dist/assets ]; then
@@ -203,21 +392,73 @@ case "$cmd" in
       log_warn "Pas de bundle local — skip check-bundle (lance d'abord npm run build)."
     fi
     ;;
+  full+)
+    rc=0
+    check_source || rc=$?
+    [ "$rc" -ne 0 ] && exit "$rc"
+    if [ -d app/dist/assets ]; then
+      check_bundle || rc=$?
+      [ "$rc" -ne 0 ] && exit "$rc"
+    else
+      log_warn "Pas de bundle local — skip check-bundle"
+    fi
+    check_db || rc=$?
+    [ "$rc" -ne 0 ] && exit "$rc"
+    check_pm2 || rc=$?
+    [ "$rc" -ne 0 ] && exit "$rc"
+    check_routes || rc=$?
+    [ "$rc" -ne 0 ] && exit "$rc"
+    check_invariants || rc=$?
+    [ "$rc" -ne 0 ] && exit "$rc"
+    log_ok "============================================"
+    log_ok "R9-PROTECT full+ : TOUS LES CHECKS PASSENT"
+    log_ok "============================================"
+    ;;
+  phase1)
+    # Mode CHECKPOINT Phase 1 : skip check-source (branche feature/chore) + skip check-bundle (no rebuild)
+    rc=0
+    log_info "R9-PROTECT phase1 mode — Phase 1 CHECKPOINT validation"
+    check_db || rc=$?
+    [ "$rc" -ne 0 ] && exit "$rc"
+    check_pm2 || rc=$?
+    [ "$rc" -ne 0 ] && exit "$rc"
+    check_routes || rc=$?
+    [ "$rc" -ne 0 ] && exit "$rc"
+    check_invariants || rc=$?
+    [ "$rc" -ne 0 ] && exit "$rc"
+    log_ok "============================================"
+    log_ok "R9-PROTECT phase1 : TOUS LES CHECKS PASSENT"
+    log_ok "============================================"
+    ;;
   ""|-h|--help|help)
     cat <<EOF
-r9-protect.sh — Garde-fou anti-régression frontend Planora
+r9-protect.sh — Garde-fou anti-régression frontend + invariants Phase 1 Planora
 
-Usage :
-  ./ops/r9-protect.sh check-source   Pré-build : vérifie alignement Git
-  ./ops/r9-protect.sh check-bundle   Post-build : vérifie marqueurs critiques
-  ./ops/r9-protect.sh full           Les deux (skip bundle si absent)
+Modes :
+  check-source       Pré-build : alignement Git vs origin/clean-main
+  check-bundle       Post-build : marqueurs critiques bundle (35 markers)
+  check-db           DB intégrité + FK (READ-ONLY SSH)
+  check-pm2          PM2 PID stable + status online (READ-ONLY SSH)
+  check-routes       Aucune route shared/ montée (invariant I2)
+  check-invariants   Orchestrateur I1+I2+I3+I4
+  full               check-source + check-bundle (legacy, pre-deploy depuis clean-main)
+  full+              check-source + check-bundle + check-db + check-pm2 + check-routes + check-invariants
+  phase1             CHECKPOINT Phase 1 : check-db + check-pm2 + check-routes + check-invariants
+                     (skip check-source/check-bundle car branche feature + no rebuild)
 
-Voir docs/R9-PROTECT.md pour le détail.
+Variables baseline (export pour I3/I4) :
+  PHASE1_BASELINE_PID            = 2318858
+  PHASE1_BASELINE_BUNDLE_MD5     = 63b8d8e1...
+  PHASE1_BASELINE_BUNDLE_FILENAME= index-B9BAx_hy.js
+  PHASE1_BASELINE_DB_SHA         = 02cca29c...
+  R9_VPS_SSH                     = ssh -i ~/.ssh/id_ed25519 root@136.144.204.115 (override)
+
+Voir docs/R9-PROTECT.md + AUDIT-SAFE-FREEZE-BACKUP-GOVERNANCE-HARDENING-2026-05-18.md.
 
 Codes de sortie :
   0 OK
   2 Désalignement Git
-  3 Marqueur critique manquant
+  3 Marqueur critique manquant / invariant violé
   4 Pas de bundle
 EOF
     exit 0
