@@ -880,9 +880,10 @@ const AgendaTab = () => {
     </div>
   )}
 
-  {/* V1.10.4-r11.0.28.a — Compteurs RDV (filtres cliquables) sous la grille.
-      Style premier passage : marginTop discret + cards conservees a l'identique.
-      r11.0.28.b retravaillera le style (verre leger compact mini-bandeau). */}
+  {/* V1.10.4-r11.0.28.b — Compteurs RDV refonte verre leger compact (Linear/Notion Calendar style).
+      Mini-bandeau horizontal inline : icon + label inline + count tabular-nums, hauteur ~32px
+      (vs ~70px en .a). Verre leger rgba+backdropFilter blur. Logique filtres+localStorage
+      'c360-agendaFilter' 100% preservee. Devient resume secondaire discret sous la grille. */}
   {(()=>{
     const myBk = (bookings||[]).filter(b=>b.collaboratorId===collab.id);
     const confirmed = myBk.filter(b=>b.status==='confirmed'||b.status==='completed').length;
@@ -891,21 +892,34 @@ const AgendaTab = () => {
     const total = confirmed + pending + cancelled;
     // Phase1 quick wins — persist localStorage 'c360-agendaFilter' au click.
     const [agendaFilter, setAgendaFilter] = [_T.agendaFilter||'all', (v)=>{_T.agendaFilter=v;try{localStorage.setItem('c360-agendaFilter',v);}catch{}setPortalTabKey(k=>k+1);}];
-    return <div style={{display:'flex',gap:8,marginTop:14,marginBottom:14}}>
+    return <div style={{display:'flex',gap:6,marginTop:12,marginBottom:12}}>
       {[
-        {id:'confirmed',label:'Confirmés',count:confirmed,icon:'check',color:'#22C55E',bg:'#22C55E08'},
-        {id:'pending',label:'En attente',count:pending,icon:'clock',color:'#F59E0B',bg:'#F59E0B08'},
-        {id:'cancelled',label:'Annulés',count:cancelled,icon:'x',color:'#EF4444',bg:'#EF444408'},
-        {id:'all',label:'Total',count:total,icon:'calendar',color:'#3B82F6',bg:'#3B82F608'},
-      ].map(f=>(
-        <div key={f.id} onClick={()=>setAgendaFilter(agendaFilter===f.id?'all':f.id)} style={{flex:1,padding:'10px 12px',borderRadius:10,background:agendaFilter===f.id?f.color+'12':f.bg,border:'1.5px solid '+(agendaFilter===f.id?f.color+'40':'transparent'),cursor:'pointer',transition:'all .15s'}} onMouseEnter={e=>e.currentTarget.style.borderColor=f.color+'30'} onMouseLeave={e=>{if(agendaFilter!==f.id)e.currentTarget.style.borderColor='transparent';}}>
-          <div style={{display:'flex',alignItems:'center',gap:6,marginBottom:4}}>
-            <div style={{width:24,height:24,borderRadius:6,background:f.color+'15',display:'flex',alignItems:'center',justifyContent:'center'}}><I n={f.icon} s={12} style={{color:f.color}}/></div>
-            <span style={{fontSize:11,fontWeight:600,color:T.text2}}>{f.label}</span>
-          </div>
-          <div style={{fontSize:22,fontWeight:800,color:T.text}}>{f.count}</div>
-        </div>
-      ))}
+        {id:'confirmed',label:'Confirmés',count:confirmed,icon:'check',color:'#22C55E'},
+        {id:'pending',label:'En attente',count:pending,icon:'clock',color:'#F59E0B'},
+        {id:'cancelled',label:'Annulés',count:cancelled,icon:'x',color:'#EF4444'},
+        {id:'all',label:'Total',count:total,icon:'calendar',color:'#3B82F6'},
+      ].map(f=>{
+        const active = agendaFilter===f.id;
+        return (
+        <div key={f.id} onClick={()=>setAgendaFilter(active?'all':f.id)} title={active?`Filtre actif : ${f.label}. Clic pour retirer le filtre.`:`Filtrer : ${f.label}`} style={{
+          flex:1,
+          padding:'7px 12px',
+          borderRadius:8,
+          background: active ? f.color+'12' : 'rgba(255,255,255,0.5)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          border: '1px solid ' + (active ? f.color+'30' : 'rgba(0,0,0,0.05)'),
+          cursor:'pointer',
+          transition:'all .15s',
+          display:'flex',
+          alignItems:'center',
+          gap:7,
+        }} onMouseEnter={e=>{ if(!active) e.currentTarget.style.background='rgba(255,255,255,0.85)'; }} onMouseLeave={e=>{ if(!active) e.currentTarget.style.background='rgba(255,255,255,0.5)'; }}>
+          <I n={f.icon} s={11} style={{color: active ? f.color : T.text3, flexShrink:0}}/>
+          <span style={{fontSize:10, fontWeight:600, color: active ? f.color : T.text3, flex:1, minWidth:0, whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis', letterSpacing:0.2}}>{f.label}</span>
+          <span style={{fontSize:13, fontWeight:700, color: active ? f.color : T.text, lineHeight:1, fontVariantNumeric:'tabular-nums', flexShrink:0}}>{f.count}</span>
+        </div>);
+      })}
     </div>;
   })()}
 
