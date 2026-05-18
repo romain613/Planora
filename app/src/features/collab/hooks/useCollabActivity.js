@@ -67,8 +67,12 @@ export function useCollabActivity() {
     });
 
     // Bookings crees ou cancelled
+    // V1.10.4-r11.0.27.e — bookingType='reminder' exclus : reminder != action commerciale,
+    // ne doit pas gonfler score energie ni polluer sparkline 24h. Cohérent règle 5
+    // feedback_reminder_system_anti_regression (reminder = outil interne, pas KPI).
     (Array.isArray(bookings) ? bookings : []).forEach((b) => {
       if (!b || !b.contactId || !myIds.has(b.contactId)) return;
+      if (b.bookingType === "reminder") return; // r11.0.27.e
       if (b.status === "cancelled") {
         addToBin(b.updatedAt, -1);
       } else {

@@ -81,8 +81,12 @@ export function useRecentActivityFeed() {
     });
 
     // ── 3. RDV crees aujourd'hui ──
+    // V1.10.4-r11.0.27.e — bookingType='reminder' exclus : reminder != vrai RDV commercial,
+    // visibilite assuree dans bloc Notifications live (cf NOTIF_STYLE reminder_due). Cohérent
+    // règle 5 feedback_reminder_system_anti_regression (reminder = booking interne, non-RDV).
     bks.forEach((b) => {
       if (!b || !b.contactId || !myIds.has(b.contactId)) return;
+      if (b.bookingType === "reminder") return; // r11.0.27.e
       // RDV cree aujourd'hui (et pas annule le meme jour)
       if (b.createdAt && b.createdAt.startsWith(today) && b.status !== "cancelled") {
         const ms = new Date(b.createdAt).getTime();

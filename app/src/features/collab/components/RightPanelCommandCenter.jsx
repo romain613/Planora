@@ -517,6 +517,7 @@ const RightPanelCommandCenter = () => {
                 call_missed: "#EF4444",
                 sms_inbound: "#0EA5E9",
                 client_message: "#2563EB",
+                reminder_due: "#F59E0B", // r11.0.27.e — coherent NOTIF_STYLE cloche header (orange amber)
               };
               const icons = {
                 leads_batch: "flame",
@@ -528,6 +529,7 @@ const RightPanelCommandCenter = () => {
                 call_missed: "phone-missed",
                 sms_inbound: "message-square",
                 client_message: "message-circle",
+                reminder_due: "bell", // r11.0.27.e — bell icon explicite (fallback etait deja bell mais on l'inscrit pour clarte)
               };
               const c = colors[n.type] || "#64748B";
               const ic = icons[n.type] || "bell";
