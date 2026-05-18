@@ -477,7 +477,11 @@ const AgendaTab = () => {
     return (
     <div key="agenda-view-day" style={{ animation:'agendaFadeInUp .22s ease-out' }}>
       <div style={{ textAlign:"center", marginBottom:12 }}>
-        <div style={{ fontSize:16, fontWeight:700, color:T.accent }}>{DAYS_FR[getDow(dayDate)]} {new Date(dayDate).getDate()} {MONTHS_FR[new Date(dayDate).getMonth()]} {new Date(dayDate).getFullYear()}</div>
+        {/* V1.10.4-r11.0.28.c — Today badge inline si dayDate est aujourd'hui (UX ultra identifiable). */}
+        <div style={{ fontSize:16, fontWeight:700, color:T.accent, display:'inline-flex', alignItems:'center', gap:8 }}>
+          {isDayToday && <span style={{ fontSize:9, fontWeight:800, color:'#fff', background:T.accent, padding:'2px 8px', borderRadius:10, letterSpacing:0.5, textTransform:'uppercase', boxShadow:'0 1px 2px rgba(0,0,0,0.08)' }}>Aujourd'hui</span>}
+          <span>{DAYS_FR[getDow(dayDate)]} {new Date(dayDate).getDate()} {MONTHS_FR[new Date(dayDate).getMonth()]} {new Date(dayDate).getFullYear()}</span>
+        </div>
         <div style={{ fontSize:12, color:T.text3, marginTop:4 }}>{_dayBkF.length} RDV{_agFilter!=='all'?` (filtre: ${_agFilter})`:''} · {myGoogleEvents.filter(ge => ge.startTime.slice(0,10) === dayDate).length} Google · {(myOutlookEvents||[]).filter(oe => (oe.startTime||'').slice(0,10) === dayDate).length} Outlook</div>
       </div>
       {/* Phase2 — Empty state intelligent : aucun RDV ce jour ET aucun event externe */}
@@ -508,7 +512,11 @@ const AgendaTab = () => {
             const nowOffsetPx = isNow ? Math.round(((nowH*60+nowM) - slotMin) / 30 * slotH) : 0;
             return (
               <div key={hour} style={{ display:"grid", gridTemplateColumns:"56px 1fr", height:slotH, borderBottom:`1px solid ${isFullHour ? '#e5e7eb' : '#f3f4f6'}`, position:"relative" }}>
-                {isNow && <div style={{ position:"absolute", left:48, right:0, top:nowOffsetPx, height:2, background:'#EF4444', zIndex:10 }}><div style={{ position:'absolute', left:-5, top:-4, width:10, height:10, borderRadius:5, background:'#EF4444', animation:'agendaNowPulse 2s ease-in-out infinite' }}/></div>}
+                {isNow && <div style={{ position:"absolute", left:48, right:0, top:nowOffsetPx, height:1, background:'#EF4444', opacity:0.9, zIndex:10, pointerEvents:'none' }}>
+                  {/* V1.10.4-r11.0.28.c — Now-line Google Agenda style : height 2->1, dot 10->8, pill heure a droite. */}
+                  <div style={{ position:'absolute', left:-4, top:-3.5, width:8, height:8, borderRadius:4, background:'#EF4444', animation:'agendaNowPulse 2s ease-in-out infinite' }}/>
+                  <span style={{ position:'absolute', right:6, top:-7, fontSize:9, fontWeight:700, color:'#EF4444', background:'#fff', padding:'1px 5px', borderRadius:3, boxShadow:'0 1px 3px rgba(0,0,0,0.08)', letterSpacing:0.2, fontVariantNumeric:'tabular-nums' }}>{String(nowH).padStart(2,'0')}:{String(nowM).padStart(2,'0')}</span>
+                </div>}
                 <div style={{ padding:"0 8px", fontSize:11, color:isFullHour?'#70757a':'transparent', textAlign:"right", fontFamily:"-apple-system,sans-serif", lineHeight:slotH+'px', borderRight:'1px solid #dadce0', fontWeight:400, userSelect:'none' }}>{isFullHour ? (parseInt(hour)<10?parseInt(hour):hour.slice(0,2))+':00' : ''}</div>
                 <div
                   onClick={()=>{if(isFreeSlot){setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:dayDate,time:hour,duration:30,notes:'',calendarId:getCollaboratorDefaultCalendarId(calendars,collab.id),_bookingMode:true});setPhoneShowScheduleModal(true);}}}
@@ -670,9 +678,11 @@ const AgendaTab = () => {
           const dayTotalH = Math.floor(dayTotalMin/60);
           const dayTotalM = dayTotalMin%60;
           return (
-            <div key={ds} onClick={() => { setSelectedDay(ds); setViewMode("day"); }} style={{ padding:"8px 4px", textAlign:"center", borderRight:i<6?`1px solid ${T.border}`:"none", background:isToday?"linear-gradient(135deg,"+T.accent+"18,"+T.accent+"08)":"transparent", cursor:"pointer", transition:"background .15s" }}>
+            <div key={ds} onClick={() => { setSelectedDay(ds); setViewMode("day"); }} style={{ padding:"6px 4px 8px", textAlign:"center", borderRight:i<6?`1px solid ${T.border}`:"none", background:isToday?"linear-gradient(180deg,"+T.accent+"22,"+T.accent+"08)":"transparent", cursor:"pointer", transition:"background .15s", position:'relative' }}>
+              {/* V1.10.4-r11.0.28.c — Today identification ultra visible : badge "Aujourd'hui" pill au-dessus + numero amplifie + gradient renforce. */}
+              {isToday && <div style={{ display:'inline-block', fontSize:8, fontWeight:800, color:'#fff', background:T.accent, padding:'1px 6px', borderRadius:8, letterSpacing:0.5, textTransform:'uppercase', marginBottom:2, boxShadow:'0 1px 2px rgba(0,0,0,0.06)' }}>Aujourd'hui</div>}
               <div style={{ fontSize:10, fontWeight:700, color:isToday?T.accent:T.text3, textTransform:"uppercase", letterSpacing:1 }}>{DAYS_SHORT[i]}</div>
-              <div style={{ fontSize:20, fontWeight:800, color:isToday?T.accent:T.text, lineHeight:1.2 }}>{d.getDate()}</div>
+              <div style={{ fontSize:isToday?26:20, fontWeight:isToday?900:800, color:isToday?T.accent:T.text, lineHeight:1.1, fontVariantNumeric:'tabular-nums' }}>{d.getDate()}</div>
               {dayBkCount > 0 ? <div style={{ fontSize:9, fontWeight:700, color:T.accent, marginTop:2 }}>{dayBkCount} RDV · {dayTotalH>0?dayTotalH+'h':''}{ dayTotalM>0?dayTotalM+'min':dayTotalH>0?'':'0min'}</div> : <div style={{fontSize:9,color:T.text3,marginTop:2,opacity:0.5}}>—</div>}
             </div>
           );
@@ -687,7 +697,11 @@ const AgendaTab = () => {
           const nowOffPx = isNowRow ? Math.round(((nowH*60+nowM) - slotMin) / 30 * slotH) : 0;
           return (
           <div key={hour} style={{ display:"grid", gridTemplateColumns:"56px repeat(7,1fr)", height:slotH, borderBottom:`1px solid ${isFullHour ? '#dadce0' : '#f1f3f4'}`, position:"relative" }}>
-            {isNowRow && <div style={{ position:"absolute", left:48, right:0, top:nowOffPx, height:2, background:'#EF4444', zIndex:10, pointerEvents:'none' }}><div style={{ position:'absolute', left:-5, top:-4, width:10, height:10, borderRadius:5, background:'#EF4444', animation:'agendaNowPulse 2s ease-in-out infinite' }}/></div>}
+            {isNowRow && <div style={{ position:"absolute", left:48, right:0, top:nowOffPx, height:1, background:'#EF4444', opacity:0.9, zIndex:10, pointerEvents:'none' }}>
+              {/* V1.10.4-r11.0.28.c — Now-line Google Agenda style symetrique Day view : height 2->1, dot 10->8, pill heure a droite. */}
+              <div style={{ position:'absolute', left:-4, top:-3.5, width:8, height:8, borderRadius:4, background:'#EF4444', animation:'agendaNowPulse 2s ease-in-out infinite' }}/>
+              <span style={{ position:'absolute', right:6, top:-7, fontSize:9, fontWeight:700, color:'#EF4444', background:'#fff', padding:'1px 5px', borderRadius:3, boxShadow:'0 1px 3px rgba(0,0,0,0.08)', letterSpacing:0.2, fontVariantNumeric:'tabular-nums' }}>{String(nowH).padStart(2,'0')}:{String(nowM).padStart(2,'0')}</span>
+            </div>}
             <div style={{ padding:"0 8px", fontSize:11, color:isFullHour?'#70757a':'transparent', textAlign:"right", fontFamily:"-apple-system,sans-serif", lineHeight:slotH+'px', borderRight:'1px solid #dadce0', fontWeight:400, userSelect:'none' }}>{isFullHour ? (parseInt(hour)<10?parseInt(hour):hour.slice(0,2))+':00' : ''}</div>
             {weekDates.map((ds,i) => {
               const cellBookings = getBookingAt(ds, hour);
@@ -706,14 +720,14 @@ const AgendaTab = () => {
                   onClick={()=>{if(isEmptyAvail){setPhoneScheduleForm({contactId:'',contactName:'',number:'',date:ds,time:hour,duration:30,notes:'',calendarId:getCollaboratorDefaultCalendarId(calendars,collab.id),_bookingMode:true});setPhoneShowScheduleModal(true);}}}
                   title={isEmptyAvail?'+ Créer un RDV à '+hour:undefined}
                   onMouseEnter={e=>{if(isEmptyAvail)e.currentTarget.style.background='rgba(59,130,246,0.06)';}}
-                  onMouseLeave={e=>{e.currentTarget.style.background=isToday?'#E8F0FE40':isAvail?'#fff':'#f8f9fa';}}
+                  onMouseLeave={e=>{e.currentTarget.style.background=isToday?T.accent+'12':isAvail?'#fff':'#f8f9fa';}}
                   /* Phase3 drag drop : zone droppable Week. */
                   onDragOver={e=>{if(_dragBkId){e.preventDefault();e.dataTransfer.dropEffect='move';const _sk=ds+'_'+hour;if(_dragOverSlot!==_sk)_setDragOverSlot(_sk);}}}
                   onDragLeave={e=>{if(!e.currentTarget.contains(e.relatedTarget)){const _sk=ds+'_'+hour;if(_dragOverSlot===_sk)_setDragOverSlot(null);}}}
                   onDrop={e=>{e.preventDefault();const _bkId=e.dataTransfer.getData('text/plain');if(_bkId)_handleBkDrop(_bkId,ds,hour);}}
                   style={{
                     borderRight:i<6?'1px solid #dadce060':'none', padding:0,
-                    background: (_dragOverSlot===ds+'_'+hour)?'rgba(59,130,246,0.14)':(isToday ? '#E8F0FE40' : isAvail ? '#fff' : '#f8f9fa'),
+                    background: (_dragOverSlot===ds+'_'+hour)?'rgba(59,130,246,0.14)':(isToday ? T.accent+'12' : isAvail ? '#fff' : '#f8f9fa'),
                     height:slotH, position:"relative", overflow:'visible',
                     cursor: isEmptyAvail ? 'pointer' : 'default', transition:'background .12s',
                     border:(_dragOverSlot===ds+'_'+hour)?'1px dashed #3B82F6':undefined,
