@@ -528,21 +528,34 @@ const AgendaTab = () => {
                     boxSizing:'border-box',
                   }}
                 >
-                  {/* V1.10.4-r11.0.5 — Buffer blocks visuels (sous les RDV, non interactifs) */}
+                  {/* V1.10.4-r11.0.5 — Buffer blocks visuels (sous les RDV, non interactifs)
+                      V1.10.4-r11.0.28.b.1 — Gros buffer > 30min : pattern stripes diagonales +
+                      opacity reduite (0.35) + mini badge "Xmin" top-left + label en tooltip.
+                      Empeche le buffer de "ressembler a un vrai RDV" tout en preservant la
+                      hauteur reelle metier (busy detection / drag-drop / overlays inchanges). */}
                   {_dayBufferBlocks
                     .filter(buf => buf.date === dayDate && buf.startMin >= slotMin && buf.startMin < slotMin + 30)
                     .map(buf => {
                       const offsetPx = Math.round((buf.startMin - slotMin) / 30 * slotH);
                       const blockH = Math.max(12, Math.round(buf.durationMin / 30 * slotH));
+                      const isLargeBuffer = buf.durationMin > 30;
                       return (
-                        <div key={buf.id} draggable={false} style={{
+                        <div key={buf.id} draggable={false} title={buf.label} style={{
                           position:'absolute', top: offsetPx, left:2, width:'calc(100% - 8px)',
                           height: blockH,
-                          background:'#FCD34D', border:'1px dashed #FBBF24', borderRadius:4,
-                          opacity:0.6, zIndex:0, pointerEvents:'none',
+                          background: isLargeBuffer
+                            ? 'repeating-linear-gradient(135deg, #FCD34D 0, #FCD34D 3px, transparent 3px, transparent 7px)'
+                            : '#FCD34D',
+                          border:'1px dashed #FBBF24', borderRadius:4,
+                          opacity: isLargeBuffer ? 0.35 : 0.55,
+                          zIndex:0, pointerEvents:'none',
                           fontSize:10, fontWeight:600, color:'#92400E',
                           padding:'2px 6px', overflow:'hidden', whiteSpace:'nowrap',
-                        }}>{buf.label}</div>
+                        }}>
+                          {isLargeBuffer
+                            ? <span style={{ fontSize:9, fontWeight:700, color:'#92400E', background:'rgba(254,243,199,0.95)', padding:'1px 5px', borderRadius:3, display:'inline-block', lineHeight:1.2 }}>{buf.durationMin}min</span>
+                            : buf.label}
+                        </div>
                       );
                     })}
                   {hBookings.map(b => {
@@ -707,21 +720,32 @@ const AgendaTab = () => {
                     boxSizing:'border-box',
                   }}
                 >
-                  {/* V1.10.4-r11.0.5 — Buffer blocks visuels Week view (sous les RDV, non interactifs) */}
+                  {/* V1.10.4-r11.0.5 — Buffer blocks visuels Week view (sous les RDV, non interactifs)
+                      V1.10.4-r11.0.28.b.1 — Symetrique Day view : gros buffer > 30min stripes diagonales +
+                      opacity reduite + mini badge "Xmin" top-left + tooltip hover. */}
                   {_weekBufferBlocks
                     .filter(buf => buf.date === ds && buf.startMin >= slotMin && buf.startMin < slotMin + 30)
                     .map(buf => {
                       const offsetPx = Math.round((buf.startMin - slotMin) / 30 * slotH);
                       const blockH = Math.max(10, Math.round(buf.durationMin / 30 * slotH));
+                      const isLargeBuffer = buf.durationMin > 30;
                       return (
                         <div key={buf.id} draggable={false} title={buf.label} style={{
                           position:'absolute', top: offsetPx, left:2, width:'calc(100% - 4px)',
                           height: blockH,
-                          background:'#FCD34D', border:'1px dashed #FBBF24', borderRadius:4,
-                          opacity:0.6, zIndex:0, pointerEvents:'none',
+                          background: isLargeBuffer
+                            ? 'repeating-linear-gradient(135deg, #FCD34D 0, #FCD34D 3px, transparent 3px, transparent 7px)'
+                            : '#FCD34D',
+                          border:'1px dashed #FBBF24', borderRadius:4,
+                          opacity: isLargeBuffer ? 0.35 : 0.55,
+                          zIndex:0, pointerEvents:'none',
                           fontSize:9, fontWeight:600, color:'#92400E',
                           padding:'1px 4px', overflow:'hidden', whiteSpace:'nowrap',
-                        }}>{buf.label}</div>
+                        }}>
+                          {isLargeBuffer
+                            ? <span style={{ fontSize:8, fontWeight:700, color:'#92400E', background:'rgba(254,243,199,0.95)', padding:'1px 4px', borderRadius:3, display:'inline-block', lineHeight:1.2 }}>{buf.durationMin}min</span>
+                            : buf.label}
+                        </div>
                       );
                     })}
                   {cellBookings.filter(b => isStartSlot(b)).map(b => {
