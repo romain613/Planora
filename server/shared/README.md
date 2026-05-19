@@ -30,19 +30,27 @@
 │  ────────────────────────────────                               │
 │  server/shared/                                                  │
 │  ├─ db/                ← Sprint 1 (LIVRÉ)                        │
-│  │  ├─ dbHandles.js    (multi-DB lazy, WAL-safe)                 │
-│  │  ├─ backup.js       (atomic .backup, SHA, integrity)          │
-│  │  ├─ migrate.js      (registry, dry-run, force guard)          │
-│  │  ├─ schema/         (manifests, vide Sprint 1)                │
-│  │  ├─ index.js        (public API)                              │
-│  │  ├─ README.md                                                 │
-│  │  └─ test/           (node:test, 40 tests / 0 fail)            │
+│  │  └─ dbHandles + backup + migrate + 40 tests                   │
 │  │                                                               │
-│  ├─ auth/              ← Sprint 2 (à venir)                      │
-│  ├─ middleware/        ← Sprint 2                                │
-│  ├─ errors/            ← Sprint 2                                │
-│  ├─ logging/           ← Sprint 2                                │
-│  ├─ providers/         ← Sprint 3                                │
+│  ├─ auth/              ← Sprint 2 (LIVRÉ)                        │
+│  │  └─ context + tenantContext + sessionContext (4 niveaux)      │
+│  │                                                               │
+│  ├─ guards/            ← Sprint 2 (LIVRÉ)                        │
+│  │  └─ requireAuth + requireRole + requireTenant + requireFeature│
+│  │                                                               │
+│  ├─ middleware/        ← Sprint 2 (LIVRÉ)                        │
+│  │  └─ requestId + requestContext (ALS) + errorHandler + 404     │
+│  │                                                               │
+│  ├─ errors/            ← Sprint 2 (LIVRÉ)                        │
+│  │  └─ AppError + 22 sous-classes typées + ERROR_CODES registry  │
+│  │                                                               │
+│  ├─ logging/           ← Sprint 2 (LIVRÉ)                        │
+│  │  └─ logger + auditLogger + redaction (secrets auto-masked)    │
+│  │                                                               │
+│  ├─ utils/             ← Sprint 2 (LIVRÉ)                        │
+│  │  └─ deepFreeze + objectPath + safeJson                        │
+│  │                                                               │
+│  ├─ providers/         ← Sprint 3 (à venir)                      │
 │  └─ config/            ← optionnel, à la demande                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -61,10 +69,12 @@ Vérifications automatisées via `ops/r9-protect.sh check-routes` et `check-inva
 ## Tests
 
 ```bash
-# Tous les tests Phase 1 shared/
-node --test server/shared/db/test/*.test.js
+# Tous les tests Phase 1 shared/ (Sprint 1 db/ + Sprint 2 core)
+node --test server/shared/db/test/*.test.js server/shared/test/*.test.js
 
-# État actuel : 40 tests / 13 suites / 0 fail
+# État actuel : 164 tests / 33 suites / 0 fail
+# - Sprint 1 (db/) : 40 tests
+# - Sprint 2 (utils/errors/logging/auth/middleware/guards) : 124 tests
 ```
 
 Aucune dépendance npm ajoutée — utilise `node:test` + `node:assert/strict` (built-ins Node 18+).
