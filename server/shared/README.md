@@ -50,7 +50,10 @@
 │  ├─ utils/             ← Sprint 2 (LIVRÉ)                        │
 │  │  └─ deepFreeze + objectPath + safeJson                        │
 │  │                                                               │
-│  ├─ providers/         ← Sprint 3 (à venir)                      │
+│  ├─ providers/         ← Sprint 3 (LIVRÉ)                        │
+│  │  └─ types + core + mocks + adapters + registry + router       │
+│  │     (Twilio+Brevo WRAP-only, LCR, Failover, hiérarchie tenant)│
+│  │                                                               │
 │  └─ config/            ← optionnel, à la demande                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -72,9 +75,10 @@ Vérifications automatisées via `ops/r9-protect.sh check-routes` et `check-inva
 # Tous les tests Phase 1 shared/ (Sprint 1 db/ + Sprint 2 core)
 node --test server/shared/db/test/*.test.js server/shared/test/*.test.js
 
-# État actuel : 164 tests / 33 suites / 0 fail
-# - Sprint 1 (db/) : 40 tests
-# - Sprint 2 (utils/errors/logging/auth/middleware/guards) : 124 tests
+# État actuel : 275 tests / 52 suites / 0 fail
+# - Sprint 1 (db/)        : 40 tests
+# - Sprint 2 (core)       : 124 tests
+# - Sprint 3 (providers/) : 111 tests
 ```
 
 Aucune dépendance npm ajoutée — utilise `node:test` + `node:assert/strict` (built-ins Node 18+).
