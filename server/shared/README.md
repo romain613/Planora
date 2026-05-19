@@ -54,6 +54,22 @@
 │  │  └─ types + core + mocks + adapters + registry + router       │
 │  │     (Twilio+Brevo WRAP-only, LCR, Failover, hiérarchie tenant)│
 │  │                                                               │
+│  ├─ eslint/            ← Sprint 4 (LIVRÉ)                        │
+│  │  └─ 5 custom rules quality gates anti-régression architecture │
+│  │                                                               │
+│  ├─ contracts/         ← Sprint 4 (LIVRÉ)                        │
+│  │  └─ 5 contracts validators (provider/billing/tenant/cdr/auth) │
+│  │                                                               │
+│  ├─ r9/                ← Sprint 4 (LIVRÉ)                        │
+│  │  └─ 3 R9 alignment scripts (shared/providers/runtime boundary)│
+│  │                                                               │
+│  ├─ e2e/               ← Sprint 4 (LIVRÉ)                        │
+│  │  └─ isolation-scan agrégateur dry-run                         │
+│  │                                                               │
+│  ├─ docs/              ← Sprint 4 (LIVRÉ)                        │
+│  │  └─ 6 docs (architecture, provider, tenant, billing,          │
+│  │     opensource-roadmap, phase-transition-guide)               │
+│  │                                                               │
 │  └─ config/            ← optionnel, à la demande                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
@@ -75,10 +91,11 @@ Vérifications automatisées via `ops/r9-protect.sh check-routes` et `check-inva
 # Tous les tests Phase 1 shared/ (Sprint 1 db/ + Sprint 2 core)
 node --test server/shared/db/test/*.test.js server/shared/test/*.test.js
 
-# État actuel : 275 tests / 52 suites / 0 fail
+# État actuel : 356 tests / 67 suites / 0 fail
 # - Sprint 1 (db/)        : 40 tests
 # - Sprint 2 (core)       : 124 tests
 # - Sprint 3 (providers/) : 111 tests
+# - Sprint 4 (quality)    : 81 tests
 ```
 
 Aucune dépendance npm ajoutée — utilise `node:test` + `node:assert/strict` (built-ins Node 18+).
